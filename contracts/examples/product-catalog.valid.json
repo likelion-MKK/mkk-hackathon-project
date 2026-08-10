@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "catalog_version": "example-1.0",
+  "products": [
+    {
+      "product_id": "P001",
+      "display_name": "Example Product 001",
+      "category": "example",
+      "image_url": "https://example.invalid/assets/P001.jpg",
+      "product_url": "https://example.invalid/products/P001",
+      "qr_asset_path": "assets/qr/P001.png"
+    },
+    {
+      "product_id": "P002",
+      "display_name": "Example Product 002",
+      "category": "example",
+      "image_url": "https://example.invalid/assets/P002.jpg",
+      "product_url": "https://example.invalid/products/P002",
+      "qr_asset_path": "assets/qr/P002.png"
+    }
+  ]
+}

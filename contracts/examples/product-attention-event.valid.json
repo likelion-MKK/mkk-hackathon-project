@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "session_id": "session-example-001",
+  "event_id": "attention-example-0001",
+  "sequence": 3,
+  "frame_id": "frame-00421",
+  "captured_at_mono_ms": 143220.4,
+  "video_id": "mcm-lookbook-example-v1",
+  "video_time_ms": 4200,
+  "playback_epoch": 0,
+  "producer_id": "aoi-mapper-v1",
+  "model_revision": "fixture-revision",
+  "manifest_version": "example-1.0",
+  "source_gaze_event_id": "gaze-example-0001",
+  "outside_video": false,
+  "video_x_norm": 0.3,
+  "video_y_norm": 0.46,
+  "candidates": [
+    {
+      "exposure_id": "scene-01-product-01",
+      "product_id": "P001",
+      "priority": 0
+    }
+  ],
+  "valid": true,
+  "confidence": 0.88,
+  "reason": null
+}

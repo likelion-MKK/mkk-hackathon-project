@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcm-lookbook.example/contracts/v1/events/reaction-batch.schema.json",
+  "title": "ReactionBatch",
+  "description": "원본 프레임 없이 ProductAttentionEvent와 ExpressionSample을 소량 묶어 전송하는 envelope입니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "batch_id",
+    "batch_sequence",
+    "session_id",
+    "video_id",
+    "events"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "batch_id": {
+      "$ref": "#/$defs/id"
+    },
+    "batch_sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "session_id": {
+      "$ref": "#/$defs/id"
+    },
+    "video_id": {
+      "$ref": "#/$defs/id"
+    },
+    "events": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "expression-sample.schema.json"
+          },
+          {
+            "$ref": "product-attention-event.schema.json"
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    }
+  }
+}

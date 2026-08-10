@@ -1,0 +1,64 @@
+{
+  "schema_version": "1.0",
+  "video_id": "mcm-lookbook-example-v1",
+  "manifest_version": "example-1.0",
+  "coordinate_space": "video_normalized",
+  "exposures": [
+    {
+      "exposure_id": "scene-01-product-01",
+      "product_id": "P001",
+      "start_ms": 0,
+      "end_ms": 10000,
+      "priority": 0,
+      "shape": {
+        "type": "polygon",
+        "points": [
+          [
+            0.08,
+            0.18
+          ],
+          [
+            0.46,
+            0.18
+          ],
+          [
+            0.46,
+            0.88
+          ],
+          [
+            0.08,
+            0.88
+          ]
+        ]
+      }
+    },
+    {
+      "exposure_id": "scene-01-product-02",
+      "product_id": "P002",
+      "start_ms": 0,
+      "end_ms": 10000,
+      "priority": 0,
+      "shape": {
+        "type": "polygon",
+        "points": [
+          [
+            0.54,
+            0.18
+          ],
+          [
+            0.92,
+            0.18
+          ],
+          [
+            0.92,
+            0.88
+          ],
+          [
+            0.54,
+            0.88
+          ]
+        ]
+      }
+    }
+  ]
+}

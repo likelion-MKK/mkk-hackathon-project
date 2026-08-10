@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcm-lookbook.example/contracts/v1/events/product-attention-event.schema.json",
+  "title": "ProductAttentionEvent",
+  "description": "캡처 시점의 시선과 manifest AOI를 결합해 현재 상품 후보를 전달합니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "session_id",
+    "event_id",
+    "sequence",
+    "frame_id",
+    "captured_at_mono_ms",
+    "video_id",
+    "video_time_ms",
+    "playback_epoch",
+    "producer_id",
+    "model_revision",
+    "manifest_version",
+    "source_gaze_event_id",
+    "outside_video",
+    "candidates",
+    "valid",
+    "confidence",
+    "reason"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "session_id": {
+      "$ref": "#/$defs/id"
+    },
+    "event_id": {
+      "$ref": "#/$defs/id"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "frame_id": {
+      "$ref": "#/$defs/id"
+    },
+    "captured_at_mono_ms": {
+      "type": "number",
+      "minimum": 0
+    },
+    "video_id": {
+      "$ref": "#/$defs/id"
+    },
+    "video_time_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "playback_epoch": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "producer_id": {
+      "$ref": "#/$defs/id"
+    },
+    "model_revision": {
+      "$ref": "#/$defs/revision"
+    },
+    "manifest_version": {
+      "$ref": "#/$defs/revision"
+    },
+    "source_gaze_event_id": {
+      "$ref": "#/$defs/id"
+    },
+    "outside_video": {
+      "type": "boolean"
+    },
+    "video_x_norm": {
+      "$ref": "#/$defs/normalized"
+    },
+    "video_y_norm": {
+      "$ref": "#/$defs/normalized"
+    },
+    "candidates": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/$defs/candidate"
+      }
+    },
+    "valid": {
+      "type": "boolean"
+    },
+    "confidence": {
+      "$ref": "#/$defs/normalized"
+    },
+    "reason": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/reason"
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "valid": {
+            "const": true
+          }
+        },
+        "required": [
+          "valid"
+        ]
+      },
+      "then": {
+        "properties": {
+          "reason": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "video_x_norm": false,
+          "video_y_norm": false,
+          "candidates": {
+            "maxItems": 0
+          },
+          "reason": {
+            "$ref": "#/$defs/reason"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outside_video": {
+            "const": true
+          }
+        },
+        "required": [
+          "outside_video"
+        ]
+      },
+      "then": {
+        "properties": {
+          "video_x_norm": false,
+          "video_y_norm": false,
+          "candidates": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "valid": {
+            "const": true
+          },
+          "outside_video": {
+            "const": false
+          }
+        },
+        "required": [
+          "valid",
+          "outside_video"
+        ]
+      },
+      "then": {
+        "required": [
+          "video_x_norm",
+          "video_y_norm"
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "revision": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+    },
+    "normalized": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "exposure_id",
+        "product_id",
+        "priority"
+      ],
+      "properties": {
+        "exposure_id": {
+          "$ref": "#/$defs/id"
+        },
+        "product_id": {
+          "$ref": "#/$defs/id"
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}
