@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcm-lookbook.example/contracts/v1/events/conversion-outcome.schema.json",
+  "title": "ConversionOutcome",
+  "description": "추천 뒤 매니저가 기록한 착용 또는 구매 전환 결과입니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "outcome_id",
+    "session_id",
+    "recommendation_id",
+    "product_id",
+    "outcome_type",
+    "source",
+    "recorded_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "outcome_id": {
+      "$ref": "#/$defs/id"
+    },
+    "session_id": {
+      "$ref": "#/$defs/id"
+    },
+    "recommendation_id": {
+      "$ref": "#/$defs/id"
+    },
+    "product_id": {
+      "$ref": "#/$defs/id"
+    },
+    "outcome_type": {
+      "enum": [
+        "tried_on",
+        "purchased"
+      ]
+    },
+    "source": {
+      "const": "manager_input"
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    }
+  }
+}

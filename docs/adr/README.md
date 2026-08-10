@@ -1,0 +1,7 @@
+# Architecture Decision Records
+
+승인된 모델·runtime·transport·기술 선택과 근거를 기록한다. 박형진이 결정 절차를 관리하고 Eye ADR은 양유상, Face ADR은 정은미가 작성하며 영향받는 생산자·소비자가 리뷰한다.
+
+각 ADR에는 상태, 결정일·소유자, 문제와 제약, 비교 후보, Hard Gate, 선택·fallback, 고정 revision·checksum·code/weight license, benchmark 환경·명령, 정량 결과·실패 사례, 포기한 장점, 알려진 한계와 재평가 조건을 포함한다.
+
+후보 비교가 끝나기 전에 특정 모델을 `accepted`로 기록하거나, 미승인 제안을 확정 결정처럼 표현하지 않는다. 원본 프레임, credential, model weight는 첨부하지 않는다.

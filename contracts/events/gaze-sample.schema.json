@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcm-lookbook.example/contracts/v1/events/gaze-sample.schema.json",
+  "title": "GazeSample",
+  "description": "Eye Adapter가 캡처 시점 기준 viewport 정규화 시선 좌표와 품질을 전달합니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "session_id",
+    "event_id",
+    "sequence",
+    "frame_id",
+    "captured_at_mono_ms",
+    "video_id",
+    "video_time_ms",
+    "playback_epoch",
+    "producer_id",
+    "model_revision",
+    "calibration_id",
+    "valid",
+    "confidence",
+    "reason"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "session_id": {
+      "$ref": "#/$defs/id"
+    },
+    "event_id": {
+      "$ref": "#/$defs/id"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "frame_id": {
+      "$ref": "#/$defs/id"
+    },
+    "captured_at_mono_ms": {
+      "type": "number",
+      "minimum": 0
+    },
+    "video_id": {
+      "$ref": "#/$defs/id"
+    },
+    "video_time_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "playback_epoch": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "screen_x_norm": {
+      "$ref": "#/$defs/normalized"
+    },
+    "screen_y_norm": {
+      "$ref": "#/$defs/normalized"
+    },
+    "producer_id": {
+      "$ref": "#/$defs/id"
+    },
+    "model_revision": {
+      "$ref": "#/$defs/revision"
+    },
+    "calibration_id": {
+      "$ref": "#/$defs/id"
+    },
+    "valid": {
+      "type": "boolean"
+    },
+    "confidence": {
+      "$ref": "#/$defs/normalized"
+    },
+    "reason": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/reason"
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "valid": {
+            "const": true
+          }
+        },
+        "required": [
+          "valid"
+        ]
+      },
+      "then": {
+        "required": [
+          "screen_x_norm",
+          "screen_y_norm"
+        ],
+        "properties": {
+          "reason": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "screen_x_norm": false,
+          "screen_y_norm": false,
+          "reason": {
+            "$ref": "#/$defs/reason"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "revision": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+    },
+    "normalized": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    }
+  }
+}

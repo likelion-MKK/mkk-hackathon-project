@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcm-lookbook.example/contracts/v1/lookbook-manifest.schema.json",
+  "title": "LookbookManifest",
+  "description": "영상 재생 시각별 상품 노출 영역(AOI)을 정의하는 Contract v1 manifest입니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "video_id",
+    "manifest_version",
+    "coordinate_space",
+    "exposures"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "video_id": {
+      "$ref": "#/$defs/id"
+    },
+    "manifest_version": {
+      "$ref": "#/$defs/version"
+    },
+    "coordinate_space": {
+      "const": "video_normalized"
+    },
+    "exposures": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/exposure"
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "normalized": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "point": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/normalized"
+        },
+        {
+          "$ref": "#/$defs/normalized"
+        }
+      ],
+      "items": false,
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "shape": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "points"
+      ],
+      "properties": {
+        "type": {
+          "const": "polygon"
+        },
+        "points": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "$ref": "#/$defs/point"
+          }
+        }
+      }
+    },
+    "exposure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "exposure_id",
+        "product_id",
+        "start_ms",
+        "end_ms",
+        "priority",
+        "shape"
+      ],
+      "properties": {
+        "exposure_id": {
+          "$ref": "#/$defs/id"
+        },
+        "product_id": {
+          "$ref": "#/$defs/id"
+        },
+        "start_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end_ms": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "shape": {
+          "$ref": "#/$defs/shape"
+        }
+      }
+    }
+  }
+}

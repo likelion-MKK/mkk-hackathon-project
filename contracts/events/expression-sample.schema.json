@@ -1,0 +1,197 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcm-lookbook.example/contracts/v1/events/expression-sample.schema.json",
+  "title": "ExpressionSample",
+  "description": "Face Adapter가 관찰 가능한 표정 관련 점수와 측정 품질을 전달하며 감정이나 구매 의도를 확정하지 않습니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "session_id",
+    "event_id",
+    "sequence",
+    "frame_id",
+    "captured_at_mono_ms",
+    "video_id",
+    "video_time_ms",
+    "playback_epoch",
+    "producer_id",
+    "model_revision",
+    "taxonomy_version",
+    "face_detected",
+    "face_count",
+    "scores",
+    "quality",
+    "valid",
+    "confidence",
+    "reason"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "session_id": {
+      "$ref": "#/$defs/id"
+    },
+    "event_id": {
+      "$ref": "#/$defs/id"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "frame_id": {
+      "$ref": "#/$defs/id"
+    },
+    "captured_at_mono_ms": {
+      "type": "number",
+      "minimum": 0
+    },
+    "video_id": {
+      "$ref": "#/$defs/id"
+    },
+    "video_time_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "playback_epoch": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "producer_id": {
+      "$ref": "#/$defs/id"
+    },
+    "model_revision": {
+      "$ref": "#/$defs/revision"
+    },
+    "taxonomy_version": {
+      "$ref": "#/$defs/revision"
+    },
+    "face_detected": {
+      "type": "boolean"
+    },
+    "face_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "scores": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]{0,63}$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/normalized"
+      }
+    },
+    "quality": {
+      "$ref": "#/$defs/normalized"
+    },
+    "valid": {
+      "type": "boolean"
+    },
+    "confidence": {
+      "$ref": "#/$defs/normalized"
+    },
+    "reason": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/reason"
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "face_detected": {
+            "const": false
+          }
+        },
+        "required": [
+          "face_detected"
+        ]
+      },
+      "then": {
+        "properties": {
+          "face_count": {
+            "const": 0
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "face_count": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "valid": {
+            "const": true
+          }
+        },
+        "required": [
+          "valid"
+        ]
+      },
+      "then": {
+        "properties": {
+          "face_detected": {
+            "const": true
+          },
+          "face_count": {
+            "const": 1
+          },
+          "scores": {
+            "minProperties": 1
+          },
+          "reason": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "scores": {
+            "maxProperties": 0
+          },
+          "reason": {
+            "$ref": "#/$defs/reason"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "revision": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+    },
+    "normalized": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    }
+  }
+}
