@@ -84,6 +84,8 @@ S01 대기 화면 → S02 메뉴 → S03 룩북 시청·반응 분석 → S04 �
 
 ## 설계 문서
 
+- [문서 지도 및 작업별 읽기 순서](docs/DOCUMENT_MAP.md)
+- [AI Agent 협업·토큰 관리 규칙](AGENTS.md)
 - [전체 설계](docs/OVERALL_DESIGN.md)
 - [상세 설계 및 병렬 개발 계획](docs/DETAILED_DESIGN_PLAN.md)
 - [D1 기술·운영 의사결정서](docs/D1_TECHNICAL_DECISIONS.md)
