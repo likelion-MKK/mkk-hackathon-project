@@ -2,6 +2,13 @@
 
 이 저장소는 Contract First, 짧은 feature branch와 작은 PR을 기본으로 사용합니다.
 
+## 문서와 Agent 시작점
+
+- 사람과 AI Agent 모두 작업 전에 [`AGENTS.md`](AGENTS.md)의 공통 규칙을 확인합니다.
+- 작업에 필요한 문서만 [`docs/DOCUMENT_MAP.md`](docs/DOCUMENT_MAP.md)의 최소 읽기 묶음에서 선택합니다.
+- 새 공식 문서를 추가·이동·대체하면 같은 PR에서 문서 지도와 관련 README 링크를 갱신합니다.
+- 문서 지도에 연결되지 않은 개인 초안은 구현·리뷰의 공식 근거로 사용하지 않습니다.
+
 ## 작업 시작
 
 1. 최신 `main`을 반영합니다.
