@@ -24,3 +24,18 @@
 - 모델 코드·weight·대형 생성물을 이 scaffold에 넣지 않는다.
 
 Adapter의 언어 독립 규약은 [`adapters/README.md`](adapters/README.md)를 따른다.
+
+## D1 Python scaffold
+
+- 공통 타입과 `EyeAdapter` Protocol: `src/mcm_eye/contracts.py`
+- 결정적 개발 Adapter: `src/mcm_eye/adapters/fake.py`
+- 단위·Contract 호환 테스트: `tests/test_fake_adapter.py`
+
+현재 Eye 환경은 `pyproject.toml`과 `uv.lock`에서 Python `3.13.14`로 고정한다. 구현 시점에
+`3.13.15`가 아직 공개되지 않아 최신 공개 3.13 패치 버전을 사용하며, 공통 D1 문서의 버전
+정리는 별도 기술 결정 변경으로 남긴다.
+
+```powershell
+uv sync --locked
+uv run pytest
+```
