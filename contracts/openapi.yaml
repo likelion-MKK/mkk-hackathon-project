@@ -1,0 +1,348 @@
+openapi: 3.1.0
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+
+info:
+  title: MCM AI Lookbook Kiosk API
+  version: 0.1.0
+  summary: Kiosk, recommendation, product, conversion and manager API contract
+  description: >-
+    Contract-first scaffold for parallel FE, BE, Eye and Face development.
+    Raw webcam frames are not accepted by any operation.
+
+servers:
+  - url: /
+    description: Same-origin development server
+
+tags:
+  - name: Sessions
+  - name: Lookbooks
+  - name: Reactions
+  - name: Recommendations
+  - name: Products
+  - name: Conversions
+  - name: Managers
+  - name: System
+
+paths:
+  /api/v1/sessions:
+    post:
+      tags: [Sessions]
+      operationId: createSession
+      summary: Create an anonymous kiosk session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionCreate"
+      responses:
+        "201":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionCreated"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/v1/lookbooks/{lookbook_id}/manifest:
+    get:
+      tags: [Lookbooks]
+      operationId: getLookbookManifest
+      summary: Get the versioned video and AOI manifest
+      parameters:
+        - $ref: "#/components/parameters/LookbookId"
+      responses:
+        "200":
+          description: Lookbook manifest
+          content:
+            application/json:
+              schema:
+                $ref: "./lookbook-manifest.schema.json"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/sessions/{session_id}/reaction-batches:
+    post:
+      tags: [Reactions]
+      operationId: appendReactionBatch
+      summary: Store a batch of derived reaction events
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./events/reaction-batch.schema.json"
+      responses:
+        "202":
+          description: Batch accepted or already processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReactionBatchAccepted"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/sessions/{session_id}/complete:
+    post:
+      tags: [Recommendations]
+      operationId: completeSessionAnalysis
+      summary: Finish signal ingestion and request a recommendation
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "202":
+          description: Recommendation processing started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecommendationAccepted"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/sessions/{session_id}/recommendations:
+    get:
+      tags: [Recommendations]
+      operationId: getSessionRecommendation
+      summary: Get the current Top 2 recommendation state
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: Recommendation state
+          content:
+            application/json:
+              schema:
+                $ref: "./events/recommendation-result.schema.json"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/products/{product_id}:
+    get:
+      tags: [Products]
+      operationId: getProduct
+      summary: Get product image, official URL and pre-generated QR metadata
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      responses:
+        "200":
+          description: Product metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/conversions:
+    post:
+      tags: [Conversions]
+      operationId: recordConversionOutcome
+      summary: Record a manager-entered fitting or purchase outcome
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./events/conversion-outcome.schema.json"
+      responses:
+        "201":
+          description: Conversion outcome recorded
+          content:
+            application/json:
+              schema:
+                $ref: "./events/conversion-outcome.schema.json"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/v1/manager/events:
+    get:
+      tags: [Managers]
+      operationId: listManagerEvents
+      summary: Recover manager events after a WebSocket disconnect
+      parameters:
+        - name: after_sequence
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: Ordered manager events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "./events/manager-event.schema.json"
+
+  /api/v1/health:
+    get:
+      tags: [System]
+      operationId: getHealth
+      summary: Check API and database readiness
+      responses:
+        "200":
+          description: Service health
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+
+components:
+  parameters:
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/Identifier"
+    LookbookId:
+      name: lookbook_id
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/Identifier"
+    ProductId:
+      name: product_id
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/Identifier"
+
+  schemas:
+    Identifier:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+
+    SessionCreate:
+      type: object
+      additionalProperties: false
+      required: [kiosk_id, lookbook_id, consent_version]
+      properties:
+        kiosk_id:
+          $ref: "#/components/schemas/Identifier"
+        lookbook_id:
+          $ref: "#/components/schemas/Identifier"
+        consent_version:
+          $ref: "#/components/schemas/Identifier"
+
+    SessionCreated:
+      type: object
+      additionalProperties: false
+      required: [session_id, display_code, status, created_at]
+      properties:
+        session_id:
+          $ref: "#/components/schemas/Identifier"
+        display_code:
+          $ref: "#/components/schemas/Identifier"
+        status:
+          enum: [created, collecting]
+        created_at:
+          type: string
+          format: date-time
+
+    ReactionBatchAccepted:
+      type: object
+      additionalProperties: false
+      required: [batch_id, status]
+      properties:
+        batch_id:
+          $ref: "#/components/schemas/Identifier"
+        status:
+          enum: [accepted, duplicate]
+
+    RecommendationAccepted:
+      type: object
+      additionalProperties: false
+      required: [session_id, status]
+      properties:
+        session_id:
+          $ref: "#/components/schemas/Identifier"
+        status:
+          const: pending
+
+    Product:
+      type: object
+      additionalProperties: false
+      required: [product_id, display_name, category, image_url, product_url, qr_asset_path]
+      properties:
+        product_id:
+          $ref: "#/components/schemas/Identifier"
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        category:
+          type: string
+          minLength: 1
+          maxLength: 100
+        image_url:
+          type: string
+          format: uri-reference
+        product_url:
+          type: string
+          format: uri
+        qr_asset_path:
+          type: string
+          minLength: 1
+          maxLength: 500
+
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status, database]
+      properties:
+        status:
+          enum: [ok, degraded]
+        database:
+          enum: [up, down]
+
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 100
+        message:
+          type: string
+          minLength: 1
+          maxLength: 500
+
+  responses:
+    BadRequest:
+      description: Invalid input
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: Session state conflict
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+x-websocket-channel:
+  path: /ws/v1/managers
+  direction: server-to-client
+  message:
+    $ref: "./events/manager-event.schema.json"

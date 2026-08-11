@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcm-lookbook.example/contracts/v1/events/manager-event.schema.json",
+  "title": "ManagerEvent",
+  "description": "Manager 화면에 세션 시작 또는 추천 준비 완료를 알리는 WebSocket 이벤트입니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_id",
+    "sequence",
+    "session_id",
+    "kiosk_id",
+    "event_type",
+    "emitted_at",
+    "payload"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "event_id": {
+      "$ref": "#/$defs/id"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "session_id": {
+      "$ref": "#/$defs/id"
+    },
+    "kiosk_id": {
+      "$ref": "#/$defs/id"
+    },
+    "event_type": {
+      "enum": [
+        "session_started",
+        "recommendation_ready"
+      ]
+    },
+    "emitted_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "session_started"
+          }
+        },
+        "required": [
+          "event_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "maxProperties": 0
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/recommendation_payload"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rank",
+        "product_id"
+      ],
+      "properties": {
+        "rank": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2
+        },
+        "product_id": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
+    "recommendation_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recommendation_id",
+        "engine_mode",
+        "items"
+      ],
+      "properties": {
+        "recommendation_id": {
+          "$ref": "#/$defs/id"
+        },
+        "engine_mode": {
+          "enum": [
+            "mock",
+            "research_version"
+          ]
+        },
+        "items": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/item"
+          }
+        }
+      }
+    }
+  }
+}

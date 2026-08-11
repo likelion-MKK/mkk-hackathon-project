@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "recommendation_id": "recommendation-example-001",
+  "session_id": "session-example-001",
+  "video_id": "mcm-lookbook-example-v1",
+  "manifest_version": "example-1.0",
+  "algorithm_version": "mock-v1",
+  "engine_mode": "mock",
+  "status": "completed",
+  "items": [
+    {
+      "rank": 1,
+      "product_id": "P001"
+    },
+    {
+      "rank": 2,
+      "product_id": "P002"
+    }
+  ],
+  "reason": null
+}

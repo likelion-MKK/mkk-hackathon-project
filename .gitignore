@@ -1,0 +1,57 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# JavaScript / TypeScript
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local logs and runtime artifacts
+*.log
+tmp/
+artifacts/
+data/raw/
+
+# External model weights: keep source, pinned revision, checksum and license only
+models/
+*.onnx
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.bin
+*.tflite
+*.pb
+*.h5
+*.keras
+*.mlmodel
+*.engine
+*.gguf
+*.pkl
+*.joblib
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3

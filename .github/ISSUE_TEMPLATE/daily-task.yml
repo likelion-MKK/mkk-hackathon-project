@@ -1,0 +1,71 @@
+name: Daily development task
+description: 하루 안에 병합할 수 있는 단일 책임 작업
+title: "[AREA][D#] "
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: 작업 영역
+      options:
+        - api
+        - kiosk
+        - manager
+        - eye
+        - face
+        - recommendation
+        - contracts
+        - integration
+        - docs
+    validations:
+      required: true
+
+  - type: input
+    id: owner
+    attributes:
+      label: 담당자
+      placeholder: 이름 또는 GitHub 계정
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: 오늘 완료할 결과
+      description: 구현 목록이 아니라 확인 가능한 결과를 작성합니다.
+      placeholder: 예) Fake GazeSample fixture가 contract test를 통과한다.
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: 선행 Contract·PR·Blocker
+      placeholder: 없음 또는 #12
+
+  - type: dropdown
+    id: contract_change
+    attributes:
+      label: Contract 변경 필요
+      options:
+        - 아니요
+        - 예 - 구현 전에 별도 Contract PR 필요
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 완료 조건과 테스트
+      placeholder: 테스트 명령, fixture, screenshot 또는 benchmark 기준
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 개인정보·모델 확인
+      options:
+        - label: 원본 프레임·영상·base64·얼굴 embedding을 Git, DB, API와 로그에 남기지 않습니다.
+          required: true
+        - label: 외부 모델을 사용하면 revision, license와 checksum을 기록합니다.
+          required: false

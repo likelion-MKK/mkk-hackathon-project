@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "event_id": "manager-event-example-0002",
+  "sequence": 4,
+  "session_id": "session-example-001",
+  "kiosk_id": "kiosk-example-01",
+  "event_type": "recommendation_ready",
+  "emitted_at": "2026-08-11T09:00:00+09:00",
+  "payload": {
+    "recommendation_id": "recommendation-example-001",
+    "engine_mode": "mock",
+    "items": [
+      {
+        "rank": 1,
+        "product_id": "P001"
+      },
+      {
+        "rank": 2,
+        "product_id": "P002"
+      }
+    ]
+  }
+}

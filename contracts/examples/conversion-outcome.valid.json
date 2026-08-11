@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0",
+  "outcome_id": "outcome-example-0001",
+  "session_id": "session-example-001",
+  "recommendation_id": "recommendation-example-001",
+  "product_id": "P001",
+  "outcome_type": "tried_on",
+  "source": "manager_input",
+  "recorded_at": "2026-08-11T09:05:00+09:00"
+}

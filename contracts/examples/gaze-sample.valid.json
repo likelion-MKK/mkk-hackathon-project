@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "session_id": "session-example-001",
+  "event_id": "gaze-example-0001",
+  "sequence": 1,
+  "frame_id": "frame-00421",
+  "captured_at_mono_ms": 143220.4,
+  "video_id": "mcm-lookbook-example-v1",
+  "video_time_ms": 4200,
+  "playback_epoch": 0,
+  "screen_x_norm": 0.3,
+  "screen_y_norm": 0.46,
+  "producer_id": "fake-eye-adapter",
+  "model_revision": "fixture-revision",
+  "calibration_id": "calibration-example-001",
+  "valid": true,
+  "confidence": 0.88,
+  "reason": null
+}
