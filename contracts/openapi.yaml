@@ -177,6 +177,7 @@ paths:
       tags: [Conversions]
       operationId: recordConversionOutcome
       summary: Record a manager-entered fitting or purchase outcome
+      description: A retry with the same outcome_id must be an identical document; reuse with different values returns a conflict.
       requestBody:
         required: true
         content:
@@ -192,6 +193,10 @@ paths:
                 $ref: "./events/conversion-outcome.schema.json"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
   /api/v1/manager/events:
     get:

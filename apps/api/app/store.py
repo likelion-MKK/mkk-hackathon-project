@@ -14,6 +14,7 @@ from pathlib import Path
 from threading import RLock
 
 from apps.api.app.schemas import (
+    ConversionOutcome,
     LookbookManifest,
     ManagerEvent,
     ManagerProductRequest,
@@ -70,6 +71,7 @@ class MemoryStore:
         self.manager_events: list[ManagerEvent] = []
         self.manager_requests: dict[str, tuple[str, str]] = {}
         self._manager_sequence = 0
+        self.conversions: dict[str, ConversionOutcome] = {}
 
     def _load_catalog(self) -> ProductCatalog:
         path = self.repository_root / "data" / "products" / "catalog.example.json"
@@ -228,6 +230,30 @@ class MemoryStore:
             if session.recommendation is None:
                 raise DomainError(500, "recommendation_missing", "session recommendation state is missing")
             return session.recommendation
+
+    def record_conversion(self, outcome: ConversionOutcome) -> ConversionOutcome:
+        with self._lock:
+            existing = self.conversions.get(outcome.outcome_id)
+            if existing is not None:
+                if existing != outcome:
+                    raise DomainError(
+                        409,
+                        "outcome_id_conflict",
+                        "outcome_id was already used for a different conversion outcome",
+                    )
+                return existing
+
+            session = self._require_session(outcome.session_id)
+            recommendation = session.recommendation
+            if recommendation is None or recommendation.status != "completed":
+                raise DomainError(409, "recommendation_not_ready", "conversion requires a completed recommendation")
+            if recommendation.recommendation_id != outcome.recommendation_id:
+                raise DomainError(400, "recommendation_mismatch", "conversion recommendation_id does not match the session")
+            if outcome.product_id not in {item.product_id for item in recommendation.items}:
+                raise DomainError(400, "product_not_recommended", "conversion product_id is not in the session Top 2")
+
+            self.conversions[outcome.outcome_id] = outcome
+            return outcome
 
     def request_manager_product(self, session_id: str, request: ManagerProductRequest) -> ManagerProductRequestAccepted:
         with self._lock:

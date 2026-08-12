@@ -87,6 +87,7 @@ Schema와 event에는 웹캠 원본 프레임, 이미지 바이트, 얼굴 embed
 - batch 안의 `event_id`와 세션 sequence가 중복되지 않음
 - Top 2의 rank가 각각 `1`, `2`이고 `product_id`가 서로 다름
 - Manager product request에는 `request_id`와 `recommendation_id`만 포함하고 상품 목록을 포함하지 않음
+- `ConversionOutcome.outcome_id`의 동일 재전송은 같은 문서일 때만 멱등 처리하며, 다른 문서 재사용은 conflict로 거부함
 - `source_gaze_event_id`가 같은 세션의 실제 GazeSample을 가리킴
 
 ## 검증
