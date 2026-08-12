@@ -4,10 +4,10 @@
 
 ## 생명주기
 
-- `metadata`: adapter ID, 모델 ID·revision, runtime과 원본 label 정보를 반환한다.
+- `metadata`: `adapter_id`, `model_id`, `model_revision`, `runtime`, `source_labels`, `taxonomy_version`을 반환한다.
 - `initialize`: 고정된 설정으로 실행 자원을 준비한다.
 - `warmup`: 첫 추론 지연을 서비스 시작 전에 처리한다.
-- `infer`: 메모리 프레임 참조와 `FrameContext`를 받아 하나의 `ExpressionSample`을 만든다.
+- `infer`: 메모리 프레임 참조와 Kiosk가 소유한 `FrameContext` 중 `FaceFrameContext` Protocol에 필요한 필드를 받아 하나의 `ExpressionSample`을 만든다.
 - `dispose`: 모델·버퍼 자원을 해제하되 Kiosk가 소유한 카메라를 임의로 다시 열지 않는다.
 
 ## 불변 조건
