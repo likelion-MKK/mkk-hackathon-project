@@ -7,12 +7,12 @@
 ## 입력
 
 - 고객의 S04 제품 요청 `ManagerEvent`
-- 세션별 `RecommendationResult`와 상품 정보
+- 이벤트 payload의 추천 Top 2 `product_id`와 상품 정보
 - polling cursor 뒤의 이벤트 조회 결과
 
 ## 출력
 
-- 세션 카드의 상태와 Top 2 갱신
+- `view_recommended_products` 의도와 추천 Top 2가 포함된 제품 요청 알림 카드
 - MVP에서 매니저가 확인한 착용·구매 `ConversionOutcome`
 
 ## 금지사항

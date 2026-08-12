@@ -128,6 +128,11 @@ paths:
       tags: [Managers]
       operationId: createManagerProductRequest
       summary: Request manager assistance for a completed Top 2 recommendation
+      description: >-
+        The request body accepts only request_id and recommendation_id. Backend
+        verifies that the recommendation belongs to the session and is completed,
+        then derives the Top 2 items for the manager event from the stored result.
+        Repeating the same request_id is handled idempotently.
       parameters:
         - $ref: "#/components/parameters/SessionId"
       requestBody:
@@ -135,7 +140,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ManagerProductRequest"
+              $ref: "./requests/manager-product-request.schema.json"
       responses:
         "202":
           description: Customer product request accepted or recognized as a duplicate
@@ -298,16 +303,6 @@ components:
           $ref: "#/components/schemas/Identifier"
         status:
           const: pending
-
-    ManagerProductRequest:
-      type: object
-      additionalProperties: false
-      required: [request_id, recommendation_id]
-      properties:
-        request_id:
-          $ref: "#/components/schemas/Identifier"
-        recommendation_id:
-          $ref: "#/components/schemas/Identifier"
 
     ManagerProductRequestAccepted:
       type: object
