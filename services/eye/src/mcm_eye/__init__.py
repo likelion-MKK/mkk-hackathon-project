@@ -1,6 +1,11 @@
 """Public types and adapters for the Eye service boundary."""
 
-from .adapters import FakeEyeAdapter, FakeScenario
+from .adapters import (
+    FakeDeliveryScenario,
+    FakeEyeAdapter,
+    FakeGazeDelivery,
+    FakeScenario,
+)
 from .contracts import (
     AdapterMetadata,
     AdapterStateError,
@@ -17,7 +22,9 @@ __all__ = [
     "CalibrationRequest",
     "CalibrationResult",
     "EyeAdapter",
+    "FakeDeliveryScenario",
     "FakeEyeAdapter",
+    "FakeGazeDelivery",
     "FakeScenario",
     "GazeFrameContext",
     "GazeSample",
