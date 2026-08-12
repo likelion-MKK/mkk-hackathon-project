@@ -247,11 +247,8 @@ dispose()        → 모델·카메라 관련 자원 해제
 {
   "schema_version": "1.0",
   "session_id": "session-example",
-  "event_id": "gaze-example-00421",
-  "sequence": 421,
   "frame_id": "frame-00421",
   "captured_at_mono_ms": 143220.4,
-  "video_id": "mcm-lookbook-example-v1",
   "video_time_ms": 12840,
   "playback_epoch": 0,
   "screen_x_norm": 0.63,
@@ -260,7 +257,7 @@ dispose()        → 모델·카메라 관련 자원 해제
   "valid": true,
   "reason": null,
   "calibration_id": "calibration-example",
-  "producer_id": "eye-adapter-candidate",
+  "adapter_id": "eye-adapter-candidate",
   "model_revision": "pinned-revision"
 }
 ```
