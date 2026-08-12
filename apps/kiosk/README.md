@@ -4,6 +4,26 @@
 
 조윤혜(FE). Eye·Face 실행 경계나 API 계약을 바꿀 때는 해당 소유자와 함께 리뷰한다. 프런트엔드 기술 스택과 모델 실행 위치는 D1 확인 전까지 고정하지 않는다.
 
+## D1 로컬 실행과 검증
+
+현재 D1 구현은 실제 Backend·카메라·AI 모델 대신 `MockApiClient`와 `MockVisionClient`를 사용한다.
+
+```powershell
+Set-Location apps/kiosk
+npm install
+npm run dev
+```
+
+변경 후에는 같은 디렉터리에서 다음 검증을 모두 실행한다.
+
+```powershell
+npm run lint
+npm run test
+npm run build
+```
+
+Mock 화면 흐름은 `screensaver → menu → consent → calibration → lookbook → finalizing → report` 순서다. `lookbook`과 `finalizing`은 D1 임시 화면이며 실제 영상·추천 UI는 후속 단계에서 연결한다.
+
 ## 책임
 
 - S01 대기 화면부터 S04 분석 결과 화면까지의 상태 전이를 관리한다.
