@@ -27,7 +27,9 @@ Reason = str
 class ContractModel(BaseModel):
     """Base model that keeps API payloads closed by default."""
 
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    # Preserve input strings so JSON Schema constraints, especially identifier
+    # patterns, reject surrounding whitespace instead of silently normalizing it.
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=False)
 
 
 def _validate_identifier(value: str, *, field_name: str = "identifier") -> str:

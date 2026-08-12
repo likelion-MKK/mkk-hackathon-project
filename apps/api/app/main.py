@@ -65,7 +65,7 @@ def create_app(store: MemoryStore | None = None) -> FastAPI:
         "/api/v1/sessions/{session_id}/reaction-batches",
         response_model=ReactionBatchAccepted,
         status_code=status.HTTP_202_ACCEPTED,
-        responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}},
+        responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}},
     )
     def append_reaction_batch(session_id: str, batch: ReactionBatch) -> ReactionBatchAccepted:
         return app.state.store.append_batch(session_id, batch)

@@ -75,3 +75,35 @@ def test_raw_frame_payload_is_rejected(client: TestClient) -> None:
     response = client.post(f"/api/v1/sessions/{session_id}/reaction-batches", json=body)
     assert response.status_code == 400
     assert response.json()["code"] == "invalid_request"
+
+
+def test_identifier_surrounding_whitespace_is_rejected(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/sessions",
+        json={
+            "kiosk_id": " kiosk-test-01 ",
+            "lookbook_id": "mcm-lookbook-example-v1",
+            "consent_version": "consent-v1",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "invalid_request"
+
+
+def test_conflicting_event_sequence_is_bad_request(client: TestClient) -> None:
+    session_id = create_session(client)
+    body = reaction_batch(session_id)
+    accepted = client.post(f"/api/v1/sessions/{session_id}/reaction-batches", json=body)
+    assert accepted.status_code == 202
+
+    conflicting_batch = copy.deepcopy(body)
+    conflicting_batch["batch_id"] = "batch-example-0003"
+    conflicting_batch["events"][0]["event_id"] = "expression-example-0002"
+    response = client.post(
+        f"/api/v1/sessions/{session_id}/reaction-batches",
+        json=conflicting_batch,
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "duplicate_event_sequence"
