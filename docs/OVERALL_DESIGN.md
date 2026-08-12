@@ -119,10 +119,9 @@ flowchart LR
 
 ### Manager Notification
 
-- 고객이 키오스크를 이용하면 매니저 화면에 자동으로 알림을 보낸다.
-- 추천이 완료되면 매니저가 추천 상품을 확인할 수 있도록 한다.
-- 실시간 전달에는 FastAPI WebSocket을 사용한다.
-- 최초 알림은 S02에서 AI 추천 선택과 데이터 처리 동의가 완료된 직후 `session_started`로 전송한다.
+- 추천 완료만으로는 알림을 보내지 않는다.
+- S04에서 고객이 `매니저에게 제품 요청`을 누르면 Backend가 해당 추천 Top 2와 `view_recommended_products` 의도를 기록한다.
+- Manager Screen은 `GET /api/v1/manager/events`를 1~2초마다 polling하고 `event_id`로 중복을 제거한다.
 
 ## 6. 데이터 흐름
 
@@ -186,7 +185,7 @@ flowchart LR
 | Backend | Python, FastAPI | README에 명시 |
 | Database | PostgreSQL 17, Docker Compose, Alembic | D1 팀장 기본안 |
 | QR | `python-qrcode` | README에 명시 |
-| Manager Notification | FastAPI WebSocket | README에 명시 |
+| Manager Notification | FastAPI REST polling | 이슈 #6 |
 
 ## 11. 팀 책임 범위
 
@@ -222,7 +221,7 @@ flowchart LR
 4. 분석 데이터 구조와 PostgreSQL 저장
 5. 논문·연구 기반 추천 알고리즘
 6. Top 2 결과 화면과 상품별 QR
-7. 매니저 WebSocket 알림과 응대 화면
+7. 매니저 polling 알림과 응대 화면
 8. 구매 전환 결과 수집과 추천 개선
 9. 개인정보 동의·보유·폐기
 10. 배포·운영·오류 처리

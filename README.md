@@ -35,7 +35,7 @@ S01 대기 화면 → S02 메뉴 → S03 룩북 시청·반응 분석 → S04 �
 - **비언어적 반응 분석**: 시선, 얼굴 방향, 표정 변화 등 고객의 반응을 분석합니다.
 - **맞춤 상품 추천**: 분석 결과를 바탕으로 관심도가 높은 상품 Top 2를 추천합니다.
 - **상품별 QR 제공**: 추천 상품의 이미지와 미리 생성한 QR 코드를 함께 보여주어, 고객이 스마트폰으로 제품 정보를 이어서 확인할 수 있습니다.
-- **매니저 자동 알림**: 고객이 키오스크를 이용하면 매니저 화면에 자동으로 알림을 보내 맞춤 응대를 돕습니다.
+- **매니저 제품 요청 알림**: S04에서 고객이 버튼을 누르면 추천 Top 2와 함께 매니저에게 응대 요청을 보냅니다.
 
 ## 전체 흐름
 
@@ -60,7 +60,7 @@ S01 대기 화면 → S02 메뉴 → S03 룩북 시청·반응 분석 → S04 �
 | Backend | Python, FastAPI |
 | Database | PostgreSQL |
 | QR Code | `python-qrcode` |
-| Manager Notification | FastAPI WebSocket |
+| Manager Notification | FastAPI REST polling |
 | Recommendation Algorithm | 관련 논문과 연구 자료를 바탕으로 추후 설계 |
 
 ## 개인정보 처리 방향
