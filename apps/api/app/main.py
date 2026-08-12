@@ -1,0 +1,90 @@
+"""FastAPI entrypoint for the first Contract v1 vertical slice."""
+
+from __future__ import annotations
+
+from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+
+from apps.api.app.schemas import (
+    ErrorResponse,
+    Health,
+    LookbookManifest,
+    Product,
+    ReactionBatch,
+    ReactionBatchAccepted,
+    SessionCreate,
+    SessionCreated,
+)
+from apps.api.app.store import DomainError, MemoryStore
+
+
+def _error_response(code: str, message: str, status_code: int) -> JSONResponse:
+    body = ErrorResponse(code=code, message=message)
+    return JSONResponse(status_code=status_code, content=body.model_dump(mode="json"))
+
+
+def create_app(store: MemoryStore | None = None) -> FastAPI:
+    """Create an app with an injectable store for deterministic tests."""
+
+    app = FastAPI(
+        title="MCM AI Lookbook Kiosk API",
+        version="0.1.0",
+        description="Contract-first API scaffold; raw webcam frames are not accepted.",
+    )
+    app.state.store = store or MemoryStore()
+
+    @app.exception_handler(DomainError)
+    async def handle_domain_error(_: Request, exc: DomainError) -> JSONResponse:
+        return _error_response(exc.code, exc.message, exc.status_code)
+
+    @app.exception_handler(RequestValidationError)
+    async def handle_validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
+        errors = exc.errors()
+        message = errors[0].get("msg", "request validation failed") if errors else "request validation failed"
+        return _error_response("invalid_request", message, status.HTTP_400_BAD_REQUEST)
+
+    @app.post(
+        "/api/v1/sessions",
+        response_model=SessionCreated,
+        status_code=status.HTTP_201_CREATED,
+        responses={400: {"model": ErrorResponse}},
+    )
+    def create_session(request: SessionCreate) -> SessionCreated:
+        return app.state.store.create_session(request)
+
+    @app.get(
+        "/api/v1/lookbooks/{lookbook_id}/manifest",
+        response_model=LookbookManifest,
+        responses={404: {"model": ErrorResponse}},
+    )
+    def get_manifest(lookbook_id: str) -> LookbookManifest:
+        return app.state.store.get_manifest(lookbook_id)
+
+    @app.post(
+        "/api/v1/sessions/{session_id}/reaction-batches",
+        response_model=ReactionBatchAccepted,
+        status_code=status.HTTP_202_ACCEPTED,
+        responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}},
+    )
+    def append_reaction_batch(session_id: str, batch: ReactionBatch) -> ReactionBatchAccepted:
+        return app.state.store.append_batch(session_id, batch)
+
+    @app.get(
+        "/api/v1/products/{product_id}",
+        response_model=Product,
+        responses={404: {"model": ErrorResponse}},
+    )
+    def get_product(product_id: str) -> Product:
+        return app.state.store.get_product(product_id)
+
+    @app.get("/api/v1/health", response_model=Health)
+    def health() -> Health:
+        # The memory store is a development adapter. The response shape stays
+        # compatible with the future PostgreSQL readiness check.
+        return Health(status="ok", database="up")
+
+    return app
+
+
+app = create_app()
