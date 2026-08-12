@@ -335,6 +335,27 @@ class RecommendationAccepted(ContractModel):
     status: Literal["pending"]
 
 
+class ManagerProductRequest(ContractModel):
+    request_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
+    recommendation_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
+
+
+class ManagerProductRequestAccepted(ContractModel):
+    request_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
+    status: Literal["accepted", "duplicate"]
+
+
+class ManagerEvent(ContractModel):
+    schema_version: Literal["1.0"]
+    event_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
+    sequence: int = Field(ge=0)
+    session_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
+    kiosk_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
+    event_type: Literal["customer_product_request"]
+    emitted_at: datetime
+    payload: dict[str, Any]
+
+
 class Health(ContractModel):
     status: Literal["ok", "degraded"]
     database: Literal["up", "down"]
