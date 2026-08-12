@@ -74,6 +74,8 @@
 
 Schema와 event에는 웹캠 원본 프레임, 이미지 바이트, 얼굴 embedding, blob, base64 payload나 원본 파일 경로를 정의하지 않습니다. Object는 허용된 필드만 받도록 `additionalProperties: false`를 사용합니다. 상품 catalog의 `image_url`은 표시 자산의 외부 참조이며 이미지 payload가 아닙니다.
 
+원격 추론이 승인되더라도 이 JSON Contract v1과 일반 REST API의 금지 원칙은 유지합니다. Kiosk와 Vision Gateway 사이의 일시적 binary frame transport는 [`ADR-0001`](../docs/adr/0001-remote-vision-inference.md) 승인 후 별도 `Vision Stream v1` Contract PR로 정의하며, 실제 image payload fixture를 Git에 저장하지 않습니다.
+
 ## JSON Schema 밖의 통합 불변조건
 
 다음 조건은 단일 JSON 문서의 Draft 2020-12 검증만으로 완전히 표현할 수 없으므로 contract test와 소비자 코드가 확인해야 합니다.

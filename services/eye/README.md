@@ -6,7 +6,7 @@
 
 ## 입력
 
-- 수명 제한 메모리 프레임 참조와 캡처 시점 `FrameContext`
+- Vision Gateway가 decode한 수명 제한 서버 메모리 frame 참조와 Kiosk 캡처 시점 `FrameContext`
 - 화면·영상 layout과 version이 고정된 `LookbookManifest`
 - 선택된 adapter 종류와 calibration 설정
 
@@ -23,6 +23,7 @@
 - 무효 시선을 `(0, 0)`으로 만들거나 영상 밖 시선을 임의의 상품에 연결하지 않는다.
 - 추론 완료 시점의 영상 시각을 사용하지 않는다.
 - 모델 코드·weight·대형 생성물을 이 scaffold에 넣지 않는다.
+- 원본 frame을 Adapter 출력·예외·로그·파일·DB·cache에 포함하지 않는다.
 
 Adapter의 언어 독립 규약은 [`adapters/README.md`](adapters/README.md)를 따른다.
 

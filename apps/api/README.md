@@ -19,6 +19,7 @@
 ## 금지사항
 
 - 원본 이미지·영상·base64·얼굴 embedding 또는 그 파일 경로를 받거나 저장하지 않는다.
+- 원격 Eye·Face frame ingress는 별도 Vision Gateway 책임이다. 일반 REST middleware·DB·request log로 우회 수신하지 않는다.
 - 매 프레임마다 HTTP 요청을 요구하지 않는다. 소량 batch와 종료·장면 전환 flush를 지원한다.
 - 특정 Eye/Face 모델의 입력 형식이나 라이브러리를 API 계약에 노출하지 않는다.
 - 재전송된 `event_id`를 중복 저장하지 않는다.
