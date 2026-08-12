@@ -11,7 +11,9 @@ from mcm_eye import (
     AdapterStateError,
     CalibrationRequest,
     EyeAdapter,
+    FakeDeliveryScenario,
     FakeEyeAdapter,
+    FakeGazeDelivery,
     FakeScenario,
 )
 
@@ -92,7 +94,8 @@ def test_calibration_id_is_used_by_following_samples() -> None:
 
 def test_normal_sample_preserves_capture_context_and_contract() -> None:
     context = Context()
-    sample = initialized_adapter().infer(object(), context)
+    adapter = initialized_adapter()
+    sample = adapter.infer(object(), context)
     payload = sample.to_payload()
 
     assert payload["session_id"] == context.session_id
@@ -107,6 +110,7 @@ def test_normal_sample_preserves_capture_context_and_contract() -> None:
     assert payload["confidence"] == 0.9
     assert payload["valid"] is True
     assert payload["reason"] is None
+    assert payload["producer_id"] == adapter.metadata().adapter_id
     assert "adapter_id" not in payload
     assert_contract_valid(payload)
 
@@ -161,16 +165,56 @@ def test_delayed_scenario_uses_injected_sleeper_without_real_wait() -> None:
     assert_contract_valid(payload)
 
 
-def test_out_of_order_scenario_swaps_adjacent_sequences() -> None:
-    adapter = initialized_adapter(FakeScenario.OUT_OF_ORDER)
+def test_out_of_order_delivery_reorders_without_rewriting_capture_context() -> None:
+    adapter = initialized_adapter()
+    delivery = FakeGazeDelivery(FakeDeliveryScenario.OUT_OF_ORDER)
+    first_context = replace(
+        Context(),
+        sequence=0,
+        frame_id="frame-00000",
+        captured_at_mono_ms=1000.0,
+        video_time_ms=100,
+    )
+    second_context = replace(
+        Context(),
+        sequence=1,
+        frame_id="frame-00001",
+        captured_at_mono_ms=1033.0,
+        video_time_ms=133,
+    )
+    first = adapter.infer(object(), first_context)
+    second = adapter.infer(object(), second_context)
 
-    first = adapter.infer(object(), replace(Context(), sequence=0)).to_payload()
-    second = adapter.infer(object(), replace(Context(), sequence=1)).to_payload()
+    assert delivery.push(first) == ()
+    delivered = delivery.push(second)
 
-    assert first["sequence"] == 1
-    assert second["sequence"] == 0
-    assert_contract_valid(first)
-    assert_contract_valid(second)
+    assert delivered == (second, first)
+    assert [sample.sequence for sample in delivered] == [1, 0]
+    assert [(sample.sequence, sample.frame_id) for sample in delivered] == [
+        (1, "frame-00001"),
+        (0, "frame-00000"),
+    ]
+    assert [sample.captured_at_mono_ms for sample in delivered] == [
+        1033.0,
+        1000.0,
+    ]
+    for sample in delivered:
+        assert_contract_valid(sample.to_payload())
+
+
+def test_default_delivery_emits_each_sample_immediately() -> None:
+    sample = initialized_adapter().infer(object(), Context())
+
+    assert FakeGazeDelivery().push(sample) == (sample,)
+
+
+def test_out_of_order_delivery_flushes_an_unpaired_final_sample() -> None:
+    sample = initialized_adapter().infer(object(), Context())
+    delivery = FakeGazeDelivery(FakeDeliveryScenario.OUT_OF_ORDER)
+
+    assert delivery.push(sample) == ()
+    assert delivery.flush() == (sample,)
+    assert delivery.flush() == ()
 
 
 def test_payload_does_not_expose_raw_frame_or_forbidden_fields() -> None:

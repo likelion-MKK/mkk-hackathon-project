@@ -28,7 +28,44 @@ class FakeScenario(str, Enum):
     LOW_CONFIDENCE = "low_confidence"
     OUTSIDE_VIEWPORT = "outside_viewport"
     DELAYED = "delayed"
+
+
+class FakeDeliveryScenario(str, Enum):
+    IN_ORDER = "in_order"
     OUT_OF_ORDER = "out_of_order"
+
+
+class FakeGazeDelivery:
+    """Deliver samples deterministically without rewriting capture context."""
+
+    def __init__(
+        self,
+        scenario: FakeDeliveryScenario | str = FakeDeliveryScenario.IN_ORDER,
+    ) -> None:
+        self._scenario = FakeDeliveryScenario(scenario)
+        self._pending: GazeSample | None = None
+
+    def push(self, sample: GazeSample) -> tuple[GazeSample, ...]:
+        if self._scenario is FakeDeliveryScenario.IN_ORDER:
+            return (sample,)
+
+        if self._pending is None:
+            self._pending = sample
+            return ()
+
+        pending = self._pending
+        self._pending = None
+        return (sample, pending)
+
+    def flush(self) -> tuple[GazeSample, ...]:
+        """Release an unpaired final sample so the fake never loses data."""
+
+        if self._pending is None:
+            return ()
+
+        pending = self._pending
+        self._pending = None
+        return (pending,)
 
 
 class FakeEyeAdapter(Generic[FrameT]):
@@ -78,6 +115,8 @@ class FakeEyeAdapter(Generic[FrameT]):
         self._require_initialized()
 
     def calibrate(self, request: CalibrationRequest) -> CalibrationResult:
+        """Record the fake calibration ID; no geometric calibration is run."""
+
         self._require_initialized()
         self._calibration_id = request.calibration_id
         return CalibrationResult(
@@ -93,20 +132,14 @@ class FakeEyeAdapter(Generic[FrameT]):
         if self._scenario is FakeScenario.DELAYED and self._delay_ms:
             self._sleeper(self._delay_ms / 1000.0)
 
-        output_sequence = (
-            context.sequence ^ 1
-            if self._scenario is FakeScenario.OUT_OF_ORDER
-            else context.sequence
-        )
-        event_id = self._event_id(context, output_sequence)
+        event_id = self._event_id(context)
 
         if self._scenario is FakeScenario.NO_FACE:
-            return self._invalid_sample(context, event_id, output_sequence, 0.0, "no_face")
+            return self._invalid_sample(context, event_id, 0.0, "no_face")
         if self._scenario is FakeScenario.LOW_CONFIDENCE:
             return self._invalid_sample(
                 context,
                 event_id,
-                output_sequence,
                 0.2,
                 "low_confidence",
             )
@@ -114,14 +147,13 @@ class FakeEyeAdapter(Generic[FrameT]):
             return self._invalid_sample(
                 context,
                 event_id,
-                output_sequence,
                 0.0,
                 "outside_viewport",
             )
 
         screen_x_norm, screen_y_norm = self._coordinates(context)
         return GazeSample(
-            **self._common_fields(context, event_id, output_sequence),
+            **self._common_fields(context, event_id),
             valid=True,
             confidence=0.9,
             reason=None,
@@ -137,7 +169,7 @@ class FakeEyeAdapter(Generic[FrameT]):
         if not self._initialized:
             raise AdapterStateError("FakeEyeAdapter must be initialized before use")
 
-    def _identity(self, context: GazeFrameContext, output_sequence: int) -> str:
+    def _identity(self, context: GazeFrameContext) -> str:
         return "\x1f".join(
             (
                 self.PRODUCER_ID,
@@ -149,21 +181,19 @@ class FakeEyeAdapter(Generic[FrameT]):
                 context.video_id,
                 str(context.video_time_ms),
                 str(context.playback_epoch),
-                str(output_sequence),
+                str(context.sequence),
             )
         )
 
-    def _event_id(self, context: GazeFrameContext, output_sequence: int) -> str:
+    def _event_id(self, context: GazeFrameContext) -> str:
         deterministic_id = uuid.uuid5(
             uuid.NAMESPACE_URL,
-            self._identity(context, output_sequence),
+            self._identity(context),
         )
         return f"gaze-{deterministic_id}"
 
     def _coordinates(self, context: GazeFrameContext) -> tuple[float, float]:
-        digest = hashlib.sha256(
-            self._identity(context, context.sequence).encode("utf-8")
-        ).digest()
+        digest = hashlib.sha256(self._identity(context).encode("utf-8")).digest()
         denominator = float((1 << 64) - 1)
         screen_x_norm = int.from_bytes(digest[:8], "big") / denominator
         screen_y_norm = int.from_bytes(digest[8:16], "big") / denominator
@@ -173,13 +203,12 @@ class FakeEyeAdapter(Generic[FrameT]):
         self,
         context: GazeFrameContext,
         event_id: str,
-        output_sequence: int,
     ) -> dict[str, object]:
         return {
             "schema_version": "1.0",
             "session_id": context.session_id,
             "event_id": event_id,
-            "sequence": output_sequence,
+            "sequence": context.sequence,
             "frame_id": context.frame_id,
             "captured_at_mono_ms": context.captured_at_mono_ms,
             "video_id": context.video_id,
@@ -194,12 +223,11 @@ class FakeEyeAdapter(Generic[FrameT]):
         self,
         context: GazeFrameContext,
         event_id: str,
-        output_sequence: int,
         confidence: float,
         reason: str,
     ) -> GazeSample:
         return GazeSample(
-            **self._common_fields(context, event_id, output_sequence),
+            **self._common_fields(context, event_id),
             valid=False,
             confidence=confidence,
             reason=reason,
