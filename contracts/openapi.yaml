@@ -123,6 +123,33 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/v1/sessions/{session_id}/manager-product-requests:
+    post:
+      tags: [Managers]
+      operationId: createManagerProductRequest
+      summary: Request manager assistance for a completed Top 2 recommendation
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManagerProductRequest"
+      responses:
+        "202":
+          description: Customer product request accepted or recognized as a duplicate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManagerProductRequestAccepted"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
   /api/v1/products/{product_id}:
     get:
       tags: [Products]
@@ -165,7 +192,8 @@ paths:
     get:
       tags: [Managers]
       operationId: listManagerEvents
-      summary: Recover manager events after a WebSocket disconnect
+      summary: Poll customer product request events after a sequence cursor
+      description: Manager clients poll this endpoint every 1-2 seconds and advance the cursor with the largest returned sequence.
       parameters:
         - name: after_sequence
           in: query
@@ -271,6 +299,26 @@ components:
         status:
           const: pending
 
+    ManagerProductRequest:
+      type: object
+      additionalProperties: false
+      required: [request_id, recommendation_id]
+      properties:
+        request_id:
+          $ref: "#/components/schemas/Identifier"
+        recommendation_id:
+          $ref: "#/components/schemas/Identifier"
+
+    ManagerProductRequestAccepted:
+      type: object
+      additionalProperties: false
+      required: [request_id, status]
+      properties:
+        request_id:
+          $ref: "#/components/schemas/Identifier"
+        status:
+          enum: [accepted, duplicate]
+
     Product:
       type: object
       additionalProperties: false
@@ -340,9 +388,3 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
-
-x-websocket-channel:
-  path: /ws/v1/managers
-  direction: server-to-client
-  message:
-    $ref: "./events/manager-event.schema.json"

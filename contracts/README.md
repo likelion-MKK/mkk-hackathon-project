@@ -5,10 +5,10 @@
 ## API 계약
 
 - `openapi.yaml`: FastAPI가 구현할 REST API의 OpenAPI 3.1 계약
-- `events/manager-event.schema.json`: `/ws/v1/managers`가 전달할 WebSocket 메시지 계약
+- `events/manager-event.schema.json`: 고객의 S04 제품 요청을 매니저 화면에 전달하는 polling 이벤트 계약
 - `events/reaction-batch.schema.json`: Kiosk·AI 영역이 Backend로 전송할 파생 반응 batch 계약
 
-OpenAPI의 `x-websocket-channel`은 REST와 별개인 매니저 WebSocket endpoint와 메시지 schema를 연결하기 위한 프로젝트 확장 필드입니다.
+`GET /api/v1/manager/events?after_sequence={last_sequence}`은 매니저 화면이 1~2초 간격으로 polling하는 이벤트 조회 계약입니다. `event_id`로 중복을 제거하고, 가장 큰 `sequence`를 다음 cursor로 사용합니다.
 
 ## Schema와 정상 fixture
 
