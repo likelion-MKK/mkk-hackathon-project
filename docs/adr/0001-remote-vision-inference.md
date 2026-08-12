@@ -147,7 +147,7 @@ Binary transport는 파생 event Contract v1과 분리한다. schema fixture에�
 - 기존 FastAPI Backend
 - PostgreSQL
 
-GPU 종류와 cloud 상품은 모델이 정해지기 전에 확정하지 않는다. D5 benchmark에서 CPU/GPU별 모델 메모리, warmup, 한 세션 capture-to-result p50/p95, 지속 FPS와 10분 이상 안정성을 기록한 뒤 가장 작은 통과 사양을 선택한다. 첫 용량 Gate는 동시 Kiosk `1`대로 검증하고 실제 동시 사용 요구가 확인되면 `N`개 세션 load test로 확장한다.
+GPU 종류와 cloud 상품은 모델이 정해지기 전에 확정하지 않는다. [`Vision 추론 서버 선정·비용 결정 계획`](../benchmarks/VISION_SERVER_SELECTION_PLAN.md)에 따라 D5 benchmark에서 workload·모델을 먼저 고정하고 CPU/GPU별 모델 메모리, warmup, 한 세션 capture-to-result p50/p95, 지속 FPS와 10분 이상 안정성을 기록한 뒤 가장 작은 통과 사양을 선택한다. 첫 용량 Gate는 동시 Kiosk `1`대로 검증하고 실제 동시 사용 요구가 확인되면 `N`개 세션 load test로 확장한다. 같은 날짜·region·과금 조건의 총비용과 운영·보안 Gate까지 통과한 결과만 후속 ADR-0002에서 cloud·region·instance 결정으로 승인한다.
 
 ## 7. 구현 순서
 
@@ -157,11 +157,12 @@ Contract 변경 순서를 지키며 다음 PR을 직렬로 진행한다.
 2. **Transport Contract PR**: Vision Stream v1과 session stream 권한, synthetic protocol test를 추가한다.
 3. **Gateway PR**: FakeEye/FakeFace를 사용하는 WSS Gateway, 인증·origin·limit·비저장 test를 구현한다.
 4. **Kiosk Producer PR**: `RemoteVisionClient`, binary encoder, in-flight `1`, frame drop과 disconnect UI를 구현한다.
-5. **Eye Worker PR**: 선택 Eye Adapter와 보정 state를 서버 runtime에 연결한다.
-6. **Face Worker PR**: 선택 Face Adapter와 taxonomy 정규화를 서버 runtime에 연결한다.
-7. **Wiring PR**: 파생 sample callback → AOI/ReactionBatch → Backend를 연결한다.
-8. **Deployment PR**: TLS, private network, secret, health/readiness, resource limit과 rollback을 구성한다.
-9. **Live Gate**: 한 세션 전체 룩북, 네트워크 단절, 과부하, 세션 reset과 원본 frame 비저장을 검증한다.
+5. **Model·Server Benchmark Gate**: 고정 후보와 합성 fixture를 CPU → fractional GPU → full GPU 순서로 비교하고, network·동시 세션·총비용·보안 Gate를 통과한 cloud·region·instance를 ADR-0002로 승인한다.
+6. **Eye Worker PR**: 선택 Eye Adapter와 보정 state를 승인된 서버 runtime에 연결한다.
+7. **Face Worker PR**: 선택 Face Adapter와 taxonomy 정규화를 승인된 서버 runtime에 연결한다.
+8. **Wiring PR**: 파생 sample callback → AOI/ReactionBatch → Backend를 연결한다.
+9. **Deployment PR**: ADR-0002의 승인된 사양에 TLS, private network, secret, health/readiness, resource limit과 rollback을 구성한다.
+10. **Live Gate**: 한 세션 전체 룩북, 네트워크 단절, 과부하, 세션 reset과 원본 frame 비저장을 검증한다.
 
 ## 8. 승인 Gate
 
@@ -173,6 +174,7 @@ Contract 변경 순서를 지키며 다음 PR을 직렬로 진행한다.
 - [ ] WSS synthetic vertical slice에서 frame/context와 결과가 정확히 대응한다.
 - [ ] 선택 Eye·Face 모델이 같은 서버 조건의 benchmark를 통과했다.
 - [ ] capture-to-result 지연·지속 FPS·drop rate의 합격 수치를 팀이 확정했다.
+- [ ] 서버 선정 계획의 CPU→GPU·network·동시 세션·총비용·운영 Gate를 통과하고 ADR-0002를 승인했다.
 - [ ] 원본 frame이 proxy·app·APM·DB·cache·artifact·backup에 남지 않음을 점검했다.
 - [ ] 연결 실패 시 가짜 분석을 만들지 않고 `insufficient_data` 흐름으로 종료된다.
 - [ ] 배포 비용과 시연 시간 동안의 운영 방법·rollback 담당자를 확정했다.

@@ -32,6 +32,7 @@ README.md
 | [`docs/adr/README.md`](adr/README.md) | 기술·모델 결정을 바꿀 때 | 결정 근거와 대안을 어디에 남기는가? |
 | [`ADR-0001 원격 Eye·Face 추론 서버 전환`](adr/0001-remote-vision-inference.md) | AI 실행 위치·실시간 frame transport·서버 배포 작업 | Kiosk와 서버의 책임, 비저장 경계, 장애·승인 Gate는 무엇인가? |
 | [`docs/benchmarks/README.md`](benchmarks/README.md) | Eye·Face 후보 평가 | 비교 결과와 재현 방법을 어디에 남기는가? |
+| [`Vision 추론 서버 선정·비용 결정 계획`](benchmarks/VISION_SERVER_SELECTION_PLAN.md) | 목표 서버·region·CPU/GPU·비용 결정 | workload와 모델을 고정한 뒤 어떤 Gate 순서로 cloud와 instance를 선택하는가? |
 | [`docs/sjf/README.md`](sjf/README.md) | 과거 협업 자료가 필요할 때만 | 참고 자료는 어디에 있는가? |
 
 각 `apps/`, `services/`, `experiments/`, `tests/` 디렉터리의 `README.md`는 해당 영역의 입력·출력·소유자·금지사항을 설명한다.
@@ -63,11 +64,11 @@ README.md
 | Eye Adapter·보정 | `services/eye/README.md` → `gaze-sample.schema.json` → `lookbook-manifest.schema.json` → `D1_TECHNICAL_DECISIONS.md`의 보정·실행 위치 항목 |
 | AOI Mapper·룩북 | `services/eye/README.md` → `lookbook-manifest.schema.json`과 example → `product-attention-event.schema.json` → 실제 `data/lookbooks/<version>/manifest.json` |
 | Face Adapter | `services/face/README.md` → `expression-sample.schema.json`과 example → `D1_TECHNICAL_DECISIONS.md`의 실행 위치 항목 |
-| 원격 Vision Gateway·배포 | `adr/0001-remote-vision-inference.md` → `D1_TECHNICAL_DECISIONS.md`의 D1-05 → `apps/kiosk/README.md` → Eye·Face Adapter 계약 → 승인 후 추가할 Vision Stream v1 |
+| 원격 Vision Gateway·배포 | `adr/0001-remote-vision-inference.md` → `benchmarks/VISION_SERVER_SELECTION_PLAN.md` → `D1_TECHNICAL_DECISIONS.md`의 D1-05 → `apps/kiosk/README.md` → Eye·Face Adapter 계약 → 승인 후 추가할 Vision Stream v1 |
 | 추천 엔진 | `services/recommendation/README.md` → `product-attention-event.schema.json` → `recommendation-result.schema.json` → 알고리즘 ADR |
 | 상품·QR | `product-catalog.schema.json`과 example → `data/products/` → `contracts/openapi.yaml` |
 | Contract 변경 | `contracts/README.md` → 대상 schema와 정상·invalid example → 생산자·소비자 README → `CONTRIBUTING.md` |
-| 모델 후보 조사 | `experiments/<eye 또는 face>/README.md` → `docs/benchmarks/README.md` → 대상 서비스 Adapter 계약 → 관련 ADR |
+| 모델 후보 조사 | `experiments/<eye 또는 face>/README.md` → `docs/benchmarks/README.md` → `docs/benchmarks/VISION_SERVER_SELECTION_PLAN.md` → 대상 서비스 Adapter 계약 → 관련 ADR |
 | 통합·E2E | `DETAILED_DESIGN_PLAN.md`의 Gate·Contract 항목 → `tests/integration/README.md` 또는 `tests/e2e/README.md` → 관련 example |
 | PR·릴리스 | `CONTRIBUTING.md` → `.github/PULL_REQUEST_TEMPLATE.md` → 변경 영역 README |
 

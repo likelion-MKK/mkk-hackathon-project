@@ -649,12 +649,12 @@ QR에는 원본 반응 데이터나 얼굴 관련 정보는 넣지 않는다.
 
 | 담당 | 하루 결과물 |
 | --- | --- |
-| 박형진 | 목표 서버와 WSS 측정 harness, Recommendation·Manager event 계약, ADR 리뷰 주관 |
+| 박형진 | [`Vision 서버 선정 계획`](benchmarks/VISION_SERVER_SELECTION_PLAN.md)의 공통 harness·network·동시 세션·비용표, Recommendation·Manager event 계약, ADR 리뷰 주관 |
 | 양유상 | 목표 서버의 Eye 비교표, 선택·fallback ADR, capture-to-result·자원 smoke test |
 | 정은미 | 목표 서버의 Face 비교표, 선택·fallback ADR, capture-to-result·자원 smoke test |
 | 조윤혜 | 실제 생성 타입·RemoteVisionClient 연결, 전송 해상도·FPS 비교와 터치·오류 상태 정리 |
 
-**통합 Gate B:** ADR-0001 승인, 모델 revision·license, 목표 서버, WSS protocol, capture-to-result 지연·FPS·drop·자원·원본 비저장 기준을 확정한다. 통과하지 못하면 실제 customer frame 연결 없이 Fake/Replay로 다른 작업을 계속한다.
+**통합 Gate B:** ADR-0001 승인 후 workload·모델을 고정하고 CPU → fractional GPU → full GPU, 현장 network, 동시 세션, 같은 날짜의 총비용과 보안·운영 Gate를 순서대로 통과한다. 모델 revision·license, WSS protocol, capture-to-result 지연·FPS·drop·자원·원본 비저장 기준과 목표 cloud·region·instance를 후속 ADR-0002로 확정한다. 통과하지 못하면 실제 customer frame 연결이나 Deployment PR 없이 Fake/Replay로 다른 작업을 계속한다.
 
 ### D6. 선택 모델과 실시간 파이프라인
 
@@ -764,6 +764,7 @@ SHOW_GAZE_DEBUG=false|true
 
 - S01부터 S04까지 mock E2E와 live vertical slice가 모두 동작한다.
 - Eye와 Face 각각 후보 비교표, 재현 benchmark, 선택 ADR, 고정 revision·license·checksum과 fallback이 있다.
+- Vision 서버는 workload·모델·CPU/GPU·network·동시 세션·총비용·운영 Gate를 순서대로 통과하고 ADR-0002에 cloud·region·instance와 rollback 근거가 기록되어 있다.
 - 시선 좌표가 캡처 시점의 영상 시각·layout·AOI와 결합되어 product ID 후보로 전달된다.
 - Eye·Face의 무효 신호가 무관심이나 중립으로 잘못 계산되지 않는다.
 - 실제 추천 알고리즘이 없어도 mock 경계로 모든 팀이 병렬 개발할 수 있다.
@@ -787,6 +788,6 @@ SHOW_GAZE_DEBUG=false|true
 6. Manager 시작 알림을 S02 AI 선택과 동의 완료 직후 전송하는 기준
 7. PostgreSQL 실행 환경과 Alembic migration 운영 방식
 8. 구매 전환 기록을 Manager 입력으로 시작할지 여부
-9. 목표 Vision 서버·region·CPU/GPU·동시 Kiosk 수와 성능·비용 Gate
+9. [`Vision 서버 선정 계획`](benchmarks/VISION_SERVER_SELECTION_PLAN.md)에 따른 목표 cloud·region·CPU/GPU·동시 Kiosk 수와 성능·비용·운영 Gate 및 ADR-0002 승인
 10. 동의 화면에 표시할 저장 항목과 보유 기간 결정 일정
 11. D5까지 사용할 Eye·Face 후보 최소 3개씩의 조사 범위
