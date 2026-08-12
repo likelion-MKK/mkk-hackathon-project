@@ -12,7 +12,16 @@ from datetime import datetime
 from typing import Any, Literal, Self, TypeAlias
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictFloat,
+    StrictInt,
+    field_validator,
+    model_validator,
+)
 
 
 IDENTIFIER_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]*$"
@@ -150,26 +159,26 @@ class ExpressionSample(ContractModel):
     schema_version: Literal["1.0"]
     session_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
     event_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
-    sequence: int = Field(ge=0)
+    sequence: StrictInt = Field(ge=0)
     frame_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
-    captured_at_mono_ms: float = Field(ge=0)
+    captured_at_mono_ms: StrictFloat = Field(ge=0)
     video_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
-    video_time_ms: int = Field(ge=0)
-    playback_epoch: int = Field(ge=0)
+    video_time_ms: StrictInt = Field(ge=0)
+    playback_epoch: StrictInt = Field(ge=0)
     producer_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
     model_revision: Revision = Field(min_length=1, max_length=128)
     taxonomy_version: Revision = Field(min_length=1, max_length=128)
-    face_detected: bool
-    face_count: int = Field(ge=0)
-    scores: dict[str, float]
-    quality: float = Field(ge=0, le=1)
-    valid: bool
-    confidence: float = Field(ge=0, le=1)
+    face_detected: StrictBool
+    face_count: StrictInt = Field(ge=0)
+    scores: dict[str, StrictFloat]
+    quality: StrictFloat = Field(ge=0, le=1)
+    valid: StrictBool
+    confidence: StrictFloat = Field(ge=0, le=1)
     reason: Reason | None
 
     @field_validator("scores")
     @classmethod
-    def score_labels_are_taxonomy_keys(cls, value: dict[str, float]) -> dict[str, float]:
+    def score_labels_are_taxonomy_keys(cls, value: dict[str, StrictFloat]) -> dict[str, StrictFloat]:
         for label, score in value.items():
             if re.fullmatch(LABEL_PATTERN, label) is None:
                 raise ValueError("expression score labels must be lowercase taxonomy keys")
@@ -201,29 +210,29 @@ class ExpressionSample(ContractModel):
 class ProductAttentionCandidate(ContractModel):
     exposure_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
     product_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
-    priority: int = Field(ge=0)
+    priority: StrictInt = Field(ge=0)
 
 
 class ProductAttentionEvent(ContractModel):
     schema_version: Literal["1.0"]
     session_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
     event_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
-    sequence: int = Field(ge=0)
+    sequence: StrictInt = Field(ge=0)
     frame_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
-    captured_at_mono_ms: float = Field(ge=0)
+    captured_at_mono_ms: StrictFloat = Field(ge=0)
     video_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
-    video_time_ms: int = Field(ge=0)
-    playback_epoch: int = Field(ge=0)
+    video_time_ms: StrictInt = Field(ge=0)
+    playback_epoch: StrictInt = Field(ge=0)
     producer_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
     model_revision: Revision = Field(min_length=1, max_length=128)
     manifest_version: Revision = Field(min_length=1, max_length=128)
     source_gaze_event_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
-    outside_video: bool
-    video_x_norm: float | None = Field(default=None, ge=0, le=1)
-    video_y_norm: float | None = Field(default=None, ge=0, le=1)
+    outside_video: StrictBool
+    video_x_norm: StrictFloat | None = Field(default=None, ge=0, le=1)
+    video_y_norm: StrictFloat | None = Field(default=None, ge=0, le=1)
     candidates: list[ProductAttentionCandidate] = Field(max_length=32)
-    valid: bool
-    confidence: float = Field(ge=0, le=1)
+    valid: StrictBool
+    confidence: StrictFloat = Field(ge=0, le=1)
     reason: Reason | None
 
     @field_validator("reason")
@@ -255,7 +264,7 @@ ReactionEvent: TypeAlias = ExpressionSample | ProductAttentionEvent
 class ReactionBatch(ContractModel):
     schema_version: Literal["1.0"]
     batch_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
-    batch_sequence: int = Field(ge=0)
+    batch_sequence: StrictInt = Field(ge=0)
     session_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
     video_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
     events: list[ReactionEvent] = Field(min_length=1, max_length=256)

@@ -107,3 +107,56 @@ def test_conflicting_event_sequence_is_bad_request(client: TestClient) -> None:
 
     assert response.status_code == 400
     assert response.json()["code"] == "duplicate_event_sequence"
+
+
+@pytest.mark.parametrize(
+    ("target", "field", "value"),
+    [
+        ("batch", "batch_sequence", "0"),
+        ("event", "sequence", "1"),
+        ("event", "captured_at_mono_ms", "143220.4"),
+        ("event", "face_detected", "true"),
+    ],
+)
+def test_reaction_batch_rejects_string_type_coercion(
+    client: TestClient,
+    target: str,
+    field: str,
+    value: str,
+) -> None:
+    session_id = create_session(client)
+    body = reaction_batch(session_id)
+    payload = body if target == "batch" else body["events"][0]
+    payload[field] = value
+
+    response = client.post(f"/api/v1/sessions/{session_id}/reaction-batches", json=body)
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "invalid_request"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        f"/api/v1/products/{'P' * 600}",
+        f"/api/v1/lookbooks/{'L' * 600}/manifest",
+    ],
+)
+def test_long_read_path_identifier_is_bad_request(client: TestClient, path: str) -> None:
+    response = client.get(path)
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "invalid_request"
+
+
+def test_long_session_path_identifier_is_bad_request(client: TestClient) -> None:
+    body = reaction_batch("session-valid-01")
+    long_session_id = "S" * 600
+
+    response = client.post(
+        f"/api/v1/sessions/{long_session_id}/reaction-batches",
+        json=body,
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "invalid_request"

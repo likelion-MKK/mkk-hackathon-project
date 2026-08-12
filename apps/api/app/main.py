@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from fastapi import FastAPI, Request, status
+from typing import Annotated
+
+from fastapi import FastAPI, Path, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from apps.api.app.schemas import (
     ErrorResponse,
     Health,
+    IDENTIFIER_PATTERN,
     LookbookManifest,
     Product,
     ReactionBatch,
@@ -17,6 +20,12 @@ from apps.api.app.schemas import (
     SessionCreated,
 )
 from apps.api.app.store import DomainError, MemoryStore
+
+
+IdentifierPath = Annotated[
+    str,
+    Path(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN),
+]
 
 
 def _error_response(code: str, message: str, status_code: int) -> JSONResponse:
@@ -58,7 +67,7 @@ def create_app(store: MemoryStore | None = None) -> FastAPI:
         response_model=LookbookManifest,
         responses={404: {"model": ErrorResponse}},
     )
-    def get_manifest(lookbook_id: str) -> LookbookManifest:
+    def get_manifest(lookbook_id: IdentifierPath) -> LookbookManifest:
         return app.state.store.get_manifest(lookbook_id)
 
     @app.post(
@@ -67,7 +76,7 @@ def create_app(store: MemoryStore | None = None) -> FastAPI:
         status_code=status.HTTP_202_ACCEPTED,
         responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}},
     )
-    def append_reaction_batch(session_id: str, batch: ReactionBatch) -> ReactionBatchAccepted:
+    def append_reaction_batch(session_id: IdentifierPath, batch: ReactionBatch) -> ReactionBatchAccepted:
         return app.state.store.append_batch(session_id, batch)
 
     @app.get(
@@ -75,7 +84,7 @@ def create_app(store: MemoryStore | None = None) -> FastAPI:
         response_model=Product,
         responses={404: {"model": ErrorResponse}},
     )
-    def get_product(product_id: str) -> Product:
+    def get_product(product_id: IdentifierPath) -> Product:
         return app.state.store.get_product(product_id)
 
     @app.get("/api/v1/health", response_model=Health)
