@@ -2,7 +2,7 @@
 
 from mcm_face.adapter import FaceAdapter
 from mcm_face.adapters.fake import FakeFaceAdapter, FakeFaceScenario
-from mcm_face.models import AdapterMetadata, ExpressionSample, FrameContext
+from mcm_face.models import AdapterMetadata, ExpressionSample, FaceFrameContext
 
 __all__ = [
     "AdapterMetadata",
@@ -10,5 +10,5 @@ __all__ = [
     "FaceAdapter",
     "FakeFaceAdapter",
     "FakeFaceScenario",
-    "FrameContext",
+    "FaceFrameContext",
 ]

@@ -5,8 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 from hashlib import sha256
+from typing import Generic, TypeVar
 
-from mcm_face.models import AdapterMetadata, ExpressionSample, FrameContext
+from mcm_face.models import AdapterMetadata, ExpressionSample, FaceFrameContext
+
+
+FrameT = TypeVar("FrameT")
 
 
 class FakeFaceScenario(StrEnum):
@@ -31,14 +35,16 @@ class _ScenarioResult:
     reason: str | None
 
 
-class FakeFaceAdapter:
+class FakeFaceAdapter(Generic[FrameT]):
     """Produce repeatable ExpressionSample values without a model or camera."""
 
     _METADATA = AdapterMetadata(
         adapter_id="fake-face-adapter",
+        model_id="fake-face-model",
         model_revision="fake-face-model-v1",
         taxonomy_version="fake-face-taxonomy-v1",
         runtime="python",
+        source_labels=("smile_like", "brow_raise_like", "unmapped_fixture_label"),
     )
 
     def __init__(
@@ -66,7 +72,7 @@ class FakeFaceAdapter:
 
         self._require_ready()
 
-    def infer(self, frame: object, context: FrameContext) -> ExpressionSample:
+    def infer(self, frame: FrameT, context: FaceFrameContext) -> ExpressionSample:
         """Return a derived sample and never retain or inspect the frame object."""
 
         self._require_ready()
@@ -106,7 +112,7 @@ class FakeFaceAdapter:
         if not self._initialized or self._disposed:
             raise RuntimeError("FakeFaceAdapter is not initialized")
 
-    def _event_id(self, context: FrameContext) -> str:
+    def _event_id(self, context: FaceFrameContext) -> str:
         material = "|".join(
             (
                 str(self._seed),
@@ -123,7 +129,7 @@ class FakeFaceAdapter:
         digest = sha256(material.encode("utf-8")).hexdigest()[:24]
         return f"expression-fake-{digest}"
 
-    def _scenario_result(self, context: FrameContext) -> _ScenarioResult:
+    def _scenario_result(self, context: FaceFrameContext) -> _ScenarioResult:
         primary = self._normalized_value(context, "primary", lower=0.55, upper=0.9)
         secondary = round(1.0 - primary, 6)
 
@@ -181,7 +187,7 @@ class FakeFaceAdapter:
 
     def _normalized_value(
         self,
-        context: FrameContext,
+        context: FaceFrameContext,
         name: str,
         *,
         lower: float,

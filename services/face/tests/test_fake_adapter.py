@@ -3,12 +3,19 @@ from __future__ import annotations
 import gc
 import json
 import weakref
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
 from jsonschema import Draft202012Validator
 
-from mcm_face import FaceAdapter, FakeFaceAdapter, FakeFaceScenario, FrameContext
+from mcm_face import (
+    ExpressionSample,
+    FaceAdapter,
+    FaceFrameContext,
+    FakeFaceAdapter,
+    FakeFaceScenario,
+)
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -20,8 +27,19 @@ EXPRESSION_SCHEMA = json.loads(
 VALIDATOR = Draft202012Validator(EXPRESSION_SCHEMA)
 
 
-def frame_context(*, sequence: int = 1, frame_id: str = "frame-0001") -> FrameContext:
-    return FrameContext(
+@dataclass(frozen=True, slots=True)
+class KioskContext:
+    session_id: str
+    sequence: int
+    frame_id: str
+    captured_at_mono_ms: float
+    video_id: str
+    video_time_ms: int
+    playback_epoch: int
+
+
+def frame_context(*, sequence: int = 1, frame_id: str = "frame-0001") -> KioskContext:
+    return KioskContext(
         session_id="session-test-001",
         sequence=sequence,
         frame_id=frame_id,
@@ -36,8 +54,8 @@ def initialized_adapter(
     scenario: FakeFaceScenario = FakeFaceScenario.VALID_FACE,
     *,
     seed: int = 7,
-) -> FakeFaceAdapter:
-    adapter = FakeFaceAdapter(seed=seed, scenario=scenario)
+) -> FakeFaceAdapter[object]:
+    adapter = FakeFaceAdapter[object](seed=seed, scenario=scenario)
     adapter.initialize()
     adapter.warmup()
     return adapter
@@ -121,7 +139,23 @@ def test_capture_context_is_preserved() -> None:
 
 
 def test_adapter_satisfies_public_protocol() -> None:
-    assert isinstance(FakeFaceAdapter(), FaceAdapter)
+    assert isinstance(FakeFaceAdapter[object](), FaceAdapter)
+    assert isinstance(frame_context(), FaceFrameContext)
+
+
+def test_metadata_matches_documented_interface() -> None:
+    metadata = FakeFaceAdapter[object]().metadata()
+
+    assert metadata.adapter_id == "fake-face-adapter"
+    assert metadata.model_id == "fake-face-model"
+    assert metadata.model_revision == "fake-face-model-v1"
+    assert metadata.taxonomy_version == "fake-face-taxonomy-v1"
+    assert metadata.runtime == "python"
+    assert metadata.source_labels == (
+        "smile_like",
+        "brow_raise_like",
+        "unmapped_fixture_label",
+    )
 
 
 def test_lifecycle_is_safe_and_explicit() -> None:
@@ -163,4 +197,73 @@ def test_frame_reference_is_not_retained() -> None:
 
 def test_invalid_scenario_name_is_rejected() -> None:
     with pytest.raises(ValueError):
-        FakeFaceAdapter(scenario="unsupported")
+        FakeFaceAdapter[object](scenario="unsupported")
+
+
+def valid_expression_sample() -> ExpressionSample:
+    return initialized_adapter().infer(object(), frame_context())
+
+
+def invalid_expression_sample() -> ExpressionSample:
+    return initialized_adapter(FakeFaceScenario.NO_FACE).infer(
+        object(), frame_context()
+    )
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"schema_version": "2.0"},
+        {"session_id": ""},
+        {"event_id": "invalid event id"},
+        {"sequence": -1},
+        {"captured_at_mono_ms": -0.1},
+        {"video_time_ms": -1},
+        {"playback_epoch": -1},
+        {"face_count": -1},
+        {"quality": -0.1},
+        {"quality": 1.1},
+        {"confidence": -0.1},
+        {"confidence": 1.1},
+        {"scores": {"invalid-label": 0.5}},
+        {"scores": {"unknown": -0.1}},
+        {"scores": {"unknown": 1.1}},
+        {"face_detected": False},
+        {"face_count": 0},
+        {"face_count": 2},
+        {"scores": {}},
+        {"reason": "unexpected_reason"},
+    ],
+)
+def test_invalid_valid_sample_combinations_are_rejected(
+    changes: dict[str, object],
+) -> None:
+    with pytest.raises(ValueError):
+        replace(valid_expression_sample(), **changes)
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"face_detected": True},
+        {"face_count": 1},
+        {"scores": {"unknown": 0.5}},
+        {"reason": None},
+        {"reason": "Invalid Reason"},
+    ],
+)
+def test_invalid_invalid_sample_combinations_are_rejected(
+    changes: dict[str, object],
+) -> None:
+    with pytest.raises(ValueError):
+        replace(invalid_expression_sample(), **changes)
+
+
+def test_expression_scores_are_defensively_copied() -> None:
+    source_scores = {"unknown": 0.5}
+    sample = replace(valid_expression_sample(), scores=source_scores)
+
+    source_scores["unknown"] = 0.9
+    source_scores["new_label"] = 0.1
+
+    assert dict(sample.scores) == {"unknown": 0.5}

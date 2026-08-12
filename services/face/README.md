@@ -25,7 +25,20 @@ python scripts/validate_contracts.py
 `FakeFaceAdapter`는 실제 카메라·모델·weight·네트워크 없이 결정적인 `ExpressionSample`을 만든다. 지원 scenario는 `valid_face`, `no_face`, `multi_face`, `unknown_label`, `low_quality`, `timeout`이다.
 
 ```python
-from mcm_face import FakeFaceAdapter, FrameContext
+from dataclasses import dataclass
+
+from mcm_face import FakeFaceAdapter
+
+
+@dataclass(frozen=True, slots=True)
+class KioskFrameContext:
+    session_id: str
+    sequence: int
+    frame_id: str
+    captured_at_mono_ms: float
+    video_id: str
+    video_time_ms: int
+    playback_epoch: int
 
 adapter = FakeFaceAdapter(seed=7, scenario="valid_face")
 adapter.initialize()
@@ -33,7 +46,7 @@ adapter.warmup()
 
 sample = adapter.infer(
     frame=object(),
-    context=FrameContext(
+    context=KioskFrameContext(
         session_id="session-demo-001",
         sequence=1,
         frame_id="frame-0001",
@@ -48,7 +61,7 @@ payload = sample.to_payload()
 adapter.dispose()
 ```
 
-`frame`은 동일 Kiosk 메모리 안의 수명 제한 참조이며 Adapter 결과·예외·로그에 포함하지 않는다.
+Face 패키지는 Kiosk의 구체적인 `FrameContext` 타입을 소유하지 않는다. Kiosk가 만든 객체가 공개 `FaceFrameContext` Protocol의 필드를 제공하면 구조적으로 호환된다. `frame`은 동일 Kiosk 메모리 안의 수명 제한 참조이며 Adapter 결과·예외·로그에 포함하지 않는다.
 
 ## 입력
 
