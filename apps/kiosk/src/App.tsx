@@ -1,13 +1,13 @@
 import { useState } from "react";
 
 type KioskScreen =
-  | "intro"
-  | "categorySelection"
-  | "cameraConsent"
-  | "gazeCalibration"
-  | "lookbookPlayback"
-  | "recommendationProcessing"
-  | "recommendationReport";
+  | "screensaver" // S01
+  | "menu" // S02
+  | "consent" // S02 consent step
+  | "calibration" // S03 preparation
+  | "lookbook" // S03
+  | "finalizing" // S03 → S04
+  | "report"; // S04
 
 type ProductCategory = "가방" | "백팩" | "지갑" | "전체 컬렉션";
 
@@ -33,21 +33,21 @@ const buttonStyle = {
 };
 
 function App() {
-  const [screen, setScreen] = useState<KioskScreen>("intro");
+  const [screen, setScreen] = useState<KioskScreen>("screensaver");
   const [selectedCategory, setSelectedCategory] =
     useState<ProductCategory | null>(null);
 
   const selectCategory = (category: ProductCategory) => {
     setSelectedCategory(category);
-    setScreen("cameraConsent");
+    setScreen("consent");
   };
 
   const restart = () => {
     setSelectedCategory(null);
-    setScreen("intro");
+    setScreen("screensaver");
   };
 
-  if (screen === "intro") {
+  if (screen === "screensaver") {
     return (
       <main
         style={{
@@ -66,7 +66,7 @@ function App() {
           <button
             type="button"
             style={{ ...buttonStyle, marginTop: "24px" }}
-            onClick={() => setScreen("categorySelection")}
+            onClick={() => setScreen("menu")}
           >
             취향 발견하기
           </button>
@@ -75,7 +75,7 @@ function App() {
     );
   }
 
-  if (screen === "categorySelection") {
+  if (screen === "menu") {
     return (
       <main
         style={{
@@ -119,7 +119,7 @@ function App() {
     );
   }
 
-  if (screen === "cameraConsent") {
+  if (screen === "consent") {
     return (
       <main
         style={{
@@ -152,7 +152,7 @@ function App() {
               style={buttonStyle}
               onClick={() => {
                 setSelectedCategory(null);
-                setScreen("categorySelection");
+                setScreen("menu");
               }}
             >
               동의하지 않음
@@ -161,7 +161,7 @@ function App() {
             <button
               type="button"
               style={buttonStyle}
-              onClick={() => setScreen("gazeCalibration")}
+              onClick={() => setScreen("calibration")}
             >
               동의하고 계속
             </button>
@@ -171,7 +171,7 @@ function App() {
     );
   }
 
-  if (screen === "gazeCalibration") {
+  if (screen === "calibration") {
     return (
       <main style={pageStyle}>
         <section>
