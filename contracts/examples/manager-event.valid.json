@@ -1,12 +1,13 @@
 {
   "schema_version": "1.0",
-  "event_id": "manager-event-example-0002",
+  "event_id": "manager-request-example-0001",
   "sequence": 4,
   "session_id": "session-example-001",
   "kiosk_id": "kiosk-example-01",
-  "event_type": "recommendation_ready",
+  "event_type": "customer_product_request",
   "emitted_at": "2026-08-11T09:00:00+09:00",
   "payload": {
+    "intent": "view_recommended_products",
     "recommendation_id": "recommendation-example-001",
     "engine_mode": "mock",
     "items": [

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://mcm-lookbook.example/contracts/v1/events/manager-event.schema.json",
   "title": "ManagerEvent",
-  "description": "Manager 화면에 세션 시작 또는 추천 준비 완료를 알리는 WebSocket 이벤트입니다.",
+  "description": "고객의 S04 제품 요청을 매니저 화면에 전달하는 polling 이벤트입니다.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -35,7 +35,8 @@
     "event_type": {
       "enum": [
         "session_started",
-        "recommendation_ready"
+        "recommendation_ready",
+        "customer_product_request"
       ]
     },
     "emitted_at": {
@@ -66,8 +67,39 @@
             "maxProperties": 0
           }
         }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "customer_product_request"
+          }
+        },
+        "required": [
+          "event_type"
+        ]
       },
-      "else": {
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/customer_product_request_payload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "recommendation_ready"
+          }
+        },
+        "required": [
+          "event_type"
+        ]
+      },
+      "then": {
         "properties": {
           "payload": {
             "$ref": "#/$defs/recommendation_payload"
@@ -110,6 +142,39 @@
         "items"
       ],
       "properties": {
+        "recommendation_id": {
+          "$ref": "#/$defs/id"
+        },
+        "engine_mode": {
+          "enum": [
+            "mock",
+            "research_version"
+          ]
+        },
+        "items": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/item"
+          }
+        }
+      }
+    },
+    "customer_product_request_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "intent",
+        "recommendation_id",
+        "engine_mode",
+        "items"
+      ],
+      "properties": {
+        "intent": {
+          "const": "view_recommended_products"
+        },
         "recommendation_id": {
           "$ref": "#/$defs/id"
         },

@@ -5,10 +5,11 @@
 ## API 계약
 
 - `openapi.yaml`: FastAPI가 구현할 REST API의 OpenAPI 3.1 계약
-- `events/manager-event.schema.json`: `/ws/v1/managers`가 전달할 WebSocket 메시지 계약
+- `requests/manager-product-request.schema.json`: S04 고객 제품 요청 body 계약
+- `events/manager-event.schema.json`: 고객의 S04 제품 요청을 매니저 화면에 전달하는 polling 이벤트 계약
 - `events/reaction-batch.schema.json`: Kiosk·AI 영역이 Backend로 전송할 파생 반응 batch 계약
 
-OpenAPI의 `x-websocket-channel`은 REST와 별개인 매니저 WebSocket endpoint와 메시지 schema를 연결하기 위한 프로젝트 확장 필드입니다.
+`GET /api/v1/manager/events?after_sequence={last_sequence}`은 매니저 화면이 1~2초 간격으로 polling하는 이벤트 조회 계약입니다. `event_id`로 중복을 제거하고, 가장 큰 `sequence`를 다음 cursor로 사용합니다.
 
 ## Schema와 정상 fixture
 
@@ -21,7 +22,8 @@ OpenAPI의 `x-websocket-channel`은 REST와 별개인 매니저 WebSocket endpoi
 | `events/product-attention-event.schema.json` | `examples/product-attention-event.valid.json` | 시선과 AOI의 교차 결과 |
 | `events/reaction-batch.schema.json` | `examples/reaction-batch.valid.json` | 파생 반응 event 전송 묶음 |
 | `events/recommendation-result.schema.json` | `examples/recommendation-result.valid.json` | 추천 상태와 Top 2 |
-| `events/manager-event.schema.json` | `examples/manager-event.valid.json` | 세션 시작·추천 준비 알림 |
+| `requests/manager-product-request.schema.json` | `examples/manager-product-request.valid.json` | S04 고객 제품 요청 body |
+| `events/manager-event.schema.json` | `examples/manager-event.valid.json` | 고객의 제품 요청 polling 알림 |
 | `events/conversion-outcome.schema.json` | `examples/conversion-outcome.valid.json` | 추천 후 착용·구매 기록 |
 
 실행용 데이터 fixture는 다음 두 파일에도 있습니다.
@@ -82,6 +84,7 @@ Schema와 event에는 웹캠 원본 프레임, 이미지 바이트, 얼굴 embed
 - batch와 내부 event의 `session_id`, `video_id`가 envelope와 일치함
 - batch 안의 `event_id`와 세션 sequence가 중복되지 않음
 - Top 2의 rank가 각각 `1`, `2`이고 `product_id`가 서로 다름
+- Manager product request에는 `request_id`와 `recommendation_id`만 포함하고 상품 목록을 포함하지 않음
 - `source_gaze_event_id`가 같은 세션의 실제 GazeSample을 가리킴
 
 ## 검증

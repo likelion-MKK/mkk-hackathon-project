@@ -16,7 +16,7 @@
 | D1-03 | Python·Node와 설치 방식 | Node 24 LTS + npm, Python 3.13 + uv, AI 환경은 서비스별 분리 | 잠정 결정 | 박형진·양유상·정은미 |
 | D1-04 | Kiosk 기기·브라우저·카메라 | Windows 11 + Edge Stable + 16:9 Full HD + 720p/30fps 이상 카메라를 기준 환경으로 사용 | 실제 장비 확인 필요 | 박형진·조윤혜 |
 | D1-05 | Eye·Face 실행 위치 | 원본 프레임은 키오스크 밖으로 보내지 않고 동일 기기에서 추론 | 위치 원칙 결정, runtime D5 확정 | 양유상·정은미·조윤혜 |
-| D1-06 | 매니저 최초 알림 | S02에서 AI 추천 선택과 동의가 끝난 직후 `session_started` 전송 | 잠정 결정 | 박형진·조윤혜 |
+| D1-06 | 매니저 제품 요청 알림 | S04에서 고객이 제품 요청 버튼을 누를 때만 Top 2와 함께 `customer_product_request` 기록 | 이슈 #6, Consumer 검토 필요 | 박형진·조윤혜 |
 | D1-07 | PostgreSQL과 migration | PostgreSQL 17.10 Docker Compose, SQLAlchemy 2 + Alembic, migration 단일 순서 관리 | 잠정 결정 | 박형진 |
 | D1-08 | 룩북 영상과 상품 | 개발용 fixture로 병렬 개발, 실제 영상·상품은 version과 checksum을 고정한 뒤 manifest·catalog에 반영 | 실제 자산 확정 필요 | 전원 |
 
@@ -100,7 +100,7 @@ flowchart LR
 - `apps/kiosk`: React + TypeScript + Vite 기반 S01-S04 Kiosk 앱
 - `apps/manager`: React + TypeScript + Vite 기반 매니저 알림 앱
 - 두 앱은 root npm workspace를 사용하고 root `package-lock.json` 하나를 공유한다.
-- REST·WebSocket 데이터 타입은 `contracts/`에서 생성하거나 contract test로 검증한다.
+- REST·polling 데이터 타입은 `contracts/`에서 생성하거나 contract test로 검증한다.
 - Kiosk 상태는 `screensaver → menu → consent → calibration → lookbook → finalizing → report`처럼 명시적인 상태 전이로 관리한다.
 - 무거운 AI 모델 코드는 React component에 직접 넣지 않고 `VisionClient` 경계 뒤에 둔다.
 
@@ -279,38 +279,29 @@ health()
 
 ---
 
-## 7. D1-06 매니저 최초 알림 시점
+## 7. D1-06 매니저 제품 요청 알림 시점
 
-### 선택지
+### 결정
 
-| 시점 | 장점 | 문제 |
-| --- | --- | --- |
-| S01 첫 터치 | 가장 빠르게 알림 | 메뉴만 둘러보는 고객까지 알림이 발생함 |
-| S02 AI 추천 선택 직후 | 실제 분석 플로우 진입자만 알림 | 동의 전 취소를 별도로 처리해야 함 |
-| 동의 완료 직후 | 분석이 실제 시작될 세션만 알림 | S02 선택보다 아주 조금 늦음 |
-| S04 결과 완료 | 결과가 있는 알림만 전송 | 매니저가 고객 이용 중임을 미리 알 수 없음 |
+추천 결과가 완료돼도 자동 알림을 보내지 않는다. **S04에서 고객이 `매니저에게 제품 요청` 버튼을 누를 때만** Kiosk가 `POST /api/v1/sessions/{session_id}/manager-product-requests`를 호출한다.
 
-### 팀장 기본안
-
-**S02에서 AI 추천을 선택하고 데이터 처리 동의가 완료된 직후** 세션을 만들고 `session_started`를 자동 전송한다. S01 첫 터치는 알림 기준으로 사용하지 않는다.
-
-이후 새 알림 카드를 계속 추가하지 않고 같은 `session_id` 카드를 추천 완료 시 갱신한다.
+Backend는 URL의 세션과 `recommendation_id`를 검증한 뒤, 클라이언트가 보낸 상품 목록을 신뢰하지 않고 서버의 완료된 Top 2로 `customer_product_request` 이벤트를 저장한다.
 
 ```text
-session_started
-  → recommendation_ready
+S04 고객 제품 요청
+  → customer_product_request
+  → Manager REST polling
 ```
 
-Contract v1의 ManagerEvent는 위 두 종류만 지원한다. `calibrating`, `analyzing`, `cancelled`, `timed_out`, `failed`까지 매니저에게 실시간으로 보여 줄 필요가 생기면 enum과 example을 먼저 추가하는 별도 Contract PR로 진행한다. Kiosk 내부 화면 상태를 ManagerEvent로 임의 전송하지 않는다.
+Manager Screen은 `GET /api/v1/manager/events?after_sequence={last_sequence}`을 1~2초 간격으로 조회한다. `event_id`로 중복을 제거하고 가장 큰 `sequence`를 다음 cursor로 사용한다. 양방향 채팅과 WebSocket endpoint는 MVP 범위에서 제외한다.
 
 ### ManagerEvent 최소 정보
 
 - 공통: `schema_version`, `event_id`, `sequence`, `session_id`, `kiosk_id`, `event_type`, `emitted_at`, `payload`
-- `session_started`: 개인 정보나 원본 얼굴 없이 빈 `payload`로 시작 상태만 표시
-- `recommendation_ready`: `recommendation_id`, `engine_mode`, rank와 `product_id`로 구성된 Top 2
+- `customer_product_request`: `intent=view_recommended_products`, `recommendation_id`, `engine_mode`, rank와 `product_id`로 구성된 서버 검증 Top 2
 - 상품 표시명과 이미지는 Manager가 같은 `product_id`로 catalog를 조회해 표시
 
-WebSocket 재연결과 중복 전송이 있어도 `event_id`로 한 번만 반영한다. 알림 실패가 Kiosk 룩북 재생을 막아서는 안 된다.
+알림 조회 실패가 Kiosk 룩북 재생을 막아서는 안 된다. 기존 `session_started`, `recommendation_ready`는 v1 소비자 호환을 위해 계약 enum에 남기되, 새 Producer는 생성하지 않는다.
 
 ---
 

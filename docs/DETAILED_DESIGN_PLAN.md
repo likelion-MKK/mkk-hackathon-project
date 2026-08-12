@@ -94,7 +94,7 @@ services/
 
 contracts/
   openapi.yaml                 # REST 계약
-  events/                      # WebSocket·실시간 이벤트 JSON Schema
+  events/                      # Manager polling 이벤트 JSON Schema
   lookbook-manifest.schema.json
   examples/                    # 정상·오류·경계 fixture
 
@@ -182,7 +182,7 @@ AI 후보마다 의존성 환경을 분리해 서로 다른 모델 라이브러�
 | `ProductAttentionEvent` | AOI Mapper | 추천 입력·저장 | 시선과 현재 노출 상품의 교차 결과 |
 | `ReactionBatch` | Kiosk·Signal Transport | FastAPI | 소량의 파생 이벤트 묶음 |
 | `RecommendationResult` | Recommendation Engine | Kiosk·Manager | Top 2, 상태, 알고리즘 버전 |
-| `ManagerEvent` | FastAPI | Manager Screen | 사용 시작과 추천 완료 알림 |
+| `ManagerEvent` | FastAPI | Manager Screen | 고객의 S04 제품 요청 알림 |
 | `ConversionOutcome` | Manager 또는 후속 연동 | FastAPI·PostgreSQL | 추천 후 착용·구매 결과 |
 
 ## 6. Lookbook Manifest와 AOI
@@ -451,11 +451,11 @@ Eye·Face 담당자는 최종 점수를 계산하지 않는다. 추천 영역이
 | `POST` | `/api/v1/sessions/{session_id}/reaction-batches` | 파생 이벤트 batch 저장 |
 | `POST` | `/api/v1/sessions/{session_id}/complete` | 분석 종료와 추천 실행 요청 |
 | `GET` | `/api/v1/sessions/{session_id}/recommendations` | Top 2 결과 조회 |
+| `POST` | `/api/v1/sessions/{session_id}/manager-product-requests` | 고객의 매니저 제품 요청 기록 |
 | `GET` | `/api/v1/products/{product_id}` | 상품 이미지·QR 정보 조회 |
 | `POST` | `/api/v1/conversions` | 착용·구매 전환 결과 저장 |
-| `GET` | `/api/v1/manager/events` | 연결 복구용 이벤트 조회 |
+| `GET` | `/api/v1/manager/events` | polling cursor 뒤 고객 제품 요청 이벤트 조회 |
 | `GET` | `/api/v1/health` | API·DB 상태 확인 |
-| `WS` | `/ws/v1/managers` | 매니저 자동 알림 |
 
 정확한 request·response는 Contract PR의 OpenAPI와 JSON Schema로 정의한다.
 
@@ -469,7 +469,7 @@ Eye·Face 담당자는 최종 점수를 계산하지 않는다. 추천 영역이
 | `reaction_batches` | 원본이 아닌 파생 이벤트 batch와 schema version |
 | `recommendation_runs` | 사용한 algorithm version과 결과 상태 |
 | `recommendation_items` | 추천 순위와 product ID |
-| `manager_events` | 자동 알림과 전달 상태 |
+| `manager_events` | 고객의 제품 요청 알림과 polling cursor |
 | `conversion_outcomes` | 세션·상품별 착용·구매 결과 |
 | `model_registry` | Eye·Face 모델 revision, checksum, license와 상태 |
 
@@ -487,7 +487,7 @@ Eye·Face 담당자는 최종 점수를 계산하지 않는다. 추천 영역이
 
 - 카테고리 탐색과 AI 추천 선택
 - 카메라·파생 데이터 저장·추천 개선 목적 안내
-- AI 추천을 선택하고 동의가 완료되면 분석 세션을 만들고 매니저에게 `session_started` 전송
+- AI 추천을 선택하고 동의가 완료되면 분석 세션을 생성
 - 동의하지 않으면 카메라 분석 없이 다른 흐름 제공
 
 ### S03. AI Lookbook
@@ -504,13 +504,14 @@ Eye·Face 담당자는 최종 점수를 계산하지 않는다. 추천 영역이
 - 추천 상태와 Top 2 표시
 - 상품 이미지와 각 상품의 사전 생성 QR 표시
 - mock과 실제 추천 결과를 개발·검증 환경에서 구분
+- 고객이 원할 때만 `매니저에게 제품 요청` 버튼으로 Top 2 응대를 요청
 - 일정 시간 뒤 다음 고객을 위해 전체 상태 초기화
 
 ### Manager Screen
 
-- 사용 시작 이벤트를 자동으로 표시
-- 같은 세션 카드에 추천 Top 2를 갱신
-- WebSocket 재연결과 누락 이벤트 복구
+- polling으로 고객의 제품 요청 이벤트를 조회
+- 요청된 세션의 Top 2와 `view_recommended_products` 의도를 표시
+- `event_id` 중복 제거와 `after_sequence` cursor를 유지
 - MVP에서는 추천 후 착용·구매 결과를 해당 세션에 기록하는 입력 제공
 
 고정 상품 QR만으로는 어느 분석 세션이 구매로 이어졌는지 알 수 없다. 따라서 MVP의 구매 전환 기록은 매니저 세션 카드 입력을 기본안으로 하고, POS·CRM 자동 연동은 후속 기능으로 둔다.
@@ -661,7 +662,7 @@ QR에는 원본 반응 데이터나 얼굴 관련 정보는 넣지 않는다.
 
 | 담당 | 하루 결과물 |
 | --- | --- |
-| 박형진 | 실제 상품·QR, Manager WebSocket, conversion 저장 기본안 |
+| 박형진 | 실제 상품·QR, Manager polling, conversion 저장 기본안 |
 | 양유상 | 실제 웹캠 calibration과 장면별 AOI hit 검증 |
 | 정은미 | 실제 웹캠 조도·각도·no-face 안정성 검증 |
 | 조윤혜 | 실제 S03·S04와 Manager 화면, Kiosk touch UI 정리 |
@@ -672,7 +673,7 @@ QR에는 원본 반응 데이터나 얼굴 관련 정보는 넣지 않는다.
 
 | 담당 | 하루 결과물 |
 | --- | --- |
-| 박형진 | API·PostgreSQL·WebSocket 통합, 재전송·재연결, 로그·DB 개인정보 점검 |
+| 박형진 | API·PostgreSQL·polling 통합, 재조회·cursor, 로그·DB 개인정보 점검 |
 | 양유상 | 최종 Eye 성능 budget·failure matrix와 병목 수정 |
 | 정은미 | 최종 Face 성능 budget·failure matrix와 병목 수정 |
 | 조윤혜 | 카메라 거부, AI 불가, 데이터 부족, 네트워크 단절, 접근성·터치 E2E |
@@ -720,7 +721,7 @@ QR에는 원본 반응 데이터나 얼굴 관련 정보는 넣지 않는다.
 - 화면 밖·낮은 confidence·no-face·multi-face
 - Eye·Face 처리 지연과 순서 뒤바뀜
 - 영상 pause·seek·replay
-- Backend 지연·중복 batch·WebSocket 재연결
+- Backend 지연·중복 batch·polling cursor 재조회
 - 신호가 부족한 세션
 
 고객의 실제 원본 얼굴 영상을 Git fixture로 사용하지 않는다.
@@ -747,7 +748,7 @@ SHOW_GAZE_DEBUG=false|true
 - Eye·Face의 무효 신호가 무관심이나 중립으로 잘못 계산되지 않는다.
 - 실제 추천 알고리즘이 없어도 mock 경계로 모든 팀이 병렬 개발할 수 있다.
 - Top 2 상품 이미지와 각 상품 QR이 표시된다.
-- Kiosk 이용 시작과 추천 결과가 Manager WebSocket으로 전달된다.
+- S04 고객 제품 요청이 Manager polling으로 전달된다.
 - 동의된 파생 반응, 추천과 구매 전환 데이터가 PostgreSQL 저장 경계를 통과한다.
 - 파일·DB·로그·API에 웹캠 원본 프레임이 남지 않는다.
 - 매일 작은 PR을 `main`에 병합하고 최신 `main`의 mock smoke test가 통과한다.

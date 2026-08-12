@@ -31,7 +31,7 @@
 | --- | --- | --- |
 | `apps/kiosk/` | 조윤혜 | S01-S04, 영상·웹캠 orchestration, 터치 UI |
 | `apps/manager/` | 조윤혜, 박형진 | 매니저 UI와 Backend 이벤트 연결 |
-| `apps/api/` | 박형진 | FastAPI, 세션, PostgreSQL, QR, WebSocket |
+| `apps/api/` | 박형진 | FastAPI, 세션, PostgreSQL, QR, Manager polling |
 | `services/recommendation/` | 박형진 | feature 집계와 추천 엔진 경계 |
 | `services/eye/`, `experiments/eye/` | 양유상 | Eye Adapter, 보정, 시선 좌표, AOI 매핑·평가 |
 | `services/face/`, `experiments/face/` | 정은미 | Face Adapter, 출력 정규화·평가 |
