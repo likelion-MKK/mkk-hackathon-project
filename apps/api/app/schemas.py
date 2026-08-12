@@ -286,6 +286,45 @@ class ReactionBatch(ContractModel):
         return self
 
 
+class RecommendationItem(ContractModel):
+    rank: StrictInt = Field(ge=1, le=2)
+    product_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
+
+
+class RecommendationResult(ContractModel):
+    schema_version: Literal["1.0"]
+    recommendation_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
+    session_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
+    video_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
+    manifest_version: Revision = Field(min_length=1, max_length=128)
+    algorithm_version: Revision = Field(min_length=1, max_length=128)
+    engine_mode: Literal["mock", "research_version"]
+    status: Literal["pending", "completed", "insufficient_data", "failed"]
+    items: list[RecommendationItem]
+    reason: Reason | None
+
+    @field_validator("reason")
+    @classmethod
+    def reason_is_normalized(cls, value: str | None) -> str | None:
+        return None if value is None else _validate_reason(value)
+
+    @model_validator(mode="after")
+    def enforce_result_shape(self) -> Self:
+        if self.status == "completed":
+            ranks = [item.rank for item in self.items]
+            product_ids = [item.product_id for item in self.items]
+            if ranks != [1, 2] or len(set(product_ids)) != 2 or self.reason is not None:
+                raise ValueError("completed recommendation must contain distinct rank 1 and rank 2 items")
+        else:
+            if self.items:
+                raise ValueError("non-completed recommendation results cannot contain items")
+            if self.status in {"insufficient_data", "failed"} and self.reason is None:
+                raise ValueError("failed or insufficient recommendations need a reason")
+            if self.status == "pending" and self.reason is not None:
+                raise ValueError("pending recommendations must have a null reason")
+        return self
+
+
 class ReactionBatchAccepted(ContractModel):
     batch_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
     status: Literal["accepted", "duplicate"]
