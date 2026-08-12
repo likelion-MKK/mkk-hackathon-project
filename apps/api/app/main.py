@@ -16,10 +16,13 @@ from apps.api.app.schemas import (
     Product,
     ReactionBatch,
     ReactionBatchAccepted,
+    RecommendationAccepted,
+    RecommendationResult,
     SessionCreate,
     SessionCreated,
 )
 from apps.api.app.store import DomainError, MemoryStore
+from services.recommendation.mock.engine import MockRecommendationEngine
 
 
 IdentifierPath = Annotated[
@@ -42,6 +45,7 @@ def create_app(store: MemoryStore | None = None) -> FastAPI:
         description="Contract-first API scaffold; raw webcam frames are not accepted.",
     )
     app.state.store = store or MemoryStore()
+    app.state.recommendation_engine = MockRecommendationEngine()
 
     @app.exception_handler(DomainError)
     async def handle_domain_error(_: Request, exc: DomainError) -> JSONResponse:
@@ -78,6 +82,23 @@ def create_app(store: MemoryStore | None = None) -> FastAPI:
     )
     def append_reaction_batch(session_id: IdentifierPath, batch: ReactionBatch) -> ReactionBatchAccepted:
         return app.state.store.append_batch(session_id, batch)
+
+    @app.post(
+        "/api/v1/sessions/{session_id}/complete",
+        response_model=RecommendationAccepted,
+        status_code=status.HTTP_202_ACCEPTED,
+        responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}},
+    )
+    def complete_session(session_id: str) -> RecommendationAccepted:
+        return app.state.store.complete_session(session_id, app.state.recommendation_engine)
+
+    @app.get(
+        "/api/v1/sessions/{session_id}/recommendations",
+        response_model=RecommendationResult,
+        responses={404: {"model": ErrorResponse}},
+    )
+    def get_recommendation(session_id: str) -> RecommendationResult:
+        return app.state.store.get_recommendation(session_id)
 
     @app.get(
         "/api/v1/products/{product_id}",

@@ -330,6 +330,11 @@ class ReactionBatchAccepted(ContractModel):
     status: Literal["accepted", "duplicate"]
 
 
+class RecommendationAccepted(ContractModel):
+    session_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
+    status: Literal["pending"]
+
+
 class Health(ContractModel):
     status: Literal["ok", "degraded"]
     database: Literal["up", "down"]
