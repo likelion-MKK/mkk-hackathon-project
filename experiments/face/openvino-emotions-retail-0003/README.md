@@ -11,10 +11,12 @@
 | runtime | Python, OpenVINO local CPU |
 | code license | Apache-2.0 |
 | model asset | FP32 XML·BIN, 로컬 `models/`에만 저장 |
-| model checksum | 공식 manifest의 SHA-384와 로컬 SHA256을 함께 확인 예정 |
+| model XML SHA256 | `11768c788fdf242ac93fa749504674878e3c797a5dce5b1d874e387a6b88f1fc` |
+| model BIN SHA256 | `faaef5507627692057ac3b4dcd465de23568d59677f0f71c36d06bb9947904da` |
+| model size | XML 39,209 bytes, BIN 9,930,028 bytes |
 | weight license | Open Model Zoo manifest가 지정한 Apache-2.0 |
-| network | 최초 XML·BIN 다운로드에만 필요, 추론은 local-only 검증 예정 |
-| Hard Gate | `pending` |
+| network | 최초 XML·BIN 다운로드에만 필요, 이후 local-only 재실행 성공 |
+| Hard Gate | `pass` |
 
 ## 입력과 출력
 
@@ -44,4 +46,12 @@
 
 ## Smoke 결과
 
-`not_run`. 실행 명령, checksum, 결과와 실패 원인은 smoke 구현 후 이 문서에 기록한다.
+Python 3.13.15에서 package 설치, 공식 SHA-384 검증, CPU 추론과 local-only 재실행이 통과했다.
+
+```powershell
+uv sync --locked
+uv run python smoke.py
+uv run python smoke.py --offline
+```
+
+두 실행 모두 입력 shape `1×3×64×64`, 출력 shape `1×5×1×1`, 유한한 score와 softmax 합계 1을 확인했다. 실제 얼굴 품질이나 label 정확도는 D4 benchmark에서 별도로 평가한다.

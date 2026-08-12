@@ -7,15 +7,17 @@
 | 조사일 | 2026-08-13 |
 | source | `https://github.com/av-savchenko/hsemotion` |
 | source revision | `2546ff6fd09f911c0619354523293ff621b31ba2` |
+| weight source revision | `520a051c64cd191521e5934655314e769a319684` |
 | package | `hsemotion==0.3.0` |
 | model ID | `enet_b0_8_best_afew` |
 | runtime | Python, PyTorch local CPU |
 | code license | Apache-2.0 |
 | model asset | `enet_b0_8_best_afew.pt`, 로컬 `models/`에만 저장 |
-| model SHA256 | smoke 실행 후 기록 |
-| weight license | 명시적인 별도 weight license 확인 중 |
-| network | 최초 weight 다운로드에만 필요, 추론은 local-only 검증 예정 |
-| Hard Gate | `pending` |
+| model SHA256 | `47c1423f3e6f50e3750bf7b0eda7db947c9ce0c2637e1766bf2187eddc652b17` |
+| model size | 16,419,305 bytes |
+| weight license | weight source repository의 Apache-2.0 |
+| network | 최초 weight 다운로드 후 local asset 접근까지 확인 |
+| Hard Gate | `fail` — 안전한 PyTorch 로더로 실행 불가 |
 
 ## 입력과 출력
 
@@ -37,4 +39,14 @@
 
 ## Smoke 결과
 
-`not_run`. 실행 명령, checksum, 결과와 실패 원인은 smoke 구현 후 이 문서에 기록한다.
+Python 3.13.15에서 `hsemotion==0.3.0`, `torch==2.13.0`, `timm==1.0.28` 설치와 weight checksum 확인까지 성공했다.
+
+```powershell
+uv sync --locked
+uv run python smoke.py
+uv run python smoke.py --offline
+```
+
+online과 offline 실행 모두 `unsafe_legacy_pickle_blocked`로 종료됐다. 배포 파일은 `timm.models.efficientnet.EfficientNet` 전체 객체를 pickle로 직렬화했으며 최신 PyTorch의 기본 `weights_only=True` 안전 로더가 이를 거부한다.
+
+`weights_only=False`로 바꾸면 원격 pickle의 임의 코드 실행 가능성이 생기므로 사용하지 않았다. 안전한 `state_dict` 또는 ONNX 배포가 확인되지 않는 한 이 후보는 D4 benchmark와 production 선택 대상에서 제외한다.

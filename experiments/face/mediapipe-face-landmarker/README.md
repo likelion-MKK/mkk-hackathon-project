@@ -11,10 +11,11 @@
 | runtime | Python, local CPU |
 | code license | Apache-2.0 |
 | model asset | `face_landmarker.task`, 다운로드 후 로컬 `models/`에만 저장 |
-| model SHA256 | smoke 실행 후 기록 |
+| model SHA256 | `64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff` |
+| model size | 3,758,596 bytes |
 | weight license | 공식 model card와 배포 조건 확인 중 |
-| network | 최초 asset 다운로드에만 필요, 추론은 local-only 검증 예정 |
-| Hard Gate | `pending` |
+| network | 최초 asset 다운로드에만 필요, 이후 local asset buffer로 재실행 성공 |
+| Hard Gate | `pending` — 명시적인 weight license 확인 전 D4 비교 제외 |
 
 ## 입력과 출력
 
@@ -39,4 +40,14 @@
 
 ## Smoke 결과
 
-`not_run`. 실행 명령, checksum, 결과와 실패 원인은 smoke 구현 후 이 문서에 기록한다.
+Python 3.13.15에서 package 설치, synthetic no-face 입력 추론과 local-only 재실행이 통과했다.
+
+```powershell
+uv sync --locked
+uv run python smoke.py
+uv run python smoke.py --offline
+```
+
+두 실행 모두 `face_count=0`, `blendshape_groups=0`, `status=pass`를 반환했다. Windows의 한글 경로를 native runtime에 직접 전달하면 asset을 열지 못하므로, 같은 로컬 파일을 `model_asset_buffer`로 읽어 경로 의존성을 제거했다.
+
+Smoke 통과는 52개 blendshape 품질을 검증하지 않는다. D4 진입 전 weight license를 명시적으로 확인해야 한다.

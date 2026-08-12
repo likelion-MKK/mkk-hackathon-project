@@ -10,11 +10,25 @@
 
 | 후보 | 출력 성격 | Python package | Hard Gate | Smoke |
 | --- | --- | --- | --- | --- |
-| [MediaPipe Face Landmarker](mediapipe-face-landmarker/README.md) | 52개 얼굴 blendshape 계수 | `mediapipe==1.0.0` | `pending` | `not_run` |
-| [OpenVINO emotions-recognition-retail-0003](openvino-emotions-retail-0003/README.md) | 5개 분류 점수 | `openvino==2026.3.0` | `pending` | `not_run` |
-| [HSEmotion enet_b0_8_best_afew](hsemotion-enet-b0-8-best-afew/README.md) | 8개 분류 점수 | `hsemotion==0.3.0` | `pending` | `not_run` |
+| [MediaPipe Face Landmarker](mediapipe-face-landmarker/README.md) | 52개 얼굴 blendshape 계수 | `mediapipe==1.0.0` | `pending` — weight license 확인 필요 | `pass` |
+| [OpenVINO emotions-recognition-retail-0003](openvino-emotions-retail-0003/README.md) | 5개 분류 점수 | `openvino==2026.3.0` | `pass` | `pass` |
+| [HSEmotion enet_b0_8_best_afew](hsemotion-enet-b0-8-best-afew/README.md) | 8개 분류 점수 | `hsemotion==0.3.0` | `fail` — unsafe legacy pickle | `fail` |
 
 공통 조사 기준은 정확한 source revision, code·weight license, 모델 SHA256, Python 3.13.15 설치 가능성, 로컬 CPU 추론, 모델 다운로드 후 offline 재실행이다. 실제 얼굴 대신 코드에서 생성한 synthetic 입력만 사용한다.
+
+### Smoke 환경
+
+| 항목 | 값 |
+| --- | --- |
+| 실행일 | 2026-08-13 |
+| OS | Windows 11 Home 64-bit, `10.0.26200` |
+| CPU | Intel Core Ultra 7 155H, 16 cores / 22 logical processors |
+| RAM | 약 15.6 GiB |
+| GPU | Intel Arc Graphics, driver `32.0.101.8424` |
+| 실행 장치 | 모든 smoke는 CPU |
+| Python | CPython `3.13.15`, 후보별 `uv.lock` |
+
+이 결과는 synthetic 입력으로 설치·모델 로딩·출력 경계만 확인한 smoke다. 후보 간 품질·속도 순위나 실제 얼굴 정확도를 의미하지 않는다.
 
 ## 입력과 출력
 
