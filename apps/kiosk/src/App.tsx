@@ -1,4 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import bagImage from "./assets/categories/category-bags.png";
+import apparelImage from "./assets/categories/category-apparel.png";
+import accessoryImage from "./assets/categories/category-accessories.png";
+import screensaverImageOne from "./assets/categories/screensaver-01.jpg";
+import screensaverImageTwo from "./assets/categories/screensaver-02.jpg";
+import screensaverImageThree from "./assets/categories/screensaver-03.jpg";
 import "./App.css";
 
 type KioskScreen =
@@ -10,108 +16,112 @@ type KioskScreen =
   | "finalizing" // S03 → S04
   | "report"; // S04
 
-type ProductCategory = "가방" | "백팩" | "지갑" | "전체 컬렉션";
+type ProductCategory = "가방" | "의류" | "액세서리" | "전체 컬렉션";
 
 type CategoryOption = {
   name: ProductCategory;
   englishName: string;
   number: string;
+  description: string;
 };
 
 const productCategories: CategoryOption[] = [
-  { name: "가방", englishName: "BAGS", number: "01" },
-  { name: "백팩", englishName: "BACKPACKS", number: "02" },
-  { name: "지갑", englishName: "SMALL LEATHER GOODS", number: "03" },
-  { name: "전체 컬렉션", englishName: "ALL COLLECTION", number: "04" },
+  {
+    name: "가방",
+    englishName: "BAGS",
+    number: "01",
+    description: "아이코닉 백과 데일리 백",
+  },
+  {
+    name: "의류",
+    englishName: "READY-TO-WEAR",
+    number: "02",
+    description: "새로운 시즌의 룩",
+  },
+  {
+    name: "액세서리",
+    englishName: "ACCESSORIES",
+    number: "03",
+    description: "스타일을 완성하는 디테일",
+  },
+  {
+    name: "전체 컬렉션",
+    englishName: "VIEW ALL",
+    number: "04",
+    description: "모든 카테고리에서 발견하기",
+  },
 ];
 
-function BrandMark({ light = false }: { light?: boolean }) {
-  return (
-    <span className={`brand-mark${light ? " brand-mark--light" : ""}`}>
-      <strong>MCM</strong>
-      <span>MÜNCHEN · 1976</span>
-    </span>
-  );
-}
+const screensaverImages = [
+  screensaverImageOne,
+  screensaverImageTwo,
+  screensaverImageThree,
+];
 
 function ArrowIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24">
-      <path d="M5 12h13M13 6l6 6-6 6" />
+      <path d="M4 12h15M14 6l6 6-6 6" />
     </svg>
   );
 }
 
-function CategoryGlyph({ index }: { index: number }) {
-  if (index === 0) {
-    return (
-      <svg aria-hidden="true" viewBox="0 0 140 112">
-        <path d="M29 43h82l8 55H21l8-55Z" />
-        <path d="M49 46c0-20 8-30 21-30s21 10 21 30" />
-        <path d="M29 58h82" />
-      </svg>
-    );
-  }
-
-  if (index === 1) {
-    return (
-      <svg aria-hidden="true" viewBox="0 0 140 112">
-        <path d="M37 39c0-14 11-25 25-25h16c14 0 25 11 25 25v60H37V39Z" />
-        <path d="M37 49h66M50 67h40v22H50z" />
-        <path d="M37 58c-10 8-13 21-10 38M103 58c10 8 13 21 10 38" />
-      </svg>
-    );
-  }
-
-  if (index === 2) {
-    return (
-      <svg aria-hidden="true" viewBox="0 0 140 112">
-        <rect x="25" y="30" width="90" height="57" rx="3" />
-        <path d="M25 43h90M78 54h37v22H78z" />
-        <circle cx="88" cy="65" r="2" />
-      </svg>
-    );
-  }
-
-  return (
-    <svg aria-hidden="true" viewBox="0 0 140 112">
-      <circle cx="70" cy="56" r="38" />
-      <circle cx="70" cy="56" r="25" />
-      <path d="M70 18v76M32 56h76M43 29l54 54M97 29 43 83" />
-    </svg>
-  );
+function Wordmark({ light = false }: { light?: boolean }) {
+  return <span className={`wordmark${light ? " wordmark--light" : ""}`}>MCM</span>;
 }
 
-function ScreenHeader({
-  step,
-  label,
-  light = false,
+function StoreChrome({
   onHome,
+  step,
+  overlay = false,
 }: {
-  step: string;
-  label: string;
-  light?: boolean;
   onHome: () => void;
+  step?: string;
+  overlay?: boolean;
 }) {
   return (
-    <header className={`screen-header${light ? " screen-header--light" : ""}`}>
-      <button className="brand-button" type="button" onClick={onHome}>
-        <BrandMark light={light} />
-        <span className="sr-only">처음 화면으로 이동</span>
-      </button>
-
-      <div className="screen-progress" aria-label={`${step} ${label}`}>
-        <span>{step}</span>
-        <i aria-hidden="true" />
-        <span>{label}</span>
+    <>
+      <div className="announcement-bar">
+        <span>MCM AI LOOKBOOK</span>
+        <span>당신의 시선으로 발견하는 새로운 스타일</span>
+        <span>SEOUL · KO</span>
       </div>
-    </header>
+
+      <header className={`store-header${overlay ? " store-header--overlay" : ""}`}>
+        <nav className="store-nav" aria-label="카테고리 안내">
+          <span>신상품</span>
+          <span>가방</span>
+          <span>의류</span>
+          <span>액세서리</span>
+        </nav>
+
+        <button className="wordmark-button" type="button" onClick={onHome}>
+          <Wordmark light={overlay} />
+          <span className="sr-only">처음 화면으로 이동</span>
+        </button>
+
+        <div className="store-meta">
+          <span>AI DISCOVERY</span>
+          {step && <span>{step} / 03</span>}
+        </div>
+      </header>
+    </>
   );
 }
 
 function Screensaver({ onStart }: { onStart: () => void }) {
+  const [activeSlide, setActiveSlide] = useState(0);
+
+  useEffect(() => {
+    const slideTimer = window.setInterval(() => {
+      setActiveSlide((currentSlide) => (currentSlide + 1) % screensaverImages.length);
+    }, 5000);
+
+    return () => window.clearInterval(slideTimer);
+  }, []);
+
   return (
-    <main className="kiosk-screen screensaver" aria-labelledby="screensaver-title">
+    <main className="store-screen screensaver screen-enter" aria-labelledby="screensaver-title">
       <button
         className="screensaver__hit-area"
         type="button"
@@ -119,55 +129,67 @@ function Screensaver({ onStart }: { onStart: () => void }) {
         aria-label="화면을 터치해 취향 발견 시작하기"
       />
 
-      <div className="screensaver__grain" aria-hidden="true" />
-      <div className="screensaver__halo" aria-hidden="true" />
-      <div className="screensaver__orbit screensaver__orbit--one" aria-hidden="true" />
-      <div className="screensaver__orbit screensaver__orbit--two" aria-hidden="true" />
-
-      <div className="screensaver__monogram" aria-hidden="true">
-        <span>M</span>
-        <span>C</span>
-        <span>M</span>
+      <div className="screensaver__media" aria-hidden="true">
+        {screensaverImages.map((image, index) => (
+          <img
+            className={index === activeSlide ? "is-active" : undefined}
+            key={image}
+            src={image}
+            alt=""
+          />
+        ))}
       </div>
 
-      <header className="screensaver__header">
-        <BrandMark light />
-        <span className="screensaver__edition">AI LOOKBOOK EXPERIENCE</span>
-      </header>
+      <StoreChrome onHome={onStart} overlay />
 
-      <section className="screensaver__content">
-        <p className="eyebrow eyebrow--light">A PRIVATE DISCOVERY</p>
+      <section className="screensaver__copy">
+        <p className="section-label">MCM AI LOOKBOOK</p>
         <h1 id="screensaver-title">
-          <span>당신도 몰랐던</span>
-          <strong>취향을 발견해보세요</strong>
+          당신도 몰랐던 취향을
+          <br />
+          발견해보세요
         </h1>
         <p className="screensaver__description">
-          짧은 룩북을 감상하면,
-          <br />
-          당신의 시선이 이끄는 MCM을 찾아드려요.
+          짧은 룩북을 감상하면 당신의 시선이 이끄는 스타일을 찾아드려요.
         </p>
+        <span className="hero-cta">
+          화면을 터치해 시작하기 <ArrowIcon />
+        </span>
       </section>
 
-      <div className="touch-cue" aria-hidden="true">
-        <span className="touch-cue__rings">
-          <i />
-          <b>
-            <svg viewBox="0 0 32 32">
-              <path d="M15.5 4.5a2.5 2.5 0 0 1 2.5 2.5v8.2l1.4-1.2a2.3 2.3 0 0 1 3.4.5l4 6.1c.8 1.2.9 2.6.4 3.9l-1.1 2.8H13.4l-4.8-7.7a2.4 2.4 0 0 1 .7-3.3 2.4 2.4 0 0 1 3.2.5l.5.7V7a2.5 2.5 0 0 1 2.5-2.5Z" />
-            </svg>
-          </b>
-        </span>
-        <span className="touch-cue__text">
-          <strong>화면을 터치해 시작하세요</strong>
-          <small>TOUCH TO DISCOVER</small>
-        </span>
-      </div>
-
-      <div className="screensaver__footer" aria-hidden="true">
-        <span>SEOUL · 2026</span>
-        <span>PERSONAL STYLE JOURNEY</span>
+      <div className="screensaver__index" aria-hidden="true">
+        <span>{String(activeSlide + 1).padStart(2, "0")}</span>
+        <i />
+        <span>PERSONAL STYLE DISCOVERY</span>
       </div>
     </main>
+  );
+}
+
+function CategoryMedia({ index }: { index: number }) {
+  if (index === 0) {
+    return <img className="category-card__image category-card__image--bag" src={bagImage} alt="" />;
+  }
+
+  if (index === 1) {
+    return <img className="category-card__image category-card__image--apparel" src={apparelImage} alt="" />;
+  }
+
+  if (index === 2) {
+    return (
+      <img
+        className="category-card__image category-card__image--accessory"
+        src={accessoryImage}
+        alt=""
+      />
+    );
+  }
+
+  return (
+    <div className="collection-collage">
+      <img src={apparelImage} alt="" />
+      <img src={bagImage} alt="" />
+    </div>
   );
 }
 
@@ -179,53 +201,73 @@ function CategoryMenu({
   onHome: () => void;
 }) {
   return (
-    <main className="kiosk-screen experience-screen experience-screen--ivory">
-      <ScreenHeader step="01" label="CATEGORY" onHome={onHome} />
+    <main className="store-screen gallery-screen screen-enter">
+      <StoreChrome onHome={onHome} step="01" />
 
-      <section className="menu-layout" aria-labelledby="menu-title">
-        <div className="menu-intro">
-          <p className="eyebrow">CURATE YOUR JOURNEY</p>
-          <h1 id="menu-title">
-            어떤 취향부터
-            <br />
-            발견해볼까요?
-          </h1>
-          <p className="lead-copy">
-            지금 가장 마음이 가는 카테고리를 선택해주세요.
-            <br />
-            당신의 시선으로 새로운 취향을 발견합니다.
-          </p>
-
-          <button className="text-button" type="button" onClick={onHome}>
-            <span aria-hidden="true">←</span> 처음으로 돌아가기
-          </button>
+      <section className="gallery-heading" aria-labelledby="menu-title">
+        <div>
+          <p className="section-label">CHOOSE A CATEGORY</p>
+          <h1 id="menu-title">어떤 스타일을 발견해볼까요?</h1>
         </div>
+        <p>
+          지금 가장 마음이 가는 카테고리를 선택해주세요.
+          <br />
+          선택한 컬렉션으로 룩북을 시작합니다.
+        </p>
+      </section>
 
-        <div className="category-grid">
-          {productCategories.map((category, index) => (
-            <button
-              className={`category-card category-card--${index + 1}`}
-              key={category.name}
-              type="button"
-              onClick={() => onSelect(category.name)}
-            >
+      <section className="category-gallery" aria-label="상품 카테고리">
+        {productCategories.map((category, index) => (
+          <button
+            className="category-card"
+            key={category.name}
+            type="button"
+            onClick={() => onSelect(category.name)}
+          >
+            <span className="category-card__media">
+              <CategoryMedia index={index} />
               <span className="category-card__number">{category.number}</span>
-              <span className="category-card__art">
-                <CategoryGlyph index={index} />
-              </span>
-              <span className="category-card__copy">
+            </span>
+            <span className="category-card__details">
+              <span>
                 <strong>{category.name}</strong>
                 <small>{category.englishName}</small>
               </span>
+              <span className="category-card__description">{category.description}</span>
               <span className="category-card__arrow">
                 <ArrowIcon />
               </span>
-            </button>
-          ))}
-        </div>
+            </span>
+          </button>
+        ))}
       </section>
+
+      <button className="back-link" type="button" onClick={onHome}>
+        ← 처음으로
+      </button>
     </main>
   );
+}
+
+function ConsentMedia({ category }: { category: ProductCategory | null }) {
+  if (category === "의류") {
+    return <img src={apparelImage} alt="검정 재킷과 코냑 팬츠를 입은 패션 모델" />;
+  }
+
+  if (category === "액세서리") {
+    return <img className="consent-accessory-image" src={accessoryImage} alt="MCM 가방과 참 액세서리" />;
+  }
+
+  if (category === "전체 컬렉션") {
+    return (
+      <div className="consent-collection">
+        <img src={apparelImage} alt="패션 모델" />
+        <img src={bagImage} alt="MCM 패턴 가방" />
+      </div>
+    );
+  }
+
+  return <img src={bagImage} alt="MCM 패턴 가방" />;
 }
 
 function CameraConsent({
@@ -240,53 +282,49 @@ function CameraConsent({
   onHome: () => void;
 }) {
   return (
-    <main className="kiosk-screen experience-screen experience-screen--sand">
-      <ScreenHeader step="02" label="PERMISSION" onHome={onHome} />
+    <main className="store-screen consent-screen screen-enter">
+      <StoreChrome onHome={onHome} step="02" />
 
-      <section className="consent-layout" aria-labelledby="consent-title">
-        <div className="consent-visual" aria-hidden="true">
-          <div className="consent-visual__frame">
-            <span className="frame-corner frame-corner--tl" />
-            <span className="frame-corner frame-corner--tr" />
-            <span className="frame-corner frame-corner--bl" />
-            <span className="frame-corner frame-corner--br" />
-            <div className="consent-visual__lens">
-              <i />
-            </div>
-            <span className="consent-visual__label">PRIVATE · ON DEVICE</span>
-          </div>
+      <section className="consent-page" aria-labelledby="consent-title">
+        <div className="consent-page__media">
+          <ConsentMedia category={category} />
+          <span>SELECTED · {category ?? "COLLECTION"}</span>
         </div>
 
-        <div className="consent-content">
-          <p className="eyebrow">YOUR PRIVACY, FIRST</p>
+        <div className="consent-page__content">
+          <p className="section-label">CAMERA PERMISSION</p>
           <h1 id="consent-title">
-            당신의 시선은
+            카메라 사용에
             <br />
-            순간만 머뭅니다.
+            동의해주세요
           </h1>
-          <p className="lead-copy">
+          <p className="consent-page__lead">
             <strong>{category ?? "선택한 카테고리"}</strong> 룩북을 감상하는 동안
-            카메라로 시선과 표정 관련 신호를 분석합니다.
+            시선과 표정 관련 신호를 분석해 관심 있는 스타일을 찾습니다.
           </p>
 
-          <div className="privacy-note">
-            <span className="privacy-note__icon">
-              <svg aria-hidden="true" viewBox="0 0 24 24">
-                <rect x="5" y="10" width="14" height="10" rx="2" />
-                <path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2" />
-              </svg>
-            </span>
-            <span>
-              <strong>원본 영상은 저장하지 않아요.</strong>
-              <small>분석된 파생 신호만 현재 추천을 위해 처리합니다.</small>
-            </span>
-          </div>
+          <dl className="privacy-list">
+            <div>
+              <dt>01</dt>
+              <dd>
+                <strong>원본 영상을 저장하지 않습니다</strong>
+                <span>카메라 프레임은 기기 안에서만 일시적으로 처리됩니다.</span>
+              </dd>
+            </div>
+            <div>
+              <dt>02</dt>
+              <dd>
+                <strong>분석된 신호만 사용합니다</strong>
+                <span>현재 세션의 추천을 위한 파생 신호만 처리합니다.</span>
+              </dd>
+            </div>
+          </dl>
 
-          <div className="action-row">
-            <button className="button button--secondary" type="button" onClick={onBack}>
+          <div className="consent-actions">
+            <button className="store-button store-button--outline" type="button" onClick={onBack}>
               동의하지 않음
             </button>
-            <button className="button button--primary" type="button" onClick={onContinue}>
+            <button className="store-button store-button--solid" type="button" onClick={onContinue}>
               동의하고 계속 <ArrowIcon />
             </button>
           </div>
@@ -298,42 +336,37 @@ function CameraConsent({
 
 function Calibration({ onHome }: { onHome: () => void }) {
   return (
-    <main className="kiosk-screen experience-screen calibration-screen">
-      <ScreenHeader step="03" label="CALIBRATION" light onHome={onHome} />
+    <main className="store-screen calibration-screen screen-enter">
+      <StoreChrome onHome={onHome} step="03" />
 
-      <section className="calibration-layout" aria-labelledby="calibration-title">
-        <div className="calibration-copy">
-          <p className="eyebrow eyebrow--light">FOLLOW THE LIGHT</p>
+      <section className="calibration-page" aria-labelledby="calibration-title">
+        <div className="calibration-page__copy">
+          <p className="section-label">EYE CALIBRATION</p>
           <h1 id="calibration-title">
-            시선을
+            움직이는 점을
             <br />
-            맞춰볼게요.
+            눈으로 따라가세요
           </h1>
           <p>
-            화면에서 천천히 움직이는 빛을
-            <br />
-            고개는 편안히 둔 채 눈으로 따라가세요.
+            고개는 편안하게 두고 화면 위의 검은 점만 바라봐주세요.
+            실제 시선 보정 기능은 다음 개발 단계에서 연결됩니다.
           </p>
-
-          <span className="preview-badge">CALIBRATION PREVIEW</span>
-          <button className="text-button text-button--light" type="button" onClick={onHome}>
-            <span aria-hidden="true">←</span> 처음으로 돌아가기
+          <span className="preview-label">CALIBRATION PREVIEW</span>
+          <button className="back-link" type="button" onClick={onHome}>
+            ← 처음으로 돌아가기
           </button>
         </div>
 
         <div className="calibration-stage" aria-hidden="true">
-          <div className="calibration-stage__grid" />
-          <svg className="calibration-stage__path" viewBox="0 0 620 500">
-            <path d="M80 88 C260 24 382 170 530 102 S512 312 348 254 S132 228 94 405 C210 470 404 430 540 382" />
-          </svg>
-          <span className="anchor anchor--one" />
-          <span className="anchor anchor--two" />
-          <span className="anchor anchor--three" />
-          <span className="anchor anchor--four" />
-          <span className="gaze-target">
-            <i />
-          </span>
-          <span className="calibration-stage__caption">KEEP YOUR HEAD STILL · FOLLOW WITH YOUR EYES</span>
+          <div className="calibration-stage__guide">
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+          </div>
+          <span className="calibration-target" />
+          <p>FOLLOW THE DOT WITH YOUR EYES</p>
         </div>
       </section>
     </main>
@@ -381,8 +414,8 @@ function App() {
   }
 
   return (
-    <main className="kiosk-screen placeholder-screen">
-      <BrandMark />
+    <main className="store-screen placeholder-screen">
+      <Wordmark />
       <p>다음 화면을 준비 중입니다.</p>
     </main>
   );
