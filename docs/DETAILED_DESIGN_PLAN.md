@@ -352,11 +352,11 @@ dispose()
 
 ## 9. 외부 모델 조사·선정 절차
 
-Eye와 Face는 각각 같은 절차로 GitHub·Hugging Face 후보를 비교한다. 현재 문서에서는 특정 모델을 미리 선택하지 않는다.
+Eye와 Face는 GitHub·Hugging Face 후보를 비교하되 현재 문서에서 특정 모델을 미리 선택하지 않는다. Eye는 [`D2 Eye Tracker 전수 조사·추천 계획`](benchmarks/EYE_CANDIDATE_RESEARCH_PLAN.md)을 공식 기준으로 사용하고, Face는 최소 3개 후보의 동일 조건 비교를 유지한다.
 
 ### 후보 등록
 
-각 영역에서 최소 3개 후보를 찾고 다음 정보를 기록한다.
+Eye는 기준일·검색식·API page·중복 제거를 기록하며 공개 검색에서 발견 가능한 RGB 웹캠 후보 전체를 등록한다. Face는 최소 3개 후보를 등록한다. 공통 기록 항목은 다음과 같다.
 
 - GitHub URL 또는 Hugging Face model ID
 - 정확한 commit SHA 또는 revision
@@ -385,9 +385,11 @@ Eye와 Face는 각각 같은 절차로 GitHub·Hugging Face 후보를 비교한�
 
 모델 weight는 Git에 직접 넣지 않는다. URL, revision, SHA256, license와 재현 가능한 다운로드 절차만 관리한다.
 
+Eye 후보는 `pass-commercial`, `pass-demo-only`, `deferred`, `fail` 상태를 사용한다. 사용자 후기는 GitHub Issues·Discussions, Hugging Face Discussions, Reddit, Stack Overflow와 독립 개발자 글에서 수집하되, 인기도와 단일 후기를 정확도 증거로 사용하지 않는다.
+
 ### 동일 조건 Benchmark
 
-모든 후보를 동일 하드웨어, fixture, 보정 절차와 입력 순서로 cold/warm 각각 반복 실행한다.
+Eye D2 Smoke는 설치·모델 load·출력·offline 경계만 확인한다. D2-4 상위 최대 3개와 Face 비교 후보를 D4 이후 동일 하드웨어, fixture, 보정 절차와 입력 순서로 cold/warm 각각 반복 실행한다.
 
 | 분류 | Eye 평가 | Face 평가 |
 | --- | --- | --- |
@@ -402,7 +404,7 @@ Eye와 Face는 각각 같은 절차로 GitHub·Hugging Face 후보를 비교한�
 
 ### 선택 결과
 
-D5에 영역별 ADR을 작성한다.
+Eye는 D2-4에서 primary·fallback·상용 가능 대안을 1차 추천하고 D4 상위 최대 3개를 정한다. 이는 최종 선택이 아니며 D4 동일 조건 benchmark와 D5 서버 workload 검증 후 영역별 ADR을 작성한다.
 
 - 선택 모델과 fallback 모델
 - 고정 revision과 checksum
@@ -618,14 +620,42 @@ QR에는 원본 반응 데이터나 얼굴 관련 정보는 넣지 않는다.
 
 **통합 Gate A:** 공통 예제 JSON이 FE·Eye·Face·BE contract test를 모두 통과한다.
 
-### D2. 세션 Mock과 후보 조사
+### D2. 세션 Mock과 Eye 후보 조사
 
-| 담당 | 하루 결과물 |
+| 담당 | 단계별 결과물 |
 | --- | --- |
 | 박형진 | Session·동의 API, stream 권한·만료 설계, 상품 catalog seed, PostgreSQL 초기 migration |
-| 양유상 | Eye 후보 3개 이상 inventory, revision·license·실행 smoke 기록 |
+| 양유상 | 아래 D2-1~D2-4를 순서대로 수행해 Eye 전수 inventory·Hard Gate·Smoke·1차 추천 기록 |
 | 정은미 | Face 후보 3개 이상 inventory, revision·license·실행 smoke 기록 |
 | 조윤혜 | S01·S02, 원격 frame 전송을 구분한 동의·취소·timeout UI를 mock API로 구현 |
+
+#### D2-1. Eye 공개 후보 전수 발견
+
+- GitHub·Hugging Face의 고정 검색어, 기준 시각과 모든 API page를 기록한다.
+- 검색당 1,000건을 넘는 GitHub 결과는 생성일 구간으로 분할한다.
+- fork·wrapper·동일 weight를 canonical family 기준으로 중복 제거한다.
+- 발견한 모든 후보에 포함·범위 밖·보류 사유를 남긴다.
+
+#### D2-2. Eye Hard Gate와 사용자 후기
+
+- source·weight revision, checksum, code·weight license, RGB 입력, calibration·화면 좌표 경로와 offline 실행을 확인한다.
+- GitHub Issues·Discussions, Hugging Face Discussions, Reddit, Stack Overflow와 독립 사용기에서 설치·보정·환경·성능·유지보수 후기를 수집한다.
+- 후보를 `pass-commercial`, `pass-demo-only`, `deferred`, `fail`로 분류한다.
+
+#### D2-3. Eye 통과 후보 전수 Smoke
+
+- 통과 후보를 개수 제한 없이 독립 환경에서 online·offline으로 실행한다.
+- Linux x86-64, 4 vCPU·16 GiB·Python 3.13.15를 우선하고 후보 예외는 해당 실험에만 고정한다.
+- initialize·warmup·infer·no-face/invalid·dispose와 출력·자원 관찰을 기록하되 정확도라고 표현하지 않는다.
+
+#### D2-4. Eye 점수화와 1차 추천
+
+- Hard Gate와 Smoke 통과 후보만 품질·실시간성·통합·법적/보안·후기·비용 100점 기준으로 평가한다.
+- 총점 70점, evidence coverage 80% 이상인 후보 중 primary와 다른 family의 fallback을 추천한다.
+- primary가 연구·비상업 전용이면 가장 높은 상용 가능 대안도 제시한다.
+- D4 동일 조건 benchmark에는 상위 최대 3개만 진입시키며 적격 후보가 부족하면 수를 채우지 않는다.
+
+D2-1~D2-4는 새로운 sprint 일자를 추가하는 이름이 아니라 D2 내부의 순차 Gate다. 조사량에 따라 각각 작은 PR로 나누며, 완료되지 않은 값을 추정해 다음 Gate로 넘기지 않는다.
 
 ### D3. 입력과 관측 경계
 
@@ -641,7 +671,7 @@ QR에는 원본 반응 데이터나 얼굴 관련 정보는 넣지 않는다.
 | 담당 | 하루 결과물 |
 | --- | --- |
 | 박형진 | FakeEye·FakeFace 기반 Vision Gateway WSS scaffold, 파생 event 저장, `MockRecommendationEngine` |
-| 양유상 | manifest·AOI Mapper, 시간·polygon·겹침 unit test, Eye 후보 1차 benchmark |
+| 양유상 | manifest·AOI Mapper, 시간·polygon·겹침 unit test, D2-4 상위 최대 3개 Eye 동일 조건 benchmark |
 | 정은미 | Face 후보 1차 benchmark와 label 정규화 비교 |
 | 조윤혜 | binary frame producer의 in-flight `1`·drop 처리, mock 시선·AOI overlay, S04 mock Top 2·QR |
 
@@ -650,7 +680,7 @@ QR에는 원본 반응 데이터나 얼굴 관련 정보는 넣지 않는다.
 | 담당 | 하루 결과물 |
 | --- | --- |
 | 박형진 | [`Vision 서버 선정 계획`](benchmarks/VISION_SERVER_SELECTION_PLAN.md)의 공통 harness·network·동시 세션·비용표, Recommendation·Manager event 계약, ADR 리뷰 주관 |
-| 양유상 | 목표 서버의 Eye 비교표, 선택·fallback ADR, capture-to-result·자원 smoke test |
+| 양유상 | D4 Eye 결과와 목표 서버 workload를 결합한 최종 비교표, 선택·fallback ADR, capture-to-result·자원 test |
 | 정은미 | 목표 서버의 Face 비교표, 선택·fallback ADR, capture-to-result·자원 smoke test |
 | 조윤혜 | 실제 생성 타입·RemoteVisionClient 연결, 전송 해상도·FPS 비교와 터치·오류 상태 정리 |
 
@@ -790,4 +820,4 @@ SHOW_GAZE_DEBUG=false|true
 8. 구매 전환 기록을 Manager 입력으로 시작할지 여부
 9. [`Vision 서버 선정 계획`](benchmarks/VISION_SERVER_SELECTION_PLAN.md)에 따른 목표 cloud·region·CPU/GPU·동시 Kiosk 수와 성능·비용·운영 Gate 및 ADR-0002 승인
 10. 동의 화면에 표시할 저장 항목과 보유 기간 결정 일정
-11. D5까지 사용할 Eye·Face 후보 최소 3개씩의 조사 범위
+11. Eye는 D2-1 전수 발견과 D2-4 상위 최대 3개 선정 범위, Face는 D5까지 비교할 최소 3개 후보 범위

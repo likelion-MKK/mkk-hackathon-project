@@ -230,7 +230,7 @@ Vision server RTT·jitter·packet loss·upload bandwidth:
 
 ### Gate
 
-D2 전에 Kiosk·카메라와 network 측정 조건을 기록하고, D5 모델 선정 benchmark와 D8 live test는 같은 Kiosk·목표 Vision 서버·network 조건 또는 동일 사양에서 실행한다.
+D2-3 Smoke 전에 기준 Vision 실행 환경의 OS·CPU/GPU·RAM과 후보별 실행 조건을 기록한다. D4 동일 조건 benchmark, D5 모델·서버 선정과 D8 live test는 같은 Kiosk·카메라·목표 Vision 서버·network 조건 또는 동일 사양에서 실행한다.
 
 ---
 
