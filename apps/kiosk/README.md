@@ -35,6 +35,8 @@ npm run build
 
 Mock 화면 흐름은 `screensaver → menu → consent → calibration → lookbook → finalizing → report` 순서다. `lookbook`과 `finalizing`은 D1 임시 화면이며 실제 영상·추천 UI는 후속 단계에서 연결한다.
 
+D1 Mock 룩북에는 별도의 영상 layout 정보가 없으므로 Mock 시선의 화면 정규화 좌표를 영상 정규화 좌표로 동일하게 취급한다. 이후 manifest의 노출 시간과 polygon AOI를 적용해 `ProductAttentionEvent`로 변환하고, 표정 신호와 함께 `ReactionBatch`에 담는다. 실제 영상 연결 시에는 캡처 시점의 layout을 사용한 좌표 변환으로 교체한다.
+
 ## 책임
 
 - S01 대기 화면부터 S04 분석 결과 화면까지의 상태 전이를 관리한다.

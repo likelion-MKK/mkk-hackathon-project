@@ -10,13 +10,13 @@ import {
   transitionKioskScreen,
   type KioskEvent,
 } from "./app/kiosk-machine.ts";
+import { buildD1ReactionBatch } from "./app/reaction-batch.ts";
 import type {
   ExpressionSample,
   GazeSample,
   KioskScreen,
   LookbookManifest,
   ProductCategory,
-  ReactionBatch,
   RecommendationResult,
   SessionCreated,
 } from "./app/kiosk-types.ts";
@@ -576,16 +576,18 @@ function App() {
     try {
       await visionClient.stopSession();
 
+      const gazeSample = latestGazeSample.current;
       const expressionSample = latestExpressionSample.current;
-      if (expressionSample) {
-        const batch: ReactionBatch = {
-          schema_version: "1.0",
-          batch_id: `batch-${session.session_id}-0001`,
-          batch_sequence: 0,
-          session_id: session.session_id,
-          video_id: manifest.video_id,
-          events: [expressionSample],
-        };
+      const batch = buildD1ReactionBatch({
+        batchId: `batch-${session.session_id}-0001`,
+        batchSequence: 0,
+        sessionId: session.session_id,
+        manifest,
+        gazeSample,
+        expressionSample,
+      });
+
+      if (batch) {
         await apiClient.appendReactionBatch(session.session_id, batch);
       }
 
