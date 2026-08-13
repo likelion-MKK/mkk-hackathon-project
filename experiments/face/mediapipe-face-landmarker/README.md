@@ -14,9 +14,20 @@
 | model URL | `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task` |
 | model SHA256 | `64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff` |
 | model size | 3,758,596 bytes |
-| weight license | 공식 model card와 배포 조건 확인 중 |
+| weight license | Apache-2.0 — 구성 모델 3종의 공식 model card에서 확인 |
 | network | 최초 asset 다운로드에만 필요, 이후 local asset buffer로 재실행 성공 |
-| Hard Gate | `pending` — 명시적인 weight license 확인 전 D4 비교 제외 |
+| Hard Gate | `pass` — 고정 URL·SHA256과 code·weight license 확인 |
+
+## License 근거
+
+[공식 Face Landmarker 문서](https://developers.google.com/edge/mediapipe/solutions/vision/face_landmarker/index)는 `face_landmarker.task`가 BlazeFace Short Range, FaceMesh V2, Blendshape 모델로 구성된다고 설명한다. 각 구성 모델의 공식 model card는 Apache License 2.0을 명시한다.
+
+- [BlazeFace Short Range model card](https://storage.googleapis.com/mediapipe-assets/MediaPipe%20BlazeFace%20Model%20Card%20%28Short%20Range%29.pdf)
+- [FaceMesh V2 model card](https://storage.googleapis.com/mediapipe-assets/Model%20Card%20MediaPipe%20Face%20Mesh%20V2.pdf)
+- [Blendshape V2 model card](https://storage.googleapis.com/mediapipe-assets/Model%20Card%20Blendshape%20V2.pdf)
+- [Apache License 2.0 원문](https://www.apache.org/licenses/LICENSE-2.0)
+
+Apache-2.0에 따라 상업적 사용·수정·재배포가 가능하다. 모델을 배포할 때는 라이선스 사본을 제공하고 기존 저작권·특허·상표·귀속 고지를 유지하며, 배포물에 `NOTICE`가 있으면 해당 고지를 함께 제공한다. 이 D2 PR에는 model weight를 포함하지 않으며, 향후 제품 패키징 시 라이선스·NOTICE 준수를 별도로 검증한다.
 
 ## 입력과 출력
 
@@ -55,4 +66,4 @@ uv run python smoke.py --offline
 
 Checksum 불일치는 자동으로 정상 asset처럼 교체하거나 로드하지 않는다. 로컬 `models/face_landmarker.task`를 삭제하고 online smoke를 다시 실행해 고정 URL에서 재다운로드한다.
 
-Smoke 통과는 52개 blendshape 품질을 검증하지 않는다. D4 진입 전 weight license를 명시적으로 확인해야 한다.
+Smoke와 license Hard Gate 통과는 D4 동일 조건 benchmark 진입이 가능하다는 뜻이며, 52개 blendshape 품질이나 production 모델 선정을 의미하지 않는다. 최종 선택은 D5 benchmark·ADR 승인 이후에만 진행한다.

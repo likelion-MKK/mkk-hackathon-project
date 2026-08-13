@@ -10,7 +10,7 @@
 
 | 후보 | 출력 성격 | Python package | Hard Gate | Smoke |
 | --- | --- | --- | --- | --- |
-| [MediaPipe Face Landmarker](mediapipe-face-landmarker/README.md) | 52개 얼굴 blendshape 계수 | `mediapipe==1.0.0` | `pending` — weight license 확인 필요 | `pass` |
+| [MediaPipe Face Landmarker](mediapipe-face-landmarker/README.md) | 52개 얼굴 blendshape 계수 | `mediapipe==1.0.0` | `pass` — 구성 모델 3종의 공식 model card에서 Apache-2.0 확인 | `pass` |
 | [OpenVINO emotions-recognition-retail-0003](openvino-emotions-retail-0003/README.md) | 5개 분류 점수 | `openvino==2026.3.0` | `pass` | `pass` |
 | [HSEmotion enet_b0_8_best_afew](hsemotion-enet-b0-8-best-afew/README.md) | 8개 분류 점수 | `hsemotion==0.3.0` | `fail` — unsafe legacy pickle | `fail` |
 
