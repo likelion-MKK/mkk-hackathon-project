@@ -4,6 +4,17 @@
 
 조윤혜가 화면을, 박형진이 API·WebSocket 계약을 공동 소유한다.
 
+## 로컬 실행
+
+저장소 루트에서 다음 명령으로 실행한다.
+
+```powershell
+npm install
+npm run dev:manager
+```
+
+기본 개발 주소는 `http://localhost:5174`이며 Backend·WebSocket 주소는 `.env.example`에서 확인한다.
+
 ## 입력
 
 - 사용 시작·추천 완료 `ManagerEvent`
