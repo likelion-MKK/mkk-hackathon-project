@@ -63,6 +63,34 @@ adapter.dispose()
 
 Face 패키지는 Kiosk의 구체적인 `FrameContext` 타입을 소유하지 않는다. Kiosk가 만든 capture context가 공개 `FaceFrameContext` Protocol의 필드를 제공하면 구조적으로 호환된다. 원격 추론에서는 Vision Gateway가 decode한 `frame`을 같은 서버 trust boundary의 수명 제한 메모리 참조로 전달하며 Adapter 결과·예외·로그에 포함하지 않는다.
 
+## Replay Adapter 사용
+
+`ReplayFaceAdapter`는 원본 미디어 대신 JSON fixture의 파생 관측값을 순서대로 재생한다. fixture record에는 `face_detected`, `face_count`, `scores`, `quality`, `valid`, `confidence`, `reason`만 저장한다. 세션·프레임·영상 시간 필드는 매 `infer` 호출의 `FaceFrameContext`에서 가져온다.
+
+```python
+from pathlib import Path
+
+from mcm_face import ReplayFaceAdapter
+
+
+adapter = ReplayFaceAdapter.from_fixture(
+    Path("tests/fixtures/expression-replay.d3.json")
+)
+adapter.initialize()
+adapter.warmup()
+
+sample = adapter.infer(frame=frame_reference, context=kiosk_frame_context)
+payload = sample.to_payload()
+
+adapter.dispose()
+```
+
+각 `infer`는 record 하나를 소비한다. 마지막 record 이후에는 자동 순환하지 않고 `ReplayExhaustedError`를 발생시킨다. 실행 중 반복 `initialize`는 cursor를 유지하며, `dispose` 후 다시 초기화하면 첫 record부터 재생한다.
+
+Replay의 no-face는 정상·중립 표정이 아니다. `face_detected=false`, `face_count=0`, `valid=false`, 빈 `scores`, `reason=no_face`인 관측 실패 이벤트로 그대로 전달한다. 영상 pause·seek·replay 시 Kiosk가 증가시킨 `playback_epoch`과 캡처 순간의 `video_time_ms`를 수정하지 않으므로, epoch이 바뀌었다면 영상 시간이 감소해도 그대로 보존한다.
+
+Fixture 형식과 검증·개인정보 규칙은 [`adapters/replay/README.md`](adapters/replay/README.md)를 따른다.
+
 ## 입력
 
 - Vision Gateway가 decode한 수명 제한 서버 메모리 frame 참조와 Kiosk 캡처 시점 `FrameContext`
