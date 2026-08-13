@@ -20,9 +20,12 @@ from apps.api.app.schemas import (
     ReactionBatch,
     ReactionBatchAccepted,
     ReactionEvent,
+    RecommendationAccepted,
+    RecommendationResult,
     SessionCreate,
     SessionCreated,
 )
+from services.recommendation.engine.interface import RecommendationEngine
 
 
 class DomainError(Exception):
@@ -47,6 +50,8 @@ class SessionRecord:
     event_sequences: set[int] = field(default_factory=set)
     events: list[ReactionEvent] = field(default_factory=list)
     batch_ids: set[str] = field(default_factory=set)
+    recommendation: RecommendationResult | None = None
+    completed: bool = False
 
 
 class MemoryStore:
@@ -67,6 +72,20 @@ class MemoryStore:
     def _load_manifest(self) -> LookbookManifest:
         path = self.repository_root / "data" / "lookbooks" / "example" / "manifest.json"
         return LookbookManifest.model_validate(json.loads(path.read_text(encoding="utf-8")))
+
+    def _new_recommendation(self, session_id: str) -> RecommendationResult:
+        return RecommendationResult(
+            schema_version="1.0",
+            recommendation_id=f"recommendation-{session_id}-001",
+            session_id=session_id,
+            video_id=self.manifest.video_id,
+            manifest_version=self.manifest.manifest_version,
+            algorithm_version="mock-v1",
+            engine_mode="mock",
+            status="pending",
+            items=[],
+            reason=None,
+        )
 
     def _require_session(self, session_id: str) -> SessionRecord:
         session = self.sessions.get(session_id)
@@ -93,6 +112,7 @@ class MemoryStore:
                 consent_version=request.consent_version,
                 created_at=created_at,
                 display_code=f"MKK-{session_number:04d}",
+                recommendation=self._new_recommendation(session_id),
             )
             self.sessions[session_id] = record
             if manifest.video_id != self.manifest.video_id:  # defensive invariant
@@ -122,6 +142,8 @@ class MemoryStore:
                 raise DomainError(400, "session_mismatch", "batch session_id does not match the URL")
             if batch.video_id != self.manifest.video_id:
                 raise DomainError(400, "video_mismatch", "batch video_id does not match the session manifest")
+            if session.completed:
+                raise DomainError(409, "session_completed", "completed sessions cannot accept more batches")
             if batch.batch_id in session.batch_ids:
                 return ReactionBatchAccepted(batch_id=batch.batch_id, status="duplicate")
 
@@ -146,3 +168,34 @@ class MemoryStore:
             if not new_events:
                 return ReactionBatchAccepted(batch_id=batch.batch_id, status="duplicate")
             return ReactionBatchAccepted(batch_id=batch.batch_id, status="accepted")
+
+    def complete_session(
+        self,
+        session_id: str,
+        engine: RecommendationEngine,
+    ) -> RecommendationAccepted:
+        with self._lock:
+            session = self._require_session(session_id)
+            if session.completed:
+                raise DomainError(409, "session_already_completed", "session has already been completed")
+            if session.recommendation is None:
+                raise DomainError(500, "recommendation_missing", "session recommendation state is missing")
+
+            engine_result = engine.run(
+                recommendation_id=session.recommendation.recommendation_id,
+                session_id=session.session_id,
+                video_id=self.manifest.video_id,
+                manifest_version=self.manifest.manifest_version,
+                events=[event.model_dump(mode="json") for event in session.events],
+                products=[product.model_dump(mode="json") for product in self.products.values()],
+            )
+            session.recommendation = RecommendationResult.model_validate(engine_result.to_payload())
+            session.completed = True
+            return RecommendationAccepted(session_id=session_id, status="pending")
+
+    def get_recommendation(self, session_id: str) -> RecommendationResult:
+        with self._lock:
+            session = self._require_session(session_id)
+            if session.recommendation is None:
+                raise DomainError(500, "recommendation_missing", "session recommendation state is missing")
+            return session.recommendation
