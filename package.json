@@ -1,0 +1,19 @@
+{
+  "name": "mkk-hackathon-project",
+  "private": true,
+  "version": "0.0.0",
+  "workspaces": [
+    "apps/kiosk",
+    "apps/manager"
+  ],
+  "scripts": {
+    "dev:kiosk": "npm run dev --workspace @mkk/kiosk",
+    "dev:manager": "npm run dev --workspace @mkk/manager",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "engines": {
+    "node": "24.19.0"
+  }
+}

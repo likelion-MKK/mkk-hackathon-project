@@ -4,6 +4,17 @@
 
 조윤혜(FE). Eye·Face 실행 경계, Vision Stream이나 API 계약을 바꿀 때는 박형진·양유상·정은미와 함께 리뷰한다. 원격 추론은 [`ADR-0001`](../../docs/adr/0001-remote-vision-inference.md)이 Accepted된 뒤 실제 고객 frame에 연결한다.
 
+## 로컬 실행
+
+저장소 루트에서 다음 명령으로 실행한다.
+
+```powershell
+npm install
+npm run dev:kiosk
+```
+
+기본 개발 주소는 `http://localhost:5173`이며 Backend 주소는 `.env.example`에서 확인한다.
+
 ## 책임
 
 - S01 대기 화면부터 S04 분석 결과 화면까지의 상태 전이를 관리한다.

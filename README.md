@@ -85,6 +85,26 @@ Eye Tracking과 표정 분석은 별도 Vision 서버에서 실행하는 방향�
 
 현재는 프로젝트의 서비스 방향과 사용자 경험을 구체화하는 단계입니다. Eye·Face를 별도 Vision 서버에서 실행하는 구조는 ADR-0001의 `Proposed` 상태이며 실제 server 구현·배포 완료를 뜻하지 않습니다. 룩북 영상 구성과 추천 알고리즘은 개발 과정에서 관련 논문 및 연구 자료를 조사한 뒤 설계할 예정입니다.
 
+## Frontend 로컬 실행
+
+Node.js `24.19.0`과 npm을 사용합니다. 저장소 루트에서 한 번 설치한 뒤 Kiosk와 Manager를 각각 실행할 수 있습니다.
+
+```powershell
+npm install
+npm run dev:kiosk
+npm run dev:manager
+```
+
+전체 Frontend 검증도 저장소 루트에서 실행합니다.
+
+```powershell
+npm run lint
+npm run test
+npm run build
+```
+
+Kiosk는 기본적으로 `http://localhost:5173`, Manager는 `http://localhost:5174`에서 실행됩니다. Backend 주소 형식은 각 앱의 `.env.example`을 참고합니다.
+
 ## 설계 문서
 
 - [문서 지도 및 작업별 읽기 순서](docs/DOCUMENT_MAP.md)
