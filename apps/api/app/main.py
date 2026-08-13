@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import FastAPI, Path, Request, status
+from fastapi import FastAPI, Path, Query, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -13,6 +13,9 @@ from apps.api.app.schemas import (
     Health,
     IDENTIFIER_PATTERN,
     LookbookManifest,
+    ManagerEvent,
+    ManagerProductRequest,
+    ManagerProductRequestAccepted,
     Product,
     ReactionBatch,
     ReactionBatchAccepted,
@@ -99,6 +102,26 @@ def create_app(store: MemoryStore | None = None) -> FastAPI:
     )
     def get_recommendation(session_id: str) -> RecommendationResult:
         return app.state.store.get_recommendation(session_id)
+
+    @app.post(
+        "/api/v1/sessions/{session_id}/manager-product-requests",
+        response_model=ManagerProductRequestAccepted,
+        status_code=status.HTTP_202_ACCEPTED,
+        responses={
+            400: {"model": ErrorResponse},
+            404: {"model": ErrorResponse},
+            409: {"model": ErrorResponse},
+        },
+    )
+    def request_manager_product(
+        session_id: IdentifierPath,
+        request: ManagerProductRequest,
+    ) -> ManagerProductRequestAccepted:
+        return app.state.store.request_manager_product(session_id, request)
+
+    @app.get("/api/v1/manager/events", response_model=list[ManagerEvent])
+    def list_manager_events(after_sequence: int | None = Query(default=None, ge=0)) -> list[ManagerEvent]:
+        return app.state.store.list_manager_events(after_sequence)
 
     @app.get(
         "/api/v1/products/{product_id}",

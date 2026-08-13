@@ -15,6 +15,9 @@ from threading import RLock
 
 from apps.api.app.schemas import (
     LookbookManifest,
+    ManagerEvent,
+    ManagerProductRequest,
+    ManagerProductRequestAccepted,
     Product,
     ProductCatalog,
     ReactionBatch,
@@ -64,6 +67,9 @@ class MemoryStore:
         self.manifest = self._load_manifest()
         self.products = {product.product_id: product for product in self.catalog.products}
         self.sessions: dict[str, SessionRecord] = {}
+        self.manager_events: list[ManagerEvent] = []
+        self.manager_requests: dict[str, tuple[str, str]] = {}
+        self._manager_sequence = 0
 
     def _load_catalog(self) -> ProductCatalog:
         path = self.repository_root / "data" / "products" / "catalog.example.json"
@@ -86,6 +92,29 @@ class MemoryStore:
             items=[],
             reason=None,
         )
+
+    def _append_manager_event(self, session: SessionRecord, request: ManagerProductRequest) -> None:
+        recommendation = session.recommendation
+        if recommendation is None:
+            raise DomainError(500, "recommendation_missing", "session recommendation state is missing")
+        self.manager_events.append(
+            ManagerEvent(
+                schema_version="1.0",
+                event_id=request.request_id,
+                sequence=self._manager_sequence,
+                session_id=session.session_id,
+                kiosk_id=session.kiosk_id,
+                event_type="customer_product_request",
+                emitted_at=datetime.now(timezone.utc),
+                payload={
+                    "intent": "view_recommended_products",
+                    "recommendation_id": recommendation.recommendation_id,
+                    "engine_mode": recommendation.engine_mode,
+                    "items": [item.model_dump(mode="json") for item in recommendation.items],
+                },
+            )
+        )
+        self._manager_sequence += 1
 
     def _require_session(self, session_id: str) -> SessionRecord:
         session = self.sessions.get(session_id)
@@ -199,3 +228,25 @@ class MemoryStore:
             if session.recommendation is None:
                 raise DomainError(500, "recommendation_missing", "session recommendation state is missing")
             return session.recommendation
+
+    def request_manager_product(self, session_id: str, request: ManagerProductRequest) -> ManagerProductRequestAccepted:
+        with self._lock:
+            session = self._require_session(session_id)
+            request_key = (session_id, request.recommendation_id)
+            existing = self.manager_requests.get(request.request_id)
+            if existing is not None:
+                if existing != request_key:
+                    raise DomainError(409, "request_id_conflict", "request_id was already used for a different manager product request")
+                return ManagerProductRequestAccepted(request_id=request.request_id, status="duplicate")
+            recommendation = session.recommendation
+            if recommendation is None or recommendation.status != "completed":
+                raise DomainError(409, "recommendation_not_ready", "manager product requests require a completed recommendation")
+            if recommendation.recommendation_id != request.recommendation_id:
+                raise DomainError(400, "recommendation_mismatch", "recommendation_id does not match the session recommendation")
+            self._append_manager_event(session, request)
+            self.manager_requests[request.request_id] = request_key
+            return ManagerProductRequestAccepted(request_id=request.request_id, status="accepted")
+
+    def list_manager_events(self, after_sequence: int | None = None) -> list[ManagerEvent]:
+        with self._lock:
+            return [event for event in self.manager_events if after_sequence is None or event.sequence > after_sequence]

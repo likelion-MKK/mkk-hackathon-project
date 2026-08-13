@@ -62,7 +62,7 @@ def test_complete_session_returns_mock_top_two_without_manager_event() -> None:
         assert recommendation.status_code == 200
         assert recommendation.json()["status"] == "completed"
         assert recommendation.json()["items"] == [{"rank": 1, "product_id": "P001"}, {"rank": 2, "product_id": "P002"}]
-        assert client.get("/api/v1/manager/events").status_code == 404
+        assert client.get("/api/v1/manager/events").json() == []
 
 
 def test_complete_session_without_valid_attention_returns_insufficient_data() -> None:
