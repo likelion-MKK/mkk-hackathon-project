@@ -530,6 +530,16 @@
   letter-spacing: -0.075em;
 }
 
+.calibration-page__copy h1 {
+  font-size: clamp(2.35rem, 3vw, 3.6rem);
+  letter-spacing: -0.065em;
+}
+
+.calibration-page__copy h1 span {
+  display: block;
+  white-space: nowrap;
+}
+
 .consent-page__lead {
   max-width: 610px;
   color: #4b4b4b;
@@ -624,12 +634,12 @@
   display: grid;
   min-height: 0;
   flex: 1;
-  grid-template-columns: minmax(360px, 0.72fr) minmax(620px, 1.28fr);
+  grid-template-columns: minmax(420px, 0.8fr) minmax(620px, 1.2fr);
 }
 
 .calibration-page__copy {
   display: flex;
-  padding: clamp(2.5rem, 5.5vw, 6rem);
+  padding: clamp(2.5rem, 4.5vw, 5rem);
   flex-direction: column;
   justify-content: center;
   border-right: 1px solid var(--line);
@@ -935,7 +945,7 @@
 
   .consent-page__content h1,
   .calibration-page__copy h1 {
-    font-size: 2.6rem;
+    font-size: clamp(2rem, 10vw, 2.6rem);
   }
 
   .consent-actions {

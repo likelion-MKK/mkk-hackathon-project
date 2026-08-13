@@ -31,7 +31,8 @@
 | --- | --- | --- |
 | `apps/kiosk/` | 조윤혜 | S01-S04, 영상·웹캠 orchestration, 터치 UI |
 | `apps/manager/` | 조윤혜, 박형진 | 매니저 UI와 Backend 이벤트 연결 |
-| `apps/api/` | 박형진 | FastAPI, 세션, PostgreSQL, QR, WebSocket |
+| `apps/api/` | 박형진 | FastAPI, 세션, PostgreSQL, QR, Manager polling |
+| `apps/vision-gateway/` | 박형진 관리, 양유상·정은미·조윤혜 공동 리뷰 | ADR-0001 승인 후 WSS 인증·frame ingress·flow control·Eye/Face fan-out·비저장 경계 |
 | `services/recommendation/` | 박형진 | feature 집계와 추천 엔진 경계 |
 | `services/eye/`, `experiments/eye/` | 양유상 | Eye Adapter, 보정, 시선 좌표, AOI 매핑·평가 |
 | `services/face/`, `experiments/face/` | 정은미 | Face Adapter, 출력 정규화·평가 |
@@ -83,12 +84,13 @@ python scripts/validate_contracts.py
 
 ## 6. 개인정보와 AI 출력 원칙
 
-- 웹캠 원본 프레임·영상, image bytes, base64, 얼굴 embedding과 원본 파일 경로를 파일·DB·API·로그에 저장하지 않는다.
+- 웹캠 원본 frame·영상, image bytes, base64, 얼굴 embedding과 원본 파일 경로를 일반 REST/event 계약, 파일·DB·cache·queue·로그·APM·브라우저 저장소에 저장하거나 포함하지 않는다.
+- [`ADR-0001`](docs/adr/0001-remote-vision-inference.md)은 `Proposed` 상태이므로 Accepted와 별도 개인정보·네트워크 승인 전에는 실제 고객 frame을 원격 전송하지 않는다. 승인 후에도 고객 동의가 유효한 세션의 binary WSS Vision Stream에서만 일시 전송하고 Gateway·Worker 메모리 밖에 남기지 않는다.
 - 고객 동의를 받은 파생 신호, 추천 결과와 구매 전환 결과만 정해진 계약으로 처리한다.
 - 무효 신호를 `(0, 0)`, 중립 표정 또는 무관심으로 바꾸지 않고 `valid=false`와 사유를 유지한다.
 - 표정·시선 신호를 실제 감정, 성격 또는 구매 의도의 확정값으로 표현하지 않는다.
 - 외부 Eye·Face 모델은 URL, 정확한 commit/revision, code·weight license와 checksum을 기록한 뒤 선택한다.
-- 원본 프레임을 외부 서비스로 전송하는 모델은 별도 개인정보·네트워크 승인 전 사용하지 않는다.
+- 원본 frame을 팀 관리 Vision 서버 밖의 제3자·외부 모델 서비스로 전송하는 방식은 ADR-0001 승인과 별개인 개인정보·네트워크 승인 전 사용하지 않는다.
 
 ## 7. 작업 종료와 인계
 

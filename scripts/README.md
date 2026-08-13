@@ -12,7 +12,7 @@ python scripts/validate_contracts.py
 - `contracts/**/*.schema.json`의 JSON Schema Draft 2020-12 문법
 - `contracts/examples/*.json` 정상 fixture와 실행용 data fixture
 - `contracts/examples/invalid/*.json`이 실제로 schema에서 거부되는지 확인
-- `contracts/openapi.yaml` 문법, 필수 REST 경로와 WebSocket schema 참조
+- `contracts/openapi.yaml` 문법, 필수 REST 경로와 Manager polling event schema 참조
 - manifest 시간 범위·중복 ID와 product catalog 참조
 - reaction batch의 세션·영상 ID, event ID와 sequence 중복
 - 완료된 추천 결과의 서로 다른 Top 2와 rank 1·2

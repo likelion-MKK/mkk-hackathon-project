@@ -377,9 +377,8 @@ function Calibration({
         <div className="calibration-page__copy">
           <p className="section-label">EYE CALIBRATION</p>
           <h1 id="calibration-title">
-            움직이는 점을
-            <br />
-            눈으로 따라가세요
+            <span>움직이는 점을</span>
+            <span>눈으로 따라가세요</span>
           </h1>
           <p>
             고개는 편안하게 두고 화면 위의 검은 점만 바라봐주세요.

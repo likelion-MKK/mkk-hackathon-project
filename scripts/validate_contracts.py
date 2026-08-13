@@ -699,6 +699,7 @@ def validate_openapi(root: Path, issues: list[Issue]) -> None:
         "/api/v1/sessions/{session_id}/reaction-batches",
         "/api/v1/sessions/{session_id}/complete",
         "/api/v1/sessions/{session_id}/recommendations",
+        "/api/v1/sessions/{session_id}/manager-product-requests",
         "/api/v1/products/{product_id}",
         "/api/v1/conversions",
         "/api/v1/manager/events",
@@ -708,10 +709,7 @@ def validate_openapi(root: Path, issues: list[Issue]) -> None:
     if missing_paths:
         issues.append(Issue(openapi_path, f"missing required API paths: {missing_paths}"))
 
-    for pointer, message in (
-        ("x-websocket-channel", "missing manager WebSocket channel extension"),
-        ("components", "missing components object"),
-    ):
+    for pointer, message in (("components", "missing components object"),):
         if not isinstance(document.get(pointer), dict):
             issues.append(Issue(openapi_path, message))
 

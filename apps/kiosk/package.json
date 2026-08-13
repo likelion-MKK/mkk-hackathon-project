@@ -1,5 +1,5 @@
 {
-  "name": "kiosk-vite-temp",
+"name": "@mkk/kiosk",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "tsc -p tsconfig.test.json --noEmit && node --test src/app/kiosk-machine.test.ts src/clients/api/MockApiClient.test.ts src/clients/vision/MockVisionClient.test.ts src/contracts/contract-fixtures.test.ts",
+
+    "test": "tsc -p tsconfig.test.json --noEmit && node --test test/*.test.mjs src/app/kiosk-machine.test.ts src/clients/api/MockApiClient.test.ts src/clients/vision/MockVisionClient.test.ts src/contracts/contract-fixtures.test.ts",
+
     "preview": "vite preview"
   },
   "dependencies": {

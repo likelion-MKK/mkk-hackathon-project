@@ -13,7 +13,7 @@
 
 ## 불변 조건
 
-- 결과 시각과 `frame_id`는 입력 `FrameContext`에서 이어받는다.
+- 결과의 `sequence`, `frame_id`, 캡처 시각과 영상 시각은 입력 `FrameContext`에서 이어받고 임의로 다시 쓰지 않는다.
 - 유효 좌표는 viewport 기준 `0.0~1.0`이며 좌상단이 원점이다.
 - 사용할 수 없는 결과는 `valid=false`와 구체적인 `reason`으로 표현한다.
 - 모델 고유 landmark나 gaze vector는 adapter 밖의 공통 출력이 아니다.

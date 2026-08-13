@@ -5,10 +5,11 @@
 ## API 계약
 
 - `openapi.yaml`: FastAPI가 구현할 REST API의 OpenAPI 3.1 계약
-- `events/manager-event.schema.json`: `/ws/v1/managers`가 전달할 WebSocket 메시지 계약
+- `requests/manager-product-request.schema.json`: S04 고객 제품 요청 body 계약
+- `events/manager-event.schema.json`: 고객의 S04 제품 요청을 매니저 화면에 전달하는 polling 이벤트 계약
 - `events/reaction-batch.schema.json`: Kiosk·AI 영역이 Backend로 전송할 파생 반응 batch 계약
 
-OpenAPI의 `x-websocket-channel`은 REST와 별개인 매니저 WebSocket endpoint와 메시지 schema를 연결하기 위한 프로젝트 확장 필드입니다.
+`GET /api/v1/manager/events?after_sequence={last_sequence}`은 매니저 화면이 1~2초 간격으로 polling하는 이벤트 조회 계약입니다. `event_id`로 중복을 제거하고, 가장 큰 `sequence`를 다음 cursor로 사용합니다.
 
 ## Schema와 정상 fixture
 
@@ -21,7 +22,8 @@ OpenAPI의 `x-websocket-channel`은 REST와 별개인 매니저 WebSocket endpoi
 | `events/product-attention-event.schema.json` | `examples/product-attention-event.valid.json` | 시선과 AOI의 교차 결과 |
 | `events/reaction-batch.schema.json` | `examples/reaction-batch.valid.json` | 파생 반응 event 전송 묶음 |
 | `events/recommendation-result.schema.json` | `examples/recommendation-result.valid.json` | 추천 상태와 Top 2 |
-| `events/manager-event.schema.json` | `examples/manager-event.valid.json` | 세션 시작·추천 준비 알림 |
+| `requests/manager-product-request.schema.json` | `examples/manager-product-request.valid.json` | S04 고객 제품 요청 body |
+| `events/manager-event.schema.json` | `examples/manager-event.valid.json` | 고객의 제품 요청 polling 알림 |
 | `events/conversion-outcome.schema.json` | `examples/conversion-outcome.valid.json` | 추천 후 착용·구매 기록 |
 
 실행용 데이터 fixture는 다음 두 파일에도 있습니다.
@@ -72,6 +74,8 @@ OpenAPI의 `x-websocket-channel`은 REST와 별개인 매니저 WebSocket endpoi
 
 Schema와 event에는 웹캠 원본 프레임, 이미지 바이트, 얼굴 embedding, blob, base64 payload나 원본 파일 경로를 정의하지 않습니다. Object는 허용된 필드만 받도록 `additionalProperties: false`를 사용합니다. 상품 catalog의 `image_url`은 표시 자산의 외부 참조이며 이미지 payload가 아닙니다.
 
+원격 추론이 승인되더라도 이 JSON Contract v1과 일반 REST API의 금지 원칙은 유지합니다. Kiosk와 Vision Gateway 사이의 일시적 binary frame transport는 [`ADR-0001`](../docs/adr/0001-remote-vision-inference.md) 승인 후 별도 `Vision Stream v1` Contract PR로 정의하며, 실제 image payload fixture를 Git에 저장하지 않습니다.
+
 ## JSON Schema 밖의 통합 불변조건
 
 다음 조건은 단일 JSON 문서의 Draft 2020-12 검증만으로 완전히 표현할 수 없으므로 contract test와 소비자 코드가 확인해야 합니다.
@@ -82,6 +86,7 @@ Schema와 event에는 웹캠 원본 프레임, 이미지 바이트, 얼굴 embed
 - batch와 내부 event의 `session_id`, `video_id`가 envelope와 일치함
 - batch 안의 `event_id`와 세션 sequence가 중복되지 않음
 - Top 2의 rank가 각각 `1`, `2`이고 `product_id`가 서로 다름
+- Manager product request에는 `request_id`와 `recommendation_id`만 포함하고 상품 목록을 포함하지 않음
 - `source_gaze_event_id`가 같은 세션의 실제 GazeSample을 가리킴
 
 ## 검증

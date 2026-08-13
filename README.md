@@ -1,12 +1,12 @@
 # MCM AI Lookbook Kiosk
 
-> 룩북을 보는 고객의 비언어적 반응을 바탕으로, 매장에서 직접 확인할 MCM 상품을 추천하는 오프라인 AI 키오스크
+> 룩북을 보는 고객의 비언어적 반응을 바탕으로, 매장에서 직접 확인할 MCM 상품을 추천하는 매장형 AI 키오스크
 
 ## 프로젝트 소개
 
 MCM AI Lookbook Kiosk는 매장 방문 고객이 짧은 룩북 영상을 감상하는 동안 나타나는 시선, 얼굴 방향, 표정 등의 비언어적 반응을 분석해 관심도가 높은 상품을 추천하는 서비스입니다.
 
-고객은 별도의 회원가입이나 설문 없이 추천 결과를 확인하고, 상품별 QR 코드로 제품 정보를 이어서 볼 수 있습니다. 매장 매니저에게도 고객 이용 상황과 추천 결과를 자동으로 전달해 자연스러운 오프라인 응대로 연결합니다.
+고객은 별도의 회원가입이나 설문 없이 추천 결과를 확인하고, 상품별 QR 코드로 제품 정보를 이어서 볼 수 있습니다. S04에서 고객이 제품 요청 버튼을 누르면 추천 Top 2와 함께 매니저의 오프라인 응대로 연결합니다.
 
 ## 프로젝트 목표
 
@@ -35,17 +35,17 @@ S01 대기 화면 → S02 메뉴 → S03 룩북 시청·반응 분석 → S04 �
 - **비언어적 반응 분석**: 시선, 얼굴 방향, 표정 변화 등 고객의 반응을 분석합니다.
 - **맞춤 상품 추천**: 분석 결과를 바탕으로 관심도가 높은 상품 Top 2를 추천합니다.
 - **상품별 QR 제공**: 추천 상품의 이미지와 미리 생성한 QR 코드를 함께 보여주어, 고객이 스마트폰으로 제품 정보를 이어서 확인할 수 있습니다.
-- **매니저 자동 알림**: 고객이 키오스크를 이용하면 매니저 화면에 자동으로 알림을 보내 맞춤 응대를 돕습니다.
+- **매니저 제품 요청 알림**: S04에서 고객이 버튼을 누르면 추천 Top 2와 함께 매니저에게 응대 요청을 보냅니다.
 
 ## 전체 흐름
 
 ```text
 [Kiosk Frontend]
-  룩북 재생 · 웹캠 입력 · 사용자 조작
-            ↓
-[AI / Data]
-  비언어적 반응 데이터 분석
-            ↓
+  룩북 재생 · 웹캠 입력 · 캡처 시각 동기화
+            ↓ WSS, 동의된 세션의 일시적 frame 전송
+[Vision Inference Server]
+  Eye · Face 분석 · 파생 신호 반환, 원본 frame 비저장
+            ↓ 파생 신호만
 [Backend]
   세션 관리 · 추천 결과 생성 · QR 정보 · 매니저 알림
             ↓
@@ -58,14 +58,17 @@ S01 대기 화면 → S02 메뉴 → S03 룩북 시청·반응 분석 → S04 �
 | 구분 | 기술 / 방향 |
 | --- | --- |
 | Backend | Python, FastAPI |
+| Vision Inference | 별도 서버의 Eye·Face Python runtime, binary WSS transport 제안 |
 | Database | PostgreSQL |
 | QR Code | `python-qrcode` |
-| Manager Notification | FastAPI WebSocket |
+| Manager Notification | FastAPI REST polling |
 | Recommendation Algorithm | 관련 논문과 연구 자료를 바탕으로 추후 설계 |
 
 ## 개인정보 처리 방향
 
-고객의 웹캠 원본 영상은 저장하지 않고, 분석 후 즉시 폐기하는 방향으로 설계합니다. 다만 고객 동의를 전제로 원본 영상에서 추출한 비언어적 반응 데이터와 추천 결과, 구매 전환 결과는 PostgreSQL에 저장합니다.
+Eye Tracking과 표정 분석은 별도 Vision 서버에서 실행하는 방향을 검토합니다. 고객의 웹캠 frame은 원격 전송 사실과 목적에 동의한 세션에서만 HTTPS/WSS로 일시 전송하며, 서버 메모리에서 분석한 뒤 파일·DB·로그·cache·backup에 저장하지 않습니다. 일반 Backend와 PostgreSQL에는 원본 frame 대신 파생 신호만 전달합니다.
+
+원본 영상에서 추출한 비언어적 반응 데이터와 추천 결과, 구매 전환 결과는 고객 동의를 전제로 PostgreSQL에 저장합니다. 원격 추론의 세부 transport와 승인 조건은 [`ADR-0001`](docs/adr/0001-remote-vision-inference.md)에 제안 상태로 기록하며, 승인 전에는 실제 고객 frame을 원격 전송하지 않습니다.
 
 축적된 데이터는 실제 구매로 이어진 반응 패턴을 확인하고 추천 품질을 검증·개선하는 데 활용합니다. 개인 식별 정보는 최소화하며, 구체적인 저장 항목·보유 기간·동의 절차는 서비스 설계 단계에서 확정합니다.
 
@@ -80,7 +83,27 @@ S01 대기 화면 → S02 메뉴 → S03 룩북 시청·반응 분석 → S04 �
 
 ## 현재 단계
 
-현재는 프로젝트의 서비스 방향과 사용자 경험을 구체화하는 단계입니다. 룩북 영상 구성과 추천 알고리즘은 개발 과정에서 관련 논문 및 연구 자료를 조사한 뒤 설계할 예정입니다.
+현재는 프로젝트의 서비스 방향과 사용자 경험을 구체화하는 단계입니다. Eye·Face를 별도 Vision 서버에서 실행하는 구조는 ADR-0001의 `Proposed` 상태이며 실제 server 구현·배포 완료를 뜻하지 않습니다. 룩북 영상 구성과 추천 알고리즘은 개발 과정에서 관련 논문 및 연구 자료를 조사한 뒤 설계할 예정입니다.
+
+## Frontend 로컬 실행
+
+Node.js `24.19.0`과 npm을 사용합니다. 저장소 루트에서 한 번 설치한 뒤 Kiosk와 Manager를 각각 실행할 수 있습니다.
+
+```powershell
+npm install
+npm run dev:kiosk
+npm run dev:manager
+```
+
+전체 Frontend 검증도 저장소 루트에서 실행합니다.
+
+```powershell
+npm run lint
+npm run test
+npm run build
+```
+
+Kiosk는 기본적으로 `http://localhost:5173`, Manager는 `http://localhost:5174`에서 실행됩니다. Backend 주소 형식은 각 앱의 `.env.example`을 참고합니다.
 
 ## 설계 문서
 
@@ -89,6 +112,7 @@ S01 대기 화면 → S02 메뉴 → S03 룩북 시청·반응 분석 → S04 �
 - [전체 설계](docs/OVERALL_DESIGN.md)
 - [상세 설계 및 병렬 개발 계획](docs/DETAILED_DESIGN_PLAN.md)
 - [D1 기술·운영 의사결정서](docs/D1_TECHNICAL_DECISIONS.md)
+- [Vision 추론 서버 선정·비용 결정 계획](docs/benchmarks/VISION_SERVER_SELECTION_PLAN.md)
 - [Contract v1](contracts/README.md)
 - [개발 및 PR 운영 규칙](CONTRIBUTING.md)
 
