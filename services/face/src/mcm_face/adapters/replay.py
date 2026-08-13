@@ -14,6 +14,7 @@ from mcm_face.models import AdapterMetadata, ExpressionSample, FaceFrameContext
 
 
 FrameT = TypeVar("FrameT")
+_ContextKey = tuple[str, int, str, float, str, int, int]
 
 _FIXTURE_FIELDS = frozenset(("fixture_revision", "records"))
 _RECORD_FIELDS = frozenset(
@@ -122,6 +123,7 @@ class ReplayFaceAdapter(Generic[FrameT]):
         self._records = prepared_records
         self._metadata = metadata
         self._cursor = 0
+        self._samples_by_context: dict[_ContextKey, ExpressionSample] = {}
         self._initialized = False
         self._disposed = False
 
@@ -184,6 +186,7 @@ class ReplayFaceAdapter(Generic[FrameT]):
         if self._initialized and not self._disposed:
             return
         self._cursor = 0
+        self._samples_by_context.clear()
         self._initialized = True
         self._disposed = False
 
@@ -193,10 +196,16 @@ class ReplayFaceAdapter(Generic[FrameT]):
         self._require_ready()
 
     def infer(self, frame: FrameT, context: FaceFrameContext) -> ExpressionSample:
-        """Consume one derived record and combine it with capture-time context."""
+        """Replay one record idempotently for each capture-time context."""
 
-        self._require_ready()
         del frame
+        self._require_ready()
+
+        context_key = self._context_key(context)
+        cached_sample = self._samples_by_context.get(context_key)
+        if cached_sample is not None:
+            return cached_sample
+
         if self._cursor >= len(self._records):
             raise ReplayExhaustedError(
                 f"ReplayFaceAdapter exhausted after {len(self._records)} records"
@@ -226,18 +235,32 @@ class ReplayFaceAdapter(Generic[FrameT]):
             confidence=record.confidence,
             reason=record.reason,
         )
+        self._samples_by_context[context_key] = sample
         self._cursor += 1
         return sample
 
     def dispose(self) -> None:
         """Enter disposed state; repeated calls are safe."""
 
+        self._samples_by_context.clear()
         self._initialized = False
         self._disposed = True
 
     def _require_ready(self) -> None:
         if not self._initialized or self._disposed:
             raise RuntimeError("ReplayFaceAdapter is not initialized")
+
+    @staticmethod
+    def _context_key(context: FaceFrameContext) -> _ContextKey:
+        return (
+            context.session_id,
+            context.sequence,
+            context.frame_id,
+            context.captured_at_mono_ms,
+            context.video_id,
+            context.video_time_ms,
+            context.playback_epoch,
+        )
 
     def _event_id(self, record_index: int, context: FaceFrameContext) -> str:
         metadata = self.metadata()

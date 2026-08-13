@@ -164,6 +164,34 @@ def test_event_ids_are_unique_by_record_and_context() -> None:
     assert changed_sample.event_id != samples[0].event_id
 
 
+def test_same_context_retry_reuses_sample_without_consuming_next_record() -> None:
+    adapter = initialized_adapter()
+    first_context, second_context = replay_contexts()[:2]
+
+    first = adapter.infer(object(), first_context)
+    retried = adapter.infer(object(), first_context)
+    second = adapter.infer(object(), second_context)
+
+    assert retried is first
+    assert retried.event_id == first.event_id
+    assert retried.to_payload() == first.to_payload()
+    assert second.reason == "no_face"
+
+
+def test_retried_event_id_supports_downstream_deduplication() -> None:
+    adapter = initialized_adapter()
+    context = replay_contexts()[0]
+
+    deliveries = [
+        adapter.infer(object(), context),
+        adapter.infer(object(), context),
+    ]
+    deduplicated = {sample.event_id: sample for sample in deliveries}
+
+    assert len(deduplicated) == 1
+    assert next(iter(deduplicated.values())).to_payload() == deliveries[0].to_payload()
+
+
 def test_all_capture_context_fields_are_preserved() -> None:
     contexts = replay_contexts()
     samples = replay_all(initialized_adapter())
@@ -217,11 +245,25 @@ def test_playback_epoch_and_video_time_rewind_are_preserved() -> None:
 def test_exhaustion_does_not_loop_and_is_repeatable() -> None:
     adapter = initialized_adapter()
     replay_all(adapter)
+    unseen_context = replace(replay_contexts()[0], frame_id="frame-unseen")
 
     with pytest.raises(ReplayExhaustedError, match="exhausted after 5 records"):
-        adapter.infer(object(), replay_contexts()[0])
+        adapter.infer(object(), unseen_context)
     with pytest.raises(ReplayExhaustedError, match="exhausted after 5 records"):
-        adapter.infer(object(), replay_contexts()[0])
+        adapter.infer(object(), unseen_context)
+
+
+def test_cached_context_can_retry_after_exhaustion_but_new_context_cannot() -> None:
+    adapter = initialized_adapter()
+    contexts = replay_contexts()
+    samples = replay_all(adapter)
+
+    retried = adapter.infer(object(), contexts[0])
+    assert retried is samples[0]
+
+    unseen_context = replace(contexts[0], frame_id="frame-after-exhaustion")
+    with pytest.raises(ReplayExhaustedError, match="exhausted after 5 records"):
+        adapter.infer(object(), unseen_context)
 
 
 def test_lifecycle_and_cursor_reset_rules_are_explicit() -> None:
@@ -255,14 +297,34 @@ def test_lifecycle_and_cursor_reset_rules_are_explicit() -> None:
 def test_repeated_initialize_does_not_reset_exhausted_cursor() -> None:
     adapter = initialized_adapter()
     replay_all(adapter)
+    unseen_context = replace(replay_contexts()[0], frame_id="frame-unseen")
 
     adapter.initialize()
     with pytest.raises(ReplayExhaustedError):
-        adapter.infer(object(), replay_contexts()[0])
+        adapter.infer(object(), unseen_context)
 
     adapter.dispose()
     adapter.initialize()
     assert adapter.infer(object(), replay_contexts()[0]).valid is True
+
+
+def test_repeated_initialize_keeps_cache_and_post_dispose_initialize_clears_it() -> None:
+    adapter = initialized_adapter()
+    first_context, second_context = replay_contexts()[:2]
+
+    first = adapter.infer(object(), first_context)
+    adapter.initialize()
+    assert adapter.infer(object(), first_context) is first
+    assert adapter.infer(object(), second_context).reason == "no_face"
+
+    adapter.dispose()
+    adapter.initialize()
+    restarted_with_second_context = adapter.infer(object(), second_context)
+    assert restarted_with_second_context.valid is True
+    assert dict(restarted_with_second_context.scores) == {
+        "brow_raise_like": 0.28,
+        "smile_like": 0.72,
+    }
 
 
 def test_context_validation_failure_does_not_consume_record() -> None:
@@ -460,7 +522,35 @@ def test_frame_is_not_in_exhaustion_error() -> None:
 
     adapter = initialized_adapter()
     replay_all(adapter)
+    unseen_context = replace(replay_contexts()[0], frame_id="frame-unseen")
 
     with pytest.raises(ReplayExhaustedError) as error:
-        adapter.infer(SecretFrame(), replay_contexts()[0])
+        adapter.infer(SecretFrame(), unseen_context)
     assert "frame-secret-must-not-appear" not in str(error.value)
+
+
+@pytest.mark.parametrize("lifecycle_state", ["before_initialize", "after_dispose"])
+def test_frame_is_released_from_lifecycle_error_traceback(lifecycle_state: str) -> None:
+    class SecretFrame:
+        def __repr__(self) -> str:
+            return "lifecycle-frame-secret-must-not-appear"
+
+    adapter = ReplayFaceAdapter.from_fixture(FIXTURE_PATH)
+    if lifecycle_state == "after_dispose":
+        adapter.initialize()
+        adapter.dispose()
+
+    frame = SecretFrame()
+    frame_reference = weakref.ref(frame)
+    with pytest.raises(RuntimeError, match="not initialized") as error:
+        adapter.infer(frame, replay_contexts()[0])
+
+    traceback = error.value.__traceback__
+    del frame
+    gc.collect()
+
+    assert frame_reference() is None
+    assert "lifecycle-frame-secret-must-not-appear" not in str(error.value)
+    while traceback is not None:
+        assert "frame" not in traceback.tb_frame.f_locals
+        traceback = traceback.tb_next

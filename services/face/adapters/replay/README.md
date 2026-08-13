@@ -28,7 +28,7 @@ fixture root는 revision과 순서가 있는 record 배열만 가진다. 각 rec
 ```
 
 - `fixture_revision`은 Replay metadata의 `model_revision`으로 전달한다.
-- 배열 위치가 재생 순서이며 `infer` 한 번에 record 하나를 소비한다.
+- 배열 위치가 재생 순서이며 처음 보는 `FaceFrameContext`의 `infer` 한 번에 record 하나를 소비한다.
 - `session_id`, `sequence`, `frame_id`, `captured_at_mono_ms`, `video_id`, `video_time_ms`, `playback_epoch`은 fixture에 넣지 않고 호출 시점의 `FaceFrameContext`에서 가져온다.
 - `producer_id`, `model_revision`, `taxonomy_version`은 Adapter metadata에서 만든다.
 - fixture에 없는 label이나 score를 추측하거나 중립값으로 채우지 않는다.
@@ -48,10 +48,11 @@ adapter.dispose()
 ```
 
 - `warmup`과 `infer`는 초기화 전 또는 dispose 후 호출하면 명확한 lifecycle 오류를 발생시킨다.
-- 실행 중 반복 `initialize`는 안전한 no-op이며 현재 cursor를 되돌리지 않는다.
-- 첫 initialize 또는 dispose 후 재초기화는 cursor를 첫 record로 되돌린다.
-- 마지막 record 이후에는 처음으로 순환하지 않고 `ReplayExhaustedError`를 발생시킨다.
-- 같은 fixture와 같은 `FaceFrameContext` 호출 순서는 같은 결과와 결정적인 event ID를 만든다.
+- 동일 context의 `infer` 재시도는 cached `ExpressionSample`을 반환한다. 같은 fixture record와 결정적인 `event_id`를 재사용하며 cursor를 추가로 소비하지 않는다.
+- `event_id`는 downstream이 같은 sample의 재전송을 중복 제거하는 키다.
+- 실행 중 반복 `initialize`는 안전한 no-op이며 현재 cursor와 context cache를 유지한다.
+- 첫 initialize 또는 dispose 후 재초기화는 cursor를 첫 record로 되돌리고 이전 실행의 cache를 비운다.
+- 마지막 record 이후 처음 보는 context에는 순환 없이 `ReplayExhaustedError`를 발생시키며, 이미 처리한 context는 같은 결과로 재시도할 수 있다.
 
 ## no-face 의미
 
@@ -80,5 +81,6 @@ Replay Adapter는 영상 시각을 재계산하지 않는다. Kiosk가 pause·se
 - 실제 고객의 얼굴 영상·이미지·base64 fixture를 읽지 않는다.
 - 원본 frame, image bytes, embedding과 원본 파일 경로를 fixture·결과·예외·로그에 저장하지 않는다.
 - 전달된 frame 참조는 읽거나 보관하지 않고 capture context만 결과에 복사한다.
+- 재시도 cache에는 파생 `ExpressionSample`만 저장하고 원본 frame이나 미디어는 저장하지 않는다.
 - 결측 score를 중립값으로 채우거나 fixture에 없는 label을 추정하지 않는다.
 - drop·timeout·순서 역전은 fixture record와 호출 순서로 명시하고 원래 capture time을 보존한다.

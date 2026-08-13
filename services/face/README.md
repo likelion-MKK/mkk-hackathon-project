@@ -85,7 +85,7 @@ payload = sample.to_payload()
 adapter.dispose()
 ```
 
-각 `infer`는 record 하나를 소비한다. 마지막 record 이후에는 자동 순환하지 않고 `ReplayExhaustedError`를 발생시킨다. 실행 중 반복 `initialize`는 cursor를 유지하며, `dispose` 후 다시 초기화하면 첫 record부터 재생한다.
+처음 보는 `FaceFrameContext`의 `infer`만 record 하나를 소비한다. 같은 context를 재시도하면 Adapter가 이미 만든 `ExpressionSample`과 동일한 `event_id`를 반환하며 cursor를 진행하지 않는다. `event_id`는 downstream 재전송 중복 제거 키로 사용한다. 마지막 record 이후 처음 보는 context에는 자동 순환 없이 `ReplayExhaustedError`를 발생시키지만, 이미 처리한 context의 재시도는 계속 같은 결과를 반환한다. 실행 중 반복 `initialize`는 cursor와 재시도 cache를 유지하며, `dispose` 후 다시 초기화하면 둘을 비우고 첫 record부터 재생한다. cache에는 파생 `ExpressionSample`만 저장하며 frame은 저장하지 않는다.
 
 Replay의 no-face는 정상·중립 표정이 아니다. `face_detected=false`, `face_count=0`, `valid=false`, 빈 `scores`, `reason=no_face`인 관측 실패 이벤트로 그대로 전달한다. 영상 pause·seek·replay 시 Kiosk가 증가시킨 `playback_epoch`과 캡처 순간의 `video_time_ms`를 수정하지 않으므로, epoch이 바뀌었다면 영상 시간이 감소해도 그대로 보존한다.
 
