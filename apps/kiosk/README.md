@@ -15,6 +15,32 @@ npm run dev:kiosk
 
 기본 개발 주소는 `http://localhost:5173`이며 Backend 주소는 `.env.example`에서 확인한다.
 
+## D1 로컬 실행과 검증
+
+현재 D1 구현은 실제 Backend·카메라·AI 모델 대신 `MockApiClient`와 `MockVisionClient`를 사용한다.
+
+```powershell
+Set-Location apps/kiosk
+npm install
+npm run dev
+```
+
+변경 후에는 같은 디렉터리에서 다음 검증을 모두 실행한다.
+
+```powershell
+npm run lint
+npm run test
+npm run build
+```
+
+Mock 화면 흐름은 `screensaver → menu → consent → calibration → lookbook → finalizing → report` 순서다. `lookbook`과 `finalizing`은 D1 임시 화면이며 실제 영상·추천 UI는 후속 단계에서 연결한다.
+
+D1 Mock 룩북에는 별도의 영상 layout 정보가 없으므로 Mock 시선의 화면 정규화 좌표를 영상 정규화 좌표로 동일하게 취급한다. 이후 manifest의 노출 시간과 polygon AOI를 적용해 `ProductAttentionEvent`로 변환하고, 표정 신호와 함께 `ReactionBatch`에 담는다. 실제 영상 연결 시에는 캡처 시점의 layout을 사용한 좌표 변환으로 교체한다.
+
+카테고리 선택값은 세션의 Mock `lookbook_id`에 반영된다. 가방, 의류, 액세서리는 각각 해당 카테고리의 manifest와 Top 2를 반환하고, 전체 컬렉션은 여러 카테고리 상품을 섞은 manifest와 Top 2를 반환한다. 추천 순위는 실제 알고리즘 결과가 아니라 D1 흐름 검증을 위한 카테고리별 고정 Mock 값이다.
+
+`RESTART`는 진행 중인 flow 세대를 즉시 무효화하고 Vision 작업을 직렬화해 이전 세션의 시작·보정·추론·종료가 새 세션과 겹치지 않도록 한다. 각 API·Vision 비동기 단계 사이에서도 현재 flow인지 다시 확인하며, 무효화된 세션은 이후 batch 전송·분석 완료·화면 전환을 진행하지 않는다.
+
 ## 책임
 
 - S01 대기 화면부터 S04 분석 결과 화면까지의 상태 전이를 관리한다.

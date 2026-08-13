@@ -1,5 +1,5 @@
 {
-  "name": "@mkk/kiosk",
+"name": "@mkk/kiosk",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "node --test test/*.test.mjs",
+
+    "test": "tsc -p tsconfig.test.json --noEmit && node --test test/*.test.mjs src/app/async-flow-controller.test.ts src/app/kiosk-machine.test.ts src/app/reaction-batch.test.ts src/clients/api/MockApiClient.test.ts src/clients/vision/MockVisionClient.test.ts src/contracts/contract-fixtures.test.ts",
+
     "preview": "vite preview"
   },
   "dependencies": {

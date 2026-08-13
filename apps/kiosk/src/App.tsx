@@ -1,22 +1,46 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import bagImage from "./assets/categories/category-bags.png";
 import apparelImage from "./assets/categories/category-apparel.png";
 import accessoryImage from "./assets/categories/category-accessories.png";
 import screensaverImageOne from "./assets/categories/screensaver-01.jpg";
 import screensaverImageTwo from "./assets/categories/screensaver-02.jpg";
 import screensaverImageThree from "./assets/categories/screensaver-03.jpg";
+import { AsyncFlowController } from "./app/async-flow-controller.ts";
+import {
+  INITIAL_KIOSK_SCREEN,
+  transitionKioskScreen,
+  type KioskEvent,
+} from "./app/kiosk-machine.ts";
+import { buildD1ReactionBatch } from "./app/reaction-batch.ts";
+import type {
+  ExpressionSample,
+  GazeSample,
+  KioskScreen,
+  LookbookManifest,
+  ProductCategory,
+  RecommendationResult,
+  SessionCreated,
+} from "./app/kiosk-types.ts";
+import {
+  MOCK_LOOKBOOK_ID_BY_CATEGORY,
+  MockApiClient,
+} from "./clients/api/MockApiClient.ts";
+import { MockVisionClient } from "./clients/vision/MockVisionClient.ts";
 import "./App.css";
 
-type KioskScreen =
-  | "screensaver" // S01
-  | "menu" // S02
-  | "consent" // S02 consent step
-  | "calibration" // S03 preparation
-  | "lookbook" // S03
-  | "finalizing" // S03 → S04
-  | "report"; // S04
+const apiClient = new MockApiClient();
+const visionClient = new MockVisionClient();
 
-type ProductCategory = "가방" | "의류" | "액세서리" | "전체 컬렉션";
+const calibrationPattern = {
+  pattern_id: "five-point-v1",
+  points: [
+    [0.5, 0.5],
+    [0.1, 0.1],
+    [0.9, 0.1],
+    [0.1, 0.9],
+    [0.9, 0.9],
+  ] as [number, number][],
+};
 
 type CategoryOption = {
   name: ProductCategory;
@@ -334,7 +358,21 @@ function CameraConsent({
   );
 }
 
-function Calibration({ onHome }: { onHome: () => void }) {
+function Calibration({
+  onHome,
+  onComplete,
+}: {
+  onHome: () => void;
+  onComplete: () => Promise<void>;
+}) {
+  useEffect(() => {
+    const calibrationTimer = window.setTimeout(() => {
+      void onComplete();
+    }, 1800);
+
+    return () => window.clearTimeout(calibrationTimer);
+  }, [onComplete]);
+
   return (
     <main className="store-screen calibration-screen screen-enter">
       <StoreChrome onHome={onHome} step="03" />
@@ -372,22 +410,256 @@ function Calibration({ onHome }: { onHome: () => void }) {
   );
 }
 
+function TimedPlaceholder({
+  message,
+  onComplete,
+  onHome,
+}: {
+  message: string;
+  onComplete: () => Promise<void>;
+  onHome: () => void;
+}) {
+  useEffect(() => {
+    const stepTimer = window.setTimeout(() => {
+      void onComplete();
+    }, 1800);
+
+    return () => window.clearTimeout(stepTimer);
+  }, [onComplete]);
+
+  return (
+    <main className="store-screen placeholder-screen">
+      <button className="wordmark-button" type="button" onClick={onHome}>
+        <Wordmark />
+        <span className="sr-only">처음 화면으로 이동</span>
+      </button>
+      <p>{message}</p>
+    </main>
+  );
+}
+
+function ReportPlaceholder({
+  recommendation,
+  onHome,
+}: {
+  recommendation: RecommendationResult;
+  onHome: () => void;
+}) {
+  const productIds = recommendation.items.map((item) => item.product_id).join(" · ");
+
+  return (
+    <main className="store-screen placeholder-screen">
+      <Wordmark />
+      <p>Mock 추천 결과: {productIds || "추천 결과 없음"}</p>
+      <button className="back-link" type="button" onClick={onHome}>
+        ← 처음으로 돌아가기
+      </button>
+    </main>
+  );
+}
+
+function ErrorPlaceholder({ message, onHome }: { message: string; onHome: () => void }) {
+  return (
+    <main className="store-screen placeholder-screen" role="alert">
+      <Wordmark />
+      <p>{message}</p>
+      <button className="back-link" type="button" onClick={onHome}>
+        ← 처음으로 돌아가기
+      </button>
+    </main>
+  );
+}
+
 function App() {
-  const [screen, setScreen] = useState<KioskScreen>("screensaver");
+  const [screen, setScreen] = useState<KioskScreen>(INITIAL_KIOSK_SCREEN);
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory | null>(null);
+  const [session, setSession] = useState<SessionCreated | null>(null);
+  const [manifest, setManifest] = useState<LookbookManifest | null>(null);
+  const [recommendation, setRecommendation] = useState<RecommendationResult | null>(null);
+  const [flowError, setFlowError] = useState<string | null>(null);
+  const [isStarting, setIsStarting] = useState(false);
+  const [flowController] = useState(() => new AsyncFlowController());
+  const latestGazeSample = useRef<GazeSample | null>(null);
+  const latestExpressionSample = useRef<ExpressionSample | null>(null);
+
+  const send = useCallback((event: KioskEvent) => {
+    setScreen((currentScreen) => transitionKioskScreen(currentScreen, event));
+  }, []);
+
+  useEffect(() => {
+    const removeGazeListener = visionClient.onGazeSample((sample) => {
+      latestGazeSample.current = sample;
+    });
+    const removeExpressionListener = visionClient.onExpressionSample((sample) => {
+      latestExpressionSample.current = sample;
+    });
+
+    return () => {
+      removeGazeListener();
+      removeExpressionListener();
+      flowController.invalidateCurrentFlow();
+      void flowController.runSerialized(() => visionClient.stopSession());
+    };
+  }, [flowController]);
 
   const selectCategory = (category: ProductCategory) => {
     setSelectedCategory(category);
-    setScreen("consent");
+    send("SELECT_CATEGORY");
   };
 
-  const restart = () => {
+  const restart = useCallback(async () => {
+    const generation = flowController.invalidateCurrentFlow();
+    latestGazeSample.current = null;
+    latestExpressionSample.current = null;
     setSelectedCategory(null);
-    setScreen("screensaver");
+    setSession(null);
+    setManifest(null);
+    setRecommendation(null);
+    setFlowError(null);
+    setIsStarting(false);
+    send("RESTART");
+
+    try {
+      await flowController.runSerialized(() => visionClient.stopSession());
+    } catch {
+      if (flowController.isCurrent(generation)) {
+        setFlowError("이전 Vision 세션을 종료하지 못했습니다.");
+      }
+    }
+  }, [flowController, send]);
+
+  const beginSession = async () => {
+    if (!selectedCategory || isStarting) return;
+
+    const generation = flowController.captureGeneration();
+    setIsStarting(true);
+    setFlowError(null);
+
+    try {
+      const lookbookId = MOCK_LOOKBOOK_ID_BY_CATEGORY[selectedCategory];
+      const createdSession = await apiClient.createSession({
+        kiosk_id: "mcm-kiosk-d1",
+        lookbook_id: lookbookId,
+        consent_version: "consent-v1",
+      });
+      if (!flowController.isCurrent(generation)) return;
+
+      const lookbookManifest = await apiClient.getLookbookManifest(lookbookId);
+      if (!flowController.isCurrent(generation)) return;
+
+      await flowController.runSerialized(() =>
+        visionClient.startSession({
+          session_id: createdSession.session_id,
+          video_id: lookbookManifest.video_id,
+        }),
+      );
+
+      if (!flowController.isCurrent(generation)) return;
+
+      setSession(createdSession);
+      setManifest(lookbookManifest);
+      send("AGREE");
+    } catch {
+      if (flowController.isCurrent(generation)) {
+        setFlowError("Mock 세션을 시작하지 못했습니다.");
+      }
+    } finally {
+      if (flowController.isCurrent(generation)) setIsStarting(false);
+    }
   };
+
+  const completeCalibration = useCallback(async () => {
+    const generation = flowController.captureGeneration();
+
+    try {
+      const result = await flowController.runSerialized(() =>
+        visionClient.startCalibration(calibrationPattern),
+      );
+      if (!flowController.isCurrent(generation)) return;
+
+      if (!result.valid) throw new Error(result.reason ?? "calibration_failed");
+      await flowController.runSerialized(() => visionClient.startInference());
+
+      if (flowController.isCurrent(generation)) send("CALIBRATION_SUCCESS");
+    } catch {
+      if (flowController.isCurrent(generation)) {
+        setFlowError("Mock 시선 보정을 완료하지 못했습니다.");
+      }
+    }
+  }, [flowController, send]);
+
+  const completeLookbook = useCallback(async () => {
+    const generation = flowController.captureGeneration();
+
+    if (!session || !manifest) {
+      setFlowError("진행 중인 Mock 세션 정보를 찾지 못했습니다.");
+      return;
+    }
+
+    try {
+      await flowController.runSerialized(() => visionClient.stopSession());
+      if (!flowController.isCurrent(generation)) return;
+
+      const gazeSample = latestGazeSample.current;
+      const expressionSample = latestExpressionSample.current;
+      const batch = buildD1ReactionBatch({
+        batchId: `batch-${session.session_id}-0001`,
+        batchSequence: 0,
+        sessionId: session.session_id,
+        manifest,
+        gazeSample,
+        expressionSample,
+      });
+
+      if (batch) {
+        if (!flowController.isCurrent(generation)) return;
+        await apiClient.appendReactionBatch(session.session_id, batch);
+      }
+
+      if (!flowController.isCurrent(generation)) return;
+      await apiClient.completeSessionAnalysis(session.session_id);
+      if (flowController.isCurrent(generation)) send("LOOKBOOK_FINISHED");
+    } catch {
+      if (flowController.isCurrent(generation)) {
+        setFlowError("Mock 룩북 분석을 완료하지 못했습니다.");
+      }
+    }
+  }, [flowController, manifest, send, session]);
+
+  const loadRecommendation = useCallback(async () => {
+    const generation = flowController.captureGeneration();
+
+    if (!session) {
+      setFlowError("추천에 필요한 Mock 세션 정보를 찾지 못했습니다.");
+      return;
+    }
+
+    try {
+      if (!flowController.isCurrent(generation)) return;
+      const result = await apiClient.getSessionRecommendation(session.session_id);
+      if (!flowController.isCurrent(generation)) return;
+
+      if (result.status !== "completed") {
+        throw new Error(result.reason ?? "recommendation_not_ready");
+      }
+
+      if (flowController.isCurrent(generation)) {
+        setRecommendation(result);
+        send("RECOMMENDATION_READY");
+      }
+    } catch {
+      if (flowController.isCurrent(generation)) {
+        setFlowError("Mock 추천 결과를 불러오지 못했습니다.");
+      }
+    }
+  }, [flowController, send, session]);
+
+  if (flowError) {
+    return <ErrorPlaceholder message={flowError} onHome={restart} />;
+  }
 
   if (screen === "screensaver") {
-    return <Screensaver onStart={() => setScreen("menu")} />;
+    return <Screensaver onStart={() => send("START")} />;
   }
 
   if (screen === "menu") {
@@ -400,16 +672,40 @@ function App() {
         category={selectedCategory}
         onBack={() => {
           setSelectedCategory(null);
-          setScreen("menu");
+          send("BACK");
         }}
-        onContinue={() => setScreen("calibration")}
+        onContinue={() => void beginSession()}
         onHome={restart}
       />
     );
   }
 
   if (screen === "calibration") {
-    return <Calibration onHome={restart} />;
+    return <Calibration onHome={restart} onComplete={completeCalibration} />;
+  }
+
+  if (screen === "lookbook") {
+    return (
+      <TimedPlaceholder
+        message="Mock 룩북을 재생하고 있습니다."
+        onComplete={completeLookbook}
+        onHome={restart}
+      />
+    );
+  }
+
+  if (screen === "finalizing") {
+    return (
+      <TimedPlaceholder
+        message="Mock 추천 결과를 준비하고 있습니다."
+        onComplete={loadRecommendation}
+        onHome={restart}
+      />
+    );
+  }
+
+  if (screen === "report" && recommendation) {
+    return <ReportPlaceholder recommendation={recommendation} onHome={restart} />;
   }
 
   return (
