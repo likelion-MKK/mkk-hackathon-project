@@ -61,11 +61,11 @@ payload = sample.to_payload()
 adapter.dispose()
 ```
 
-Face 패키지는 Kiosk의 구체적인 `FrameContext` 타입을 소유하지 않는다. Kiosk가 만든 객체가 공개 `FaceFrameContext` Protocol의 필드를 제공하면 구조적으로 호환된다. `frame`은 동일 Kiosk 메모리 안의 수명 제한 참조이며 Adapter 결과·예외·로그에 포함하지 않는다.
+Face 패키지는 Kiosk의 구체적인 `FrameContext` 타입을 소유하지 않는다. Kiosk가 만든 capture context가 공개 `FaceFrameContext` Protocol의 필드를 제공하면 구조적으로 호환된다. 원격 추론에서는 Vision Gateway가 decode한 `frame`을 같은 서버 trust boundary의 수명 제한 메모리 참조로 전달하며 Adapter 결과·예외·로그에 포함하지 않는다.
 
 ## 입력
 
-- 수명 제한 메모리 프레임 참조와 캡처 시점 `FrameContext`
+- Vision Gateway가 decode한 수명 제한 서버 메모리 frame 참조와 Kiosk 캡처 시점 `FrameContext`
 - 선택된 adapter 종류와 taxonomy mapping version
 
 ## 출력
@@ -79,5 +79,6 @@ Face 패키지는 Kiosk의 구체적인 `FrameContext` 타입을 소유하지 �
 - no-face·timeout·unknown label을 중립 표정으로 대체하지 않는다.
 - Eye 흐름을 기다리게 하거나 최종 추천 점수를 계산하지 않는다.
 - 모델 코드·weight·대형 생성물을 이 scaffold에 넣지 않는다.
+- 원본 frame을 Adapter 출력·예외·로그·파일·DB·cache에 포함하지 않는다.
 
 Adapter의 언어 독립 규약은 [`adapters/README.md`](adapters/README.md)를 따른다.
