@@ -1,0 +1,59 @@
+{
+  "fixture_revision": "face-expression-replay-d3-v1",
+  "records": [
+    {
+      "face_detected": true,
+      "face_count": 1,
+      "scores": {
+        "brow_raise_like": 0.28,
+        "smile_like": 0.72
+      },
+      "quality": 0.9,
+      "valid": true,
+      "confidence": 0.88,
+      "reason": null
+    },
+    {
+      "face_detected": false,
+      "face_count": 0,
+      "scores": {},
+      "quality": 0.22,
+      "valid": false,
+      "confidence": 0.18,
+      "reason": "no_face"
+    },
+    {
+      "face_detected": false,
+      "face_count": 0,
+      "scores": {},
+      "quality": 0.35,
+      "valid": false,
+      "confidence": 0.25,
+      "reason": "no_face"
+    },
+    {
+      "face_detected": true,
+      "face_count": 1,
+      "scores": {
+        "brow_raise_like": 0.36,
+        "smile_like": 0.64
+      },
+      "quality": 0.84,
+      "valid": true,
+      "confidence": 0.8,
+      "reason": null
+    },
+    {
+      "face_detected": true,
+      "face_count": 1,
+      "scores": {
+        "brow_raise_like": 0.41,
+        "smile_like": 0.59
+      },
+      "quality": 0.87,
+      "valid": true,
+      "confidence": 0.83,
+      "reason": null
+    }
+  ]
+}
