@@ -10,7 +10,8 @@
 | package | `mediapipe==1.0.0` |
 | runtime | Python, local CPU |
 | code license | Apache-2.0 |
-| model asset | `face_landmarker.task`, 다운로드 후 로컬 `models/`에만 저장 |
+| model asset | `face_landmarker.task` version `1`, 다운로드 후 로컬 `models/`에만 저장 |
+| model URL | `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task` |
 | model SHA256 | `64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff` |
 | model size | 3,758,596 bytes |
 | weight license | 공식 model card와 배포 조건 확인 중 |
@@ -35,8 +36,9 @@
 ## 알려진 제한과 확인 항목
 
 - front-facing camera와 얼굴 가시성에 민감하다.
-- model URL의 `latest` 별칭은 변경될 수 있으므로 실제 사용 파일의 SHA256을 고정해야 한다.
+- 공식 예제의 immutable version `1` URL과 SHA256을 함께 고정한다.
 - Python 3.13.15 wheel, no-face 처리, offline 재실행을 smoke에서 확인한다.
+- 기존 파일과 새 다운로드 모두 모델을 읽기 전에 SHA256을 검증한다. 불일치하면 `model_checksum_mismatch`와 exit code `1`로 종료하며 모델 runtime을 초기화하지 않는다.
 
 ## Smoke 결과
 
@@ -44,10 +46,13 @@ Python 3.13.15에서 package 설치, synthetic no-face 입력 추론과 local-on
 
 ```powershell
 uv sync --locked
+uv run python -m unittest -v test_smoke.py
 uv run python smoke.py
 uv run python smoke.py --offline
 ```
 
 두 실행 모두 `face_count=0`, `blendshape_groups=0`, `status=pass`를 반환했다. Windows의 한글 경로를 native runtime에 직접 전달하면 asset을 열지 못하므로, 같은 로컬 파일을 `model_asset_buffer`로 읽어 경로 의존성을 제거했다.
+
+Checksum 불일치는 자동으로 정상 asset처럼 교체하거나 로드하지 않는다. 로컬 `models/face_landmarker.task`를 삭제하고 online smoke를 다시 실행해 고정 URL에서 재다운로드한다.
 
 Smoke 통과는 52개 blendshape 품질을 검증하지 않는다. D4 진입 전 weight license를 명시적으로 확인해야 한다.
