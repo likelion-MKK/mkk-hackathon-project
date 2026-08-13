@@ -2,6 +2,7 @@ import type {
   ApiHealth,
   LookbookManifest,
   Product,
+  ProductCategory,
   ReactionBatch,
   ReactionBatchAccepted,
   RecommendationAccepted,
@@ -11,65 +12,137 @@ import type {
 } from "../../app/kiosk-types.ts";
 import type { ApiClient } from "./ApiClient.ts";
 
-const MOCK_LOOKBOOK_ID = "mcm-lookbook-example-v1";
+export const MOCK_LOOKBOOK_ID_BY_CATEGORY: Record<ProductCategory, string> = {
+  가방: "mcm-lookbook-bags-v1",
+  의류: "mcm-lookbook-ready-to-wear-v1",
+  액세서리: "mcm-lookbook-accessories-v1",
+  "전체 컬렉션": "mcm-lookbook-all-v1",
+};
 
-const mockManifest: LookbookManifest = {
-  schema_version: "1.0",
-  video_id: MOCK_LOOKBOOK_ID,
-  manifest_version: "example-1.0",
-  coordinate_space: "video_normalized",
-  exposures: [
-    {
-      exposure_id: "scene-01-product-01",
-      product_id: "P001",
-      start_ms: 0,
-      end_ms: 10_000,
-      priority: 0,
-      shape: {
-        type: "polygon",
-        points: [
-          [0.08, 0.18],
-          [0.46, 0.18],
-          [0.46, 0.88],
-          [0.08, 0.88],
-        ],
+type MockLookbook = {
+  manifest: LookbookManifest;
+  recommendationProductIds: [string, string];
+};
+
+function createMockManifest(
+  videoId: string,
+  productIds: [string, string],
+): LookbookManifest {
+  return {
+    schema_version: "1.0",
+    video_id: videoId,
+    manifest_version: "d1-category-mock-1.0",
+    coordinate_space: "video_normalized",
+    exposures: [
+      {
+        exposure_id: `${videoId}-product-01`,
+        product_id: productIds[0],
+        start_ms: 0,
+        end_ms: 10_000,
+        priority: 0,
+        shape: {
+          type: "polygon",
+          points: [
+            [0.08, 0.18],
+            [0.46, 0.18],
+            [0.46, 0.88],
+            [0.08, 0.88],
+          ],
+        },
       },
-    },
-    {
-      exposure_id: "scene-01-product-02",
-      product_id: "P002",
-      start_ms: 0,
-      end_ms: 10_000,
-      priority: 0,
-      shape: {
-        type: "polygon",
-        points: [
-          [0.54, 0.18],
-          [0.92, 0.18],
-          [0.92, 0.88],
-          [0.54, 0.88],
-        ],
+      {
+        exposure_id: `${videoId}-product-02`,
+        product_id: productIds[1],
+        start_ms: 0,
+        end_ms: 10_000,
+        priority: 0,
+        shape: {
+          type: "polygon",
+          points: [
+            [0.54, 0.18],
+            [0.92, 0.18],
+            [0.92, 0.88],
+            [0.54, 0.88],
+          ],
+        },
       },
-    },
-  ],
+    ],
+  };
+}
+
+const mockLookbooks: Record<string, MockLookbook> = {
+  [MOCK_LOOKBOOK_ID_BY_CATEGORY.가방]: {
+    manifest: createMockManifest(MOCK_LOOKBOOK_ID_BY_CATEGORY.가방, ["BAG001", "BAG002"]),
+    recommendationProductIds: ["BAG001", "BAG002"],
+  },
+  [MOCK_LOOKBOOK_ID_BY_CATEGORY.의류]: {
+    manifest: createMockManifest(MOCK_LOOKBOOK_ID_BY_CATEGORY.의류, ["RTW001", "RTW002"]),
+    recommendationProductIds: ["RTW001", "RTW002"],
+  },
+  [MOCK_LOOKBOOK_ID_BY_CATEGORY.액세서리]: {
+    manifest: createMockManifest(MOCK_LOOKBOOK_ID_BY_CATEGORY.액세서리, [
+      "ACC001",
+      "ACC002",
+    ]),
+    recommendationProductIds: ["ACC001", "ACC002"],
+  },
+  [MOCK_LOOKBOOK_ID_BY_CATEGORY["전체 컬렉션"]]: {
+    manifest: createMockManifest(MOCK_LOOKBOOK_ID_BY_CATEGORY["전체 컬렉션"], [
+      "BAG001",
+      "RTW001",
+    ]),
+    recommendationProductIds: ["BAG001", "RTW001"],
+  },
 };
 
 const mockProducts: Record<string, Product> = {
-  P001: {
-    product_id: "P001",
-    display_name: "Mock Product 01",
+  BAG001: {
+    product_id: "BAG001",
+    display_name: "Mock Bag 01",
     category: "bags",
-    image_url: "/mock/products/P001.jpg",
-    product_url: "https://example.com/products/P001",
-    qr_asset_path: "/mock/qr/P001.svg",
+    image_url: "https://example.invalid/assets/BAG001.jpg",
+    product_url: "https://example.invalid/products/BAG001",
+    qr_asset_path: "assets/qr/BAG001.png",
   },
-  P002: {
-    product_id: "P002",
-    display_name: "Mock Product 02",
+  BAG002: {
+    product_id: "BAG002",
+    display_name: "Mock Bag 02",
+    category: "bags",
+    image_url: "https://example.invalid/assets/BAG002.jpg",
+    product_url: "https://example.invalid/products/BAG002",
+    qr_asset_path: "assets/qr/BAG002.png",
+  },
+  RTW001: {
+    product_id: "RTW001",
+    display_name: "Mock Ready-to-wear 01",
     category: "ready-to-wear",
-    image_url: "/mock/products/P002.jpg",
-    product_url: "https://example.com/products/P002",
-    qr_asset_path: "/mock/qr/P002.svg",
+    image_url: "https://example.invalid/assets/RTW001.jpg",
+    product_url: "https://example.invalid/products/RTW001",
+    qr_asset_path: "assets/qr/RTW001.png",
+  },
+  RTW002: {
+    product_id: "RTW002",
+    display_name: "Mock Ready-to-wear 02",
+    category: "ready-to-wear",
+    image_url: "https://example.invalid/assets/RTW002.jpg",
+    product_url: "https://example.invalid/products/RTW002",
+    qr_asset_path: "assets/qr/RTW002.png",
+  },
+  ACC001: {
+    product_id: "ACC001",
+    display_name: "Mock Accessory 01",
+    category: "accessories",
+    image_url: "https://example.invalid/assets/ACC001.jpg",
+    product_url: "https://example.invalid/products/ACC001",
+    qr_asset_path: "assets/qr/ACC001.png",
+  },
+  ACC002: {
+    product_id: "ACC002",
+    display_name: "Mock Accessory 02",
+    category: "accessories",
+    image_url: "https://example.invalid/assets/ACC002.jpg",
+    product_url: "https://example.invalid/products/ACC002",
+    qr_asset_path: "assets/qr/ACC002.png",
   },
 };
 
@@ -84,6 +157,7 @@ export class MockApiClient implements ApiClient {
   private readonly acceptedBatchIds = new Set<string>();
 
   async createSession(request: SessionCreate): Promise<SessionCreated> {
+    this.requireLookbook(request.lookbook_id);
     this.sessionSequence += 1;
     const suffix = String(this.sessionSequence).padStart(3, "0");
     const sessionId = `session-d1-mock-${suffix}`;
@@ -102,21 +176,21 @@ export class MockApiClient implements ApiClient {
   }
 
   async getLookbookManifest(lookbookId: string): Promise<LookbookManifest> {
-    if (lookbookId !== MOCK_LOOKBOOK_ID) {
-      throw new Error(`Unknown mock lookbook: ${lookbookId}`);
-    }
-
-    return structuredClone(mockManifest);
+    return structuredClone(this.requireLookbook(lookbookId).manifest);
   }
 
   async appendReactionBatch(
     sessionId: string,
     batch: ReactionBatch,
   ): Promise<ReactionBatchAccepted> {
-    this.requireSession(sessionId);
+    const session = this.requireSession(sessionId);
 
     if (batch.session_id !== sessionId) {
       throw new Error("Reaction batch session_id does not match the request path.");
+    }
+
+    if (batch.video_id !== session.request.lookbook_id) {
+      throw new Error("Reaction batch video_id does not match the session lookbook_id.");
     }
 
     const duplicate = this.acceptedBatchIds.has(batch.batch_id);
@@ -140,6 +214,7 @@ export class MockApiClient implements ApiClient {
 
   async getSessionRecommendation(sessionId: string): Promise<RecommendationResult> {
     const session = this.requireSession(sessionId);
+    const lookbook = this.requireLookbook(session.request.lookbook_id);
 
     if (!session.analysisCompleted) {
       return {
@@ -147,7 +222,7 @@ export class MockApiClient implements ApiClient {
         recommendation_id: `recommendation-${sessionId}`,
         session_id: sessionId,
         video_id: session.request.lookbook_id,
-        manifest_version: "example-1.0",
+        manifest_version: lookbook.manifest.manifest_version,
         algorithm_version: "mock-v1",
         engine_mode: "mock",
         status: "pending",
@@ -161,13 +236,13 @@ export class MockApiClient implements ApiClient {
       recommendation_id: `recommendation-${sessionId}`,
       session_id: sessionId,
       video_id: session.request.lookbook_id,
-      manifest_version: "example-1.0",
+      manifest_version: lookbook.manifest.manifest_version,
       algorithm_version: "mock-v1",
       engine_mode: "mock",
       status: "completed",
       items: [
-        { rank: 1, product_id: "P001" },
-        { rank: 2, product_id: "P002" },
+        { rank: 1, product_id: lookbook.recommendationProductIds[0] },
+        { rank: 2, product_id: lookbook.recommendationProductIds[1] },
       ],
       reason: null,
     };
@@ -199,6 +274,14 @@ export class MockApiClient implements ApiClient {
 
     return session;
   }
-}
 
-export { MOCK_LOOKBOOK_ID };
+  private requireLookbook(lookbookId: string): MockLookbook {
+    const lookbook = mockLookbooks[lookbookId];
+
+    if (!lookbook) {
+      throw new Error(`Unknown mock lookbook: ${lookbookId}`);
+    }
+
+    return lookbook;
+  }
+}

@@ -5,6 +5,7 @@ import accessoryImage from "./assets/categories/category-accessories.png";
 import screensaverImageOne from "./assets/categories/screensaver-01.jpg";
 import screensaverImageTwo from "./assets/categories/screensaver-02.jpg";
 import screensaverImageThree from "./assets/categories/screensaver-03.jpg";
+import { AsyncFlowController } from "./app/async-flow-controller.ts";
 import {
   INITIAL_KIOSK_SCREEN,
   transitionKioskScreen,
@@ -20,7 +21,10 @@ import type {
   RecommendationResult,
   SessionCreated,
 } from "./app/kiosk-types.ts";
-import { MOCK_LOOKBOOK_ID, MockApiClient } from "./clients/api/MockApiClient.ts";
+import {
+  MOCK_LOOKBOOK_ID_BY_CATEGORY,
+  MockApiClient,
+} from "./clients/api/MockApiClient.ts";
 import { MockVisionClient } from "./clients/vision/MockVisionClient.ts";
 import "./App.css";
 
@@ -474,7 +478,7 @@ function App() {
   const [recommendation, setRecommendation] = useState<RecommendationResult | null>(null);
   const [flowError, setFlowError] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
-  const flowGeneration = useRef(0);
+  const [flowController] = useState(() => new AsyncFlowController());
   const latestGazeSample = useRef<GazeSample | null>(null);
   const latestExpressionSample = useRef<ExpressionSample | null>(null);
 
@@ -493,18 +497,18 @@ function App() {
     return () => {
       removeGazeListener();
       removeExpressionListener();
-      void visionClient.stopSession();
+      flowController.invalidateCurrentFlow();
+      void flowController.runSerialized(() => visionClient.stopSession());
     };
-  }, []);
+  }, [flowController]);
 
   const selectCategory = (category: ProductCategory) => {
     setSelectedCategory(category);
     send("SELECT_CATEGORY");
   };
 
-  const restart = useCallback(() => {
-    flowGeneration.current += 1;
-    void visionClient.stopSession();
+  const restart = useCallback(async () => {
+    const generation = flowController.invalidateCurrentFlow();
     latestGazeSample.current = null;
     latestExpressionSample.current = null;
     setSelectedCategory(null);
@@ -514,59 +518,78 @@ function App() {
     setFlowError(null);
     setIsStarting(false);
     send("RESTART");
-  }, [send]);
+
+    try {
+      await flowController.runSerialized(() => visionClient.stopSession());
+    } catch {
+      if (flowController.isCurrent(generation)) {
+        setFlowError("이전 Vision 세션을 종료하지 못했습니다.");
+      }
+    }
+  }, [flowController, send]);
 
   const beginSession = async () => {
     if (!selectedCategory || isStarting) return;
 
-    const generation = flowGeneration.current;
+    const generation = flowController.captureGeneration();
     setIsStarting(true);
     setFlowError(null);
 
     try {
+      const lookbookId = MOCK_LOOKBOOK_ID_BY_CATEGORY[selectedCategory];
       const createdSession = await apiClient.createSession({
         kiosk_id: "mcm-kiosk-d1",
-        lookbook_id: MOCK_LOOKBOOK_ID,
+        lookbook_id: lookbookId,
         consent_version: "consent-v1",
       });
-      const lookbookManifest = await apiClient.getLookbookManifest(MOCK_LOOKBOOK_ID);
-      await visionClient.startSession({
-        session_id: createdSession.session_id,
-        video_id: lookbookManifest.video_id,
-      });
+      if (!flowController.isCurrent(generation)) return;
 
-      if (generation !== flowGeneration.current) return;
+      const lookbookManifest = await apiClient.getLookbookManifest(lookbookId);
+      if (!flowController.isCurrent(generation)) return;
+
+      await flowController.runSerialized(() =>
+        visionClient.startSession({
+          session_id: createdSession.session_id,
+          video_id: lookbookManifest.video_id,
+        }),
+      );
+
+      if (!flowController.isCurrent(generation)) return;
 
       setSession(createdSession);
       setManifest(lookbookManifest);
       send("AGREE");
     } catch {
-      if (generation === flowGeneration.current) {
+      if (flowController.isCurrent(generation)) {
         setFlowError("Mock 세션을 시작하지 못했습니다.");
       }
     } finally {
-      if (generation === flowGeneration.current) setIsStarting(false);
+      if (flowController.isCurrent(generation)) setIsStarting(false);
     }
   };
 
   const completeCalibration = useCallback(async () => {
-    const generation = flowGeneration.current;
+    const generation = flowController.captureGeneration();
 
     try {
-      const result = await visionClient.startCalibration(calibrationPattern);
-      if (!result.valid) throw new Error(result.reason ?? "calibration_failed");
-      await visionClient.startInference();
+      const result = await flowController.runSerialized(() =>
+        visionClient.startCalibration(calibrationPattern),
+      );
+      if (!flowController.isCurrent(generation)) return;
 
-      if (generation === flowGeneration.current) send("CALIBRATION_SUCCESS");
+      if (!result.valid) throw new Error(result.reason ?? "calibration_failed");
+      await flowController.runSerialized(() => visionClient.startInference());
+
+      if (flowController.isCurrent(generation)) send("CALIBRATION_SUCCESS");
     } catch {
-      if (generation === flowGeneration.current) {
+      if (flowController.isCurrent(generation)) {
         setFlowError("Mock 시선 보정을 완료하지 못했습니다.");
       }
     }
-  }, [send]);
+  }, [flowController, send]);
 
   const completeLookbook = useCallback(async () => {
-    const generation = flowGeneration.current;
+    const generation = flowController.captureGeneration();
 
     if (!session || !manifest) {
       setFlowError("진행 중인 Mock 세션 정보를 찾지 못했습니다.");
@@ -574,7 +597,8 @@ function App() {
     }
 
     try {
-      await visionClient.stopSession();
+      await flowController.runSerialized(() => visionClient.stopSession());
+      if (!flowController.isCurrent(generation)) return;
 
       const gazeSample = latestGazeSample.current;
       const expressionSample = latestExpressionSample.current;
@@ -588,20 +612,22 @@ function App() {
       });
 
       if (batch) {
+        if (!flowController.isCurrent(generation)) return;
         await apiClient.appendReactionBatch(session.session_id, batch);
       }
 
+      if (!flowController.isCurrent(generation)) return;
       await apiClient.completeSessionAnalysis(session.session_id);
-      if (generation === flowGeneration.current) send("LOOKBOOK_FINISHED");
+      if (flowController.isCurrent(generation)) send("LOOKBOOK_FINISHED");
     } catch {
-      if (generation === flowGeneration.current) {
+      if (flowController.isCurrent(generation)) {
         setFlowError("Mock 룩북 분석을 완료하지 못했습니다.");
       }
     }
-  }, [manifest, send, session]);
+  }, [flowController, manifest, send, session]);
 
   const loadRecommendation = useCallback(async () => {
-    const generation = flowGeneration.current;
+    const generation = flowController.captureGeneration();
 
     if (!session) {
       setFlowError("추천에 필요한 Mock 세션 정보를 찾지 못했습니다.");
@@ -609,21 +635,24 @@ function App() {
     }
 
     try {
+      if (!flowController.isCurrent(generation)) return;
       const result = await apiClient.getSessionRecommendation(session.session_id);
+      if (!flowController.isCurrent(generation)) return;
+
       if (result.status !== "completed") {
         throw new Error(result.reason ?? "recommendation_not_ready");
       }
 
-      if (generation === flowGeneration.current) {
+      if (flowController.isCurrent(generation)) {
         setRecommendation(result);
         send("RECOMMENDATION_READY");
       }
     } catch {
-      if (generation === flowGeneration.current) {
+      if (flowController.isCurrent(generation)) {
         setFlowError("Mock 추천 결과를 불러오지 못했습니다.");
       }
     }
-  }, [send, session]);
+  }, [flowController, send, session]);
 
   if (flowError) {
     return <ErrorPlaceholder message={flowError} onHome={restart} />;
