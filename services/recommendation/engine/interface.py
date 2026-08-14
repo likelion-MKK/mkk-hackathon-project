@@ -33,6 +33,7 @@ class ProductAttentionFeature:
 
     product_id: str
     valid_attention_count: int
+    # Confidence summed after each event's candidate share is applied.
     confidence_total: float
     attention_duration_ms: float
     confidence_weighted_attention_ms: float

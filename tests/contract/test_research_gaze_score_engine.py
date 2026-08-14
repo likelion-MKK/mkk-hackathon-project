@@ -78,6 +78,22 @@ def test_attention_duration_uses_video_time_buckets_not_sample_count() -> None:
     assert by_product["P002"].average_attention_confidence() == pytest.approx(0.5)
 
 
+def test_same_bucket_candidate_changes_keep_total_duration_within_one_bucket() -> None:
+    snapshot = features(
+        attention("attention-1", 1, 100, ["P001"], confidence=0.8),
+        attention("attention-2", 2, 101, ["P001", "P002"], confidence=0.6),
+    )
+    by_product = {feature.product_id: feature for feature in snapshot.product_attention}
+
+    assert by_product["P001"].attention_duration_ms == pytest.approx(200 / 3)
+    assert by_product["P002"].attention_duration_ms == pytest.approx(100 / 3)
+    assert sum(feature.attention_duration_ms for feature in snapshot.product_attention) == pytest.approx(
+        100
+    )
+    assert by_product["P001"].confidence_total == pytest.approx(1.1)
+    assert by_product["P002"].confidence_total == pytest.approx(0.3)
+
+
 def test_attention_duration_splits_an_ambiguous_observation_between_products() -> None:
     snapshot = features(attention("attention-1", 1, 100, ["P001", "P002"], confidence=0.8))
     by_product = {feature.product_id: feature for feature in snapshot.product_attention}
@@ -86,6 +102,8 @@ def test_attention_duration_splits_an_ambiguous_observation_between_products() -
     assert by_product["P002"].attention_duration_ms == pytest.approx(50)
     assert by_product["P001"].confidence_weighted_attention_ms == pytest.approx(40)
     assert by_product["P002"].confidence_weighted_attention_ms == pytest.approx(40)
+    assert by_product["P001"].confidence_total == pytest.approx(0.4)
+    assert by_product["P002"].confidence_total == pytest.approx(0.4)
 
 
 def test_attention_revisit_count_uses_separate_video_time_runs() -> None:

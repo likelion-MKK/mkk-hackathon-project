@@ -126,18 +126,44 @@ class ProductFeatureAccumulator:
         existing.attention_share = max(existing.attention_share, attention_share)
         existing.confidence_share = max(existing.confidence_share, confidence_share)
 
+    def _bucket_scales(self) -> dict[tuple[int, int], float]:
+        """Return a scale that caps all product shares in one time bucket.
+
+        Candidate attribution can change between samples inside one bucket.
+        The per-product maximum is useful for resisting capture-rate noise, but
+        it can make the product totals exceed one physical bucket. A shared
+        scale preserves the relative product contributions while keeping the
+        total observed time bounded by ``attention_bucket_ms``.
+        """
+
+        bucket_totals: dict[tuple[int, int], float] = {}
+        for feature in self._features.values():
+            for bucket_key, observation in feature.attention_buckets.items():
+                bucket_totals[bucket_key] = (
+                    bucket_totals.get(bucket_key, 0.0) + observation.attention_share
+                )
+
+        return {
+            bucket_key: 1.0 if total <= 1.0 else 1.0 / total
+            for bucket_key, total in bucket_totals.items()
+        }
+
     def _summarize_attention_buckets(
         self,
         feature: _MutableProductAttentionFeature,
+        bucket_scales: Mapping[tuple[int, int], float],
     ) -> tuple[float, float, int]:
         duration_ms = 0.0
         confidence_weighted_duration_ms = 0.0
         buckets_by_epoch: dict[int, list[int]] = {}
 
         for (playback_epoch, bucket_index), observation in feature.attention_buckets.items():
-            duration_ms += self._attention_bucket_ms * observation.attention_share
+            bucket_scale = bucket_scales[(playback_epoch, bucket_index)]
+            duration_ms += (
+                self._attention_bucket_ms * observation.attention_share * bucket_scale
+            )
             confidence_weighted_duration_ms += (
-                self._attention_bucket_ms * observation.confidence_share
+                self._attention_bucket_ms * observation.confidence_share * bucket_scale
             )
             buckets_by_epoch.setdefault(playback_epoch, []).append(bucket_index)
 
@@ -193,14 +219,14 @@ class ProductFeatureAccumulator:
             if feature is None:
                 feature = _MutableProductAttentionFeature(
                     valid_attention_count=1,
-                    confidence_total=confidence,
+                    confidence_total=confidence_share,
                     first_attention_sequence=sequence,
                     first_candidate_index=candidate_index,
                 )
                 self._features[product_id] = feature
             else:
                 feature.valid_attention_count += 1
-                feature.confidence_total += confidence
+                feature.confidence_total += confidence_share
                 self._record_first_attention(feature, sequence, candidate_index)
 
             if bucket_key is not None:
@@ -214,13 +240,14 @@ class ProductFeatureAccumulator:
     def snapshot(self) -> RecommendationFeatures:
         """Return a deterministic, payload-free engine input snapshot."""
 
+        bucket_scales = self._bucket_scales()
         product_attention: list[ProductAttentionFeature] = []
         for product_id, feature in sorted(self._features.items()):
             (
                 attention_duration_ms,
                 confidence_weighted_attention_ms,
                 revisit_count,
-            ) = self._summarize_attention_buckets(feature)
+            ) = self._summarize_attention_buckets(feature, bucket_scales)
             product_attention.append(
                 ProductAttentionFeature(
                     product_id=product_id,
