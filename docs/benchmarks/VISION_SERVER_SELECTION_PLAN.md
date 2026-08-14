@@ -95,7 +95,7 @@ frame_interval_ms = 1000 ÷ sampling_fps
 
 ## 6. Gate 2 — 모델 후보 고정
 
-Eye와 Face 각각 최소 3개 후보를 inventory한 뒤 다음 Hard Gate를 적용한다.
+Eye는 [`D2 Eye Tracker 전수 조사·추천 계획`](EYE_CANDIDATE_RESEARCH_PLAN.md)의 전수 inventory·Hard Gate·Smoke·점수화를 거친 D4 상위 최대 3개를 사용한다. Face는 최소 3개 후보를 inventory한다. 그 뒤 다음 Hard Gate를 적용한다.
 
 - 공식 source URL 또는 Hugging Face model ID
 - 정확한 commit SHA 또는 revision
@@ -261,7 +261,7 @@ Spot·preemptible 가격은 benchmark 비용 참고에는 사용할 수 있지�
 | 담당 | 책임 | D5 산출물 |
 | --- | --- | --- |
 | 박형진 | 공통 harness, server·network·비용, 보안·운영 Gate, 최종 ADR | server 비교표, calculator capture, ADR-0002 |
-| 양유상 | Eye 후보·보정·AOI 품질과 지연·자원 | Eye 후보별 동일 조건 보고서와 선택 근거 |
+| 양유상 | D2 Eye 전수 조사·1차 추천, D4 상위 최대 3개의 보정·AOI 품질과 지연·자원 | Eye 후보별 동일 조건 보고서와 선택 근거 |
 | 정은미 | Face 후보·taxonomy·품질과 지연·자원 | Face 후보별 동일 조건 보고서와 선택 근거 |
 | 조윤혜 | Kiosk encoder, FPS, WSS·network와 오류 UX | 실제 전송량·capture-to-result·disconnect 관찰 |
 
