@@ -31,6 +31,17 @@ class FaceCandidateBenchmarkTests(unittest.TestCase):
 
         self.assertEqual(first, second)
         self.assertNotEqual(first["no_face"], first["synthetic_crop"])
+        self.assertEqual(
+            BENCHMARK.synthetic_rgb("synthetic_crop", 0).tobytes(),
+            BENCHMARK.synthetic_rgb("synthetic_crop", 99).tobytes(),
+        )
+
+    def test_process_memory_is_available_on_windows(self) -> None:
+        memory = BENCHMARK.process_memory()
+
+        if BENCHMARK.os.name == "nt":
+            self.assertIsNotNone(memory["rss_mib"])
+            self.assertIsNotNone(memory["peak_working_set_mib"])
 
     def test_output_summary_keeps_metrics_only(self) -> None:
         output = {

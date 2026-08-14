@@ -154,7 +154,7 @@ def synthetic_rgb(kind: str, frame_index: int) -> Any:
     for eye_x in (98, 158):
         eye = (xx - eye_x) ** 2 + (yy - 108) ** 2 <= 8**2
         pixels[eye] = (32, 32, 32)
-    mouth_y = 164 + ((frame_index + SYNTHETIC_SEED) % 3)
+    mouth_y = 164 + (SYNTHETIC_SEED % 3)
     mouth = ((xx - 128) ** 2) / (34**2) + ((yy - mouth_y) ** 2) / (10**2) <= 1
     pixels[mouth] = (72, 28, 28)
     return pixels
@@ -285,8 +285,17 @@ def process_memory() -> dict[str, float | None]:
 
     counters = ProcessMemoryCounters()
     counters.cb = ctypes.sizeof(counters)
-    handle = ctypes.windll.kernel32.GetCurrentProcess()
-    success = ctypes.windll.psapi.GetProcessMemoryInfo(
+    kernel32 = ctypes.windll.kernel32
+    psapi = ctypes.windll.psapi
+    kernel32.GetCurrentProcess.restype = ctypes.c_void_p
+    psapi.GetProcessMemoryInfo.argtypes = (
+        ctypes.c_void_p,
+        ctypes.POINTER(ProcessMemoryCounters),
+        ctypes.c_ulong,
+    )
+    psapi.GetProcessMemoryInfo.restype = ctypes.c_int
+    handle = kernel32.GetCurrentProcess()
+    success = psapi.GetProcessMemoryInfo(
         handle, ctypes.byref(counters), counters.cb
     )
     if not success:
