@@ -6,6 +6,7 @@
 - 공동 리뷰: 박형진(Vision Gateway·Contract), 양유상(Eye), 조윤혜(Kiosk)
 - 관련 결정: `D1-05 Eye·Face 모델 실행 위치`, ADR-0001
 - 관련 작업: Face D2 후보 inventory, D3 Replay 의미, D4 후보 benchmark
+- 관련 추천 경계: [Draft PR #33](https://github.com/likelion-MKK/mkk-hackathon-project/pull/33)
 
 ## 1. Context
 
@@ -56,6 +57,11 @@ MediaPipe Face Landmarker를 D6 `SelectedFaceAdapter`의 1차 구현 대상으�
 - code license: Apache-2.0
 - weight license: Apache-2.0, D2에서 구성 모델의 공식 model card로 확인
 
+D6에서는 `output_face_blendshapes=true`, `num_faces=2`로 구성한다. 반환된 face가
+정확히 1개일 때만 유효 후보가 될 수 있다. 0개는 no-face, 2개는 2개 이상을 관찰한
+multi-face로 fail-closed 처리한다. `num_faces=1`로 제한해 multi-face를 단일 얼굴로
+오인하는 구성은 허용하지 않는다.
+
 이 결정은 모델·taxonomy 선택안이며 deployment 승인이 아니다. ADR-0001과 후속
 ADR-0002가 요구하는 개인정보, 목표 서버, network, 동시 세션과 운영 Gate는 별도로
 남아 있다.
@@ -103,7 +109,11 @@ quality·confidence 계산식과 threshold는 실제 labeled fixture 근거가 �
 - production에서 OpenVINO, HSEmotion, Fake 또는 Replay로 자동 전환하지 않는다.
 - 모델이 없거나 실패하면 명시적인 invalid 결과와 reason을 전달한다.
 - Face 결과가 없어도 Eye 처리를 막지 않으며 downstream은 유효 sample만 사용한다.
-- 유효 신호가 부족하면 추천·화면 계층은 `insufficient_data` 흐름을 사용한다.
+- Face가 무효·미수신이어도 Eye/AOI 근거가 충분하면 Eye-only 추천을 계속한다. Face를
+  neutral, 0점 또는 무관심으로 채우거나 Face 부재만으로 `insufficient_data`로
+  바꾸지 않는다.
+- primary Eye/AOI 근거까지 부족할 때만 추천·화면 계층이 `insufficient_data` 흐름을
+  사용한다.
 - OpenVINO는 detector 결합, 동일 labeled fixture 품질, 전체 지연과 유지보수 검토가
   승인된 별도 ADR 없이는 fallback으로 추가하지 않는다.
 - HSEmotion은 안전한 순수 `state_dict`, ONNX 또는 공식 안전 loader가 고정 revision,
@@ -134,7 +144,8 @@ quality·confidence 계산식과 threshold는 실제 labeled fixture 근거가 �
    모델을 load한다. 실행 중 반복 호출은 자원과 retry cache를 유지하는 no-op이다.
 3. `warmup`은 ready 상태에서 synthetic 입력으로만 수행한다.
 4. `infer`는 frame을 추론 중에만 사용하고 성공·실패 모두 `finally`에서 frame과
-   tensor 참조를 해제한다. 원본을 cache, 예외 또는 로그에 넣지 않는다.
+   landmark, source raw blendshape와 tensor 참조를 해제한다. 원본과 source raw
+   output을 cache, queue, DB, 예외 또는 로그에 넣지 않는다.
 5. `dispose`는 반복 호출에 안전하며 모델, tensor, 파생 retry cache를 해제한다.
    dispose 후 재초기화는 새 실행으로 시작한다.
 
@@ -147,16 +158,18 @@ quality·confidence 계산식과 threshold는 실제 labeled fixture 근거가 �
 `captured_at_mono_ms`, `video_id`, `video_time_ms`, `playback_epoch` 전체의 결정적
 hash로 만든다. 동일 context 재호출은 파생 `ExpressionSample` cache를 재사용해 같은
 payload와 event ID를 반환하며 모델을 다시 실행하지 않는다. cache에는 frame이나
-tensor를 저장하지 않고 session 종료·dispose 때 비운다. downstream은 event ID로
-재전송을 중복 제거한다.
+landmark, source raw score 또는 tensor를 저장하지 않고 canonical 파생 sample만
+설정된 TTL 동안 유지한다. session 취소·종료, TTL 만료와 dispose 때 즉시 비운다.
+downstream은 event ID로 재전송을 중복 제거한다.
 
 ## 5. 관찰 가능성과 보안
 
 - 모델 load·warmup·infer latency와 timeout 수를 구분해 기록한다.
 - `reason`별 실패 수, no-face 비율과 전체 invalid 비율을 집계한다.
 - Gateway에서 capture-to-result p50/p95, drop과 worker restart를 별도로 측정한다.
-- log·metric에는 frame, score payload, image bytes, base64, embedding, token, 원문
-  session ID와 파일 경로를 넣지 않는다.
+- log·metric·cache·queue·DB에는 frame, landmark, source raw score, image bytes,
+  base64, embedding, token, 원문 session ID와 파일 경로를 넣지 않는다. 운영 metric은
+  canonical payload 없이 집계값만 기록한다.
 - immutable URL과 SHA256을 load 전에 검증하고 mismatch asset은 모델 library에
   전달하지 않는다.
 - weight는 ignored `models/`, raw 검증 결과는 ignored `artifacts/`에만 둔다.
@@ -195,21 +208,47 @@ ADR을 Accepted로 바꾸고 production-ready로 표시하려면 다음을 모�
 - 목표 서버와 network에서 encode·upload·queue·infer·return을 포함한
   capture-to-result p50/p95, 3/5 FPS, drop, RAM과 10분 이상 안정성을 통과한다.
 - 동시 세션 수와 worker restart·network 단절 회복을 검증한다.
+- 동의된 비식별 fixture와 실제 Kiosk·목표 Vision 서버에서 valid coverage,
+  multi-face 오검출, Face-off Eye-only fallback을 검증한다.
+- Face 보조 신호를 넣은 결과가 Eye/AOI-only 기준보다 유용한지 평가한 뒤에만
+  recommendation weight와 `algorithm_version`을 고정한다.
 - ADR-0001 개인정보·WSS Gate와 ADR-0002 서버·운영 Gate가 승인된다.
 - proxy, Gateway, Worker, APM, 파일, DB, cache와 artifact에 frame이 남지 않음을
   확인한다.
 
 운영 회귀 시 이전 미승인 모델로 전환하지 않는다. Face feature flag를 끄고 worker를
-unready로 만들며 `model_unavailable` 또는 상위 `insufficient_data`로 종료한다. 이미
+unready로 만들며 Face는 `model_unavailable`로 종료한다. 상위 계층은 Eye/AOI까지
+부족한 경우에만 `insufficient_data`로 종료하고, 충분하면 Eye-only를 유지한다. 이미
 승인된 이전 MediaPipe asset revision이 생긴 뒤에는 checksum·taxonomy 호환성과
 rollback owner가 기록된 경우에만 그 revision으로 되돌린다.
 
-## 8. D6 handoff와 미검증 항목
+## 8. 후속 PR 분리와 D6 handoff
 
-D6는 이 ADR이 승인된 뒤 selected 슬롯 내부에 MediaPipe runtime, 전처리, strict
-output validation, taxonomy mapping, lifecycle와 derived retry cache를 구현한다.
+ADR이 Accepted되더라도 API Contract나 DB migration을 바로 변경하지 않는다. 다음
+책임을 작은 PR로 순서대로 분리한다.
+
+1. **Face Adapter·정규화 PR:** selected 슬롯 안에 MediaPipe runtime, 고정 metadata,
+   checksum-before-load, `output_face_blendshapes=true`, `num_faces=2`, strict output
+   validation, taxonomy mapping, lifecycle와 derived retry cache를 구현한다.
+2. **Adapter 검증 PR:** single/no/multi-face, low-quality, timeout, unavailable,
+   unknown·malformed fixture와 Contract test를 추가한다. 원본 frame·landmark·source
+   raw score가 log·cache·queue·DB에 없고 session 취소·TTL·retry에서 정리되는지
+   검증한다.
+3. **상품 귀속·세션 집계 PR:** 같은 session·video·playback epoch에서 시간적으로
+   대응하는 유효 Eye/AOI event가 정확히 한 상품을 가리킬 때만 valid Face 반응을 그
+   상품에 집계한다. 후보가 0개·여러 개이거나 Eye/AOI가 무효이면 어느 상품에도
+   분배하지 않으며 개별 raw sample은 영속화하지 않는다.
+4. **연구용 추천 엔진 PR:** Eye/AOI를 primary score로 유지하고 baseline 대비 변화,
+   승인된 signal group, 시간창과 valid coverage로 만든 `face_response_score`를 더
+   낮고 상한이 있는 보조 비중으로만 결합한다. Face만으로 순위를 정하거나 충분한
+   Eye/AOI 근거를 뒤집지 않는다. 정확한 식·weight·표본 수·quality threshold는
+   비식별 평가 후 `algorithm_version`에 고정한다.
+5. **실카메라·목표 서버 Gate:** synthetic 외에 동의된 비식별 fixture와 실제
+   Kiosk·목표 Vision 서버에서 capture-to-result, 지속 FPS, coverage, multi-face
+   오검출, Face-off Eye-only와 privacy 비저장을 검증한다.
+
 모델 weight와 원본 fixture는 커밋하지 않는다. OpenVINO 조합, Vision Stream,
-Gateway, 카메라와 deployment는 별도 책임이다.
+Gateway, 카메라와 deployment는 각 책임의 별도 PR이다.
 
 아직 검증되지 않은 항목:
 
@@ -219,3 +258,4 @@ Gateway, 카메라와 deployment는 별도 책임이다.
 - 목표 서버·network 포함 capture-to-result와 timeout 수치
 - 동시 세션, 장시간 안정성, worker restart 후 복구
 - 실제 labeled fixture와 consumer 유용성
+- Eye/AOI-only 대비 Face 보조 신호의 증분 유용성과 최종 recommendation weight
