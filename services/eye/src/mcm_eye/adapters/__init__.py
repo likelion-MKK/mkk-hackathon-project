@@ -15,7 +15,11 @@ from .eyetrax import (
     EyeTraxConfig,
     EyeTraxModelError,
     EyeTraxRuntimeError,
+    GazeAbObservation,
+    GazeAbObservationSink,
+    ValidationAoiEvaluator,
 )
+from .gaze_stabilizer import GazeStabilizer, StabilizerDecision
 
 __all__ = [
     "FakeDeliveryScenario",
@@ -30,4 +34,9 @@ __all__ = [
     "EyeTraxConfig",
     "EyeTraxModelError",
     "EyeTraxRuntimeError",
+    "GazeAbObservation",
+    "GazeAbObservationSink",
+    "GazeStabilizer",
+    "StabilizerDecision",
+    "ValidationAoiEvaluator",
 ]

@@ -5,7 +5,7 @@ import hashlib
 import io
 import json
 import weakref
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import jsonschema
@@ -20,6 +20,7 @@ from mcm_eye.adapters.eyetrax import (
     EyeTraxAdapter,
     EyeTraxConfig,
     EyeTraxModelError,
+    GazeAbObservation,
     prepare_face_model,
 )
 from mcm_eye.contracts import AdapterStateError, CalibrationRequest
@@ -150,6 +151,9 @@ def initialized_adapter(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     source: FixedCalibrationSource,
+    *,
+    smoothing_mode: str = "kalman_ema",
+    observation_sink=None,
 ):
     path = model_file(tmp_path, monkeypatch)
     estimator = FakeEstimator()
@@ -160,9 +164,10 @@ def initialized_adapter(
         return estimator
 
     adapter = EyeTraxAdapter(
-        EyeTraxConfig(100, 100, path),
+        EyeTraxConfig(100, 100, path, smoothing_mode=smoothing_mode),
         source,
         estimator_factory=factory,
+        observation_sink=observation_sink,
     )
     adapter.initialize()
     adapter.warmup()
@@ -171,6 +176,17 @@ def initialized_adapter(
 
 def calibrate(adapter: EyeTraxAdapter, calibration_id: str = "calibration-test"):
     return adapter.calibrate(CalibrationRequest(calibration_id))
+
+
+def test_config_defaults_and_validation(tmp_path: Path) -> None:
+    config = EyeTraxConfig(100, 100, tmp_path / "model.task")
+    assert config.smoothing_mode == "raw"
+    assert config.ema_alpha == 0.25
+
+    with pytest.raises(ValueError, match="smoothing_mode"):
+        EyeTraxConfig(100, 100, smoothing_mode="unknown")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="ema_alpha"):
+        EyeTraxConfig(100, 100, ema_alpha=1.1)
 
 
 def test_initialize_and_warmup_are_separate_and_dispose_is_idempotent(
@@ -494,10 +510,15 @@ def test_valid_inference_preserves_context_and_matches_contract(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    adapter, _, _ = initialized_adapter(tmp_path, monkeypatch, FixedCalibrationSource())
+    adapter, estimator, _ = initialized_adapter(
+        tmp_path,
+        monkeypatch,
+        FixedCalibrationSource(),
+    )
     context = FrameContext()
     try:
         assert calibrate(adapter).valid is True
+        extract_calls_before_inference = estimator.extract_calls
         sample = adapter.infer(make_frame(25, 75), context)
         duplicate = adapter.infer(make_frame(25, 75), context)
         assert sample.valid is True
@@ -508,6 +529,8 @@ def test_valid_inference_preserves_context_and_matches_contract(
         assert sample.captured_at_mono_ms == context.captured_at_mono_ms
         assert sample.video_time_ms == context.video_time_ms
         assert sample.event_id == duplicate.event_id
+        assert duplicate is sample
+        assert estimator.extract_calls == extract_calls_before_inference + 1
 
         schema = json.loads(
             (REPO_ROOT / "contracts" / "events" / "gaze-sample.schema.json").read_text(
@@ -515,6 +538,253 @@ def test_valid_inference_preserves_context_and_matches_contract(
             )
         )
         jsonschema.validate(sample.to_payload(), schema)
+    finally:
+        adapter.dispose()
+
+
+def test_raw_and_stabilized_modes_have_distinct_revisions_and_event_ids(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    raw, _, _ = initialized_adapter(
+        tmp_path / "raw",
+        monkeypatch,
+        FixedCalibrationSource(),
+        smoothing_mode="raw",
+    )
+    stabilized, _, _ = initialized_adapter(
+        tmp_path / "stabilized",
+        monkeypatch,
+        FixedCalibrationSource(),
+    )
+    context = FrameContext()
+    try:
+        assert calibrate(raw).valid is True
+        assert calibrate(stabilized).valid is True
+        raw_sample = raw.infer(make_frame(25, 75), context)
+        stabilized_sample = stabilized.infer(make_frame(25, 75), context)
+
+        assert raw_sample.model_revision.endswith("+raw-v1")
+        assert stabilized_sample.model_revision.endswith("+gaze-filter-v1")
+        assert raw.metadata().model_revision == raw_sample.model_revision
+        assert stabilized.metadata().model_revision == stabilized_sample.model_revision
+        assert raw_sample.event_id != stabilized_sample.event_id
+    finally:
+        raw.dispose()
+        stabilized.dispose()
+
+
+def test_out_of_order_event_does_not_run_estimator_and_is_cached(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter, estimator, _ = initialized_adapter(
+        tmp_path,
+        monkeypatch,
+        FixedCalibrationSource(),
+    )
+    try:
+        assert calibrate(adapter).valid is True
+        latest = replace(
+            FrameContext(),
+            sequence=10,
+            frame_id="frame-00000010",
+            captured_at_mono_ms=2000.0,
+        )
+        assert adapter.infer(make_frame(20, 50), latest).valid is True
+        extract_calls = estimator.extract_calls
+
+        older = replace(
+            latest,
+            sequence=9,
+            frame_id="frame-00000009",
+            captured_at_mono_ms=1900.0,
+        )
+        rejected = adapter.infer(make_frame(80, 50), older)
+        duplicate = adapter.infer(make_frame(80, 50), older)
+        assert rejected.valid is False
+        assert rejected.reason == "out_of_order"
+        assert duplicate is rejected
+        assert estimator.extract_calls == extract_calls
+    finally:
+        adapter.dispose()
+
+
+def test_rapid_shift_waits_for_next_valid_frame_within_120ms(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter, _, _ = initialized_adapter(tmp_path, monkeypatch, FixedCalibrationSource())
+    base = replace(
+        FrameContext(),
+        sequence=1,
+        frame_id="frame-00000001",
+        captured_at_mono_ms=1000.0,
+    )
+    try:
+        assert calibrate(adapter).valid is True
+        assert adapter.infer(make_frame(10, 50), base).valid is True
+
+        candidate_context = replace(
+            base,
+            sequence=2,
+            frame_id="frame-00000002",
+            captured_at_mono_ms=1100.0,
+        )
+        candidate = adapter.infer(make_frame(80, 50), candidate_context)
+        assert candidate.valid is False
+        assert candidate.confidence == 0.0
+        assert candidate.reason == "rapid_shift_pending"
+
+        blink = adapter.infer(
+            make_frame(80, 50, 2),
+            replace(
+                base,
+                sequence=3,
+                frame_id="frame-00000003",
+                captured_at_mono_ms=1140.0,
+            ),
+        )
+        no_face = adapter.infer(
+            make_frame(80, 50, 1),
+            replace(
+                base,
+                sequence=4,
+                frame_id="frame-00000004",
+                captured_at_mono_ms=1180.0,
+            ),
+        )
+        assert blink.reason == "blink"
+        assert no_face.reason == "no_face"
+
+        confirmed_context = replace(
+            base,
+            sequence=5,
+            frame_id="frame-00000005",
+            captured_at_mono_ms=1220.0,
+        )
+        confirmed = adapter.infer(make_frame(80, 50), confirmed_context)
+        assert confirmed.valid is True
+        assert confirmed.screen_x_norm == 0.8
+        assert confirmed.event_id != candidate.event_id
+        assert confirmed.frame_id == confirmed_context.frame_id
+        assert confirmed.captured_at_mono_ms == confirmed_context.captured_at_mono_ms
+    finally:
+        adapter.dispose()
+
+
+def test_one_frame_jump_does_not_emit_coordinates_before_return(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter, _, _ = initialized_adapter(tmp_path, monkeypatch, FixedCalibrationSource())
+    base = replace(
+        FrameContext(),
+        sequence=1,
+        frame_id="frame-00000001",
+        captured_at_mono_ms=1000.0,
+    )
+    try:
+        assert calibrate(adapter).valid is True
+        assert adapter.infer(make_frame(10, 50), base).valid is True
+        jump = adapter.infer(
+            make_frame(80, 50),
+            replace(
+                base,
+                sequence=2,
+                frame_id="frame-00000002",
+                captured_at_mono_ms=1100.0,
+            ),
+        )
+        returned = adapter.infer(
+            make_frame(10, 50),
+            replace(
+                base,
+                sequence=3,
+                frame_id="frame-00000003",
+                captured_at_mono_ms=1150.0,
+            ),
+        )
+        assert jump.valid is False
+        assert jump.reason == "rapid_shift_pending"
+        assert jump.screen_x_norm is None
+        assert returned.valid is True
+        assert returned.screen_x_norm == 0.1
+    finally:
+        adapter.dispose()
+
+
+@pytest.mark.parametrize(
+    "changed_context",
+    [
+        {"session_id": "session-new"},
+        {"video_id": "lookbook-new"},
+        {"playback_epoch": 1},
+    ],
+)
+def test_stream_identity_change_resets_pending_filter_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    changed_context: dict[str, object],
+) -> None:
+    adapter, _, _ = initialized_adapter(tmp_path, monkeypatch, FixedCalibrationSource())
+    base = replace(
+        FrameContext(),
+        sequence=1,
+        frame_id="frame-00000001",
+        captured_at_mono_ms=1000.0,
+    )
+    try:
+        assert calibrate(adapter).valid is True
+        assert adapter.infer(make_frame(10, 50), base).valid is True
+        pending = adapter.infer(
+            make_frame(80, 50),
+            replace(
+                base,
+                sequence=2,
+                frame_id="frame-00000002",
+                captured_at_mono_ms=1100.0,
+            ),
+        )
+        assert pending.reason == "rapid_shift_pending"
+
+        changed = replace(
+            base,
+            sequence=1,
+            frame_id="frame-new-stream",
+            captured_at_mono_ms=1150.0,
+            **changed_context,
+        )
+        accepted = adapter.infer(make_frame(80, 50), changed)
+        assert accepted.valid is True
+        assert accepted.screen_x_norm == 0.8
+    finally:
+        adapter.dispose()
+
+
+def test_observation_sink_receives_same_raw_point_without_frame_data(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observations: list[GazeAbObservation] = []
+    adapter, _, _ = initialized_adapter(
+        tmp_path,
+        monkeypatch,
+        FixedCalibrationSource(),
+        observation_sink=observations.append,
+    )
+    try:
+        assert calibrate(adapter).valid is True
+        sample = adapter.infer(make_frame(25, 75), FrameContext())
+        live = [item for item in observations if item.phase == "live"]
+        assert sample.valid is True
+        assert len(live) == 1
+        assert live[0].raw_x_norm == 0.25
+        assert live[0].raw_y_norm == 0.75
+        assert live[0].stabilized_x_norm == sample.screen_x_norm
+        assert live[0].stabilized_y_norm == sample.screen_y_norm
+        assert not hasattr(live[0], "frame")
+        assert not hasattr(live[0], "image")
     finally:
         adapter.dispose()
 
@@ -532,6 +802,48 @@ def test_recalibration_changes_event_identity(
         second = adapter.infer(make_frame(50, 50), context)
         assert first.event_id != second.event_id
         assert second.calibration_id == "calibration-two"
+    finally:
+        adapter.dispose()
+
+
+def test_recalibration_clears_pending_and_filter_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter, _, _ = initialized_adapter(tmp_path, monkeypatch, FixedCalibrationSource())
+    base = replace(
+        FrameContext(),
+        sequence=1,
+        frame_id="frame-00000001",
+        captured_at_mono_ms=1000.0,
+    )
+    try:
+        assert calibrate(adapter, "calibration-one").valid is True
+        assert adapter.infer(make_frame(10, 50), base).valid is True
+        pending = adapter.infer(
+            make_frame(80, 50),
+            replace(
+                base,
+                sequence=2,
+                frame_id="frame-00000002",
+                captured_at_mono_ms=1100.0,
+            ),
+        )
+        assert pending.reason == "rapid_shift_pending"
+
+        assert calibrate(adapter, "calibration-two").valid is True
+        after_recalibration = adapter.infer(
+            make_frame(80, 50),
+            replace(
+                base,
+                sequence=3,
+                frame_id="frame-00000003",
+                captured_at_mono_ms=1150.0,
+            ),
+        )
+        assert after_recalibration.valid is True
+        assert after_recalibration.screen_x_norm == 0.8
+        assert after_recalibration.calibration_id == "calibration-two"
     finally:
         adapter.dispose()
 

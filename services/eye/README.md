@@ -50,6 +50,28 @@ EyeTrax가 유효 좌표를 만들면 `confidence=1.0`을 사용한다. 이 값�
 해당 frame에서 사용할 수 있는 좌표라는 이진 표시다. `no_face`, `blink`, 비유효한 예측과
 viewport 밖 예측은 좌표 없이 `valid=false`로 유지한다.
 
+Dense5 학습과 8점 정확도 Gate에는 원시 좌표만 사용한다. 실제 얼굴 A/B에서 안정화 경로가
+목표 jitter 개선폭을 충족하지 못하고 오차 p95를 늘렸으므로 기본 모드는 `raw`다.
+
+```text
+원시 좌표 -> GazeSample
+```
+
+`kalman_ema`는 후속 3점 tune 비교 전까지 명시적으로 선택하는 실험 옵션이며 다음 순서로
+처리한다.
+
+```text
+원시 좌표 → 급속 이동 2프레임 확인 → EyeTrax Kalman + EMA 0.25 → GazeSample
+```
+
+대각선 `35%` 이상이면서 `3.0 diagonal/s` 이상인 이동은 `120ms` 안의 다음 유효 frame이
+후보점 대각선 `12%` 안에 있어야 확정한다. 대기 frame은 `rapid_shift_pending`, 역순 frame은
+`out_of_order`로 반환한다. invalid 공백 `500ms` 초과, 재보정, session·video·playback epoch
+변경과 dispose 때 filter를 초기화한다. 화면 밖 filter 결과는 clamp하지 않는다.
+
+기본 원시 mode revision은 `<source>+raw-v1`, 실험 안정화 mode는
+`<source>+gaze-filter-v1`이다. 같은 capture context라도 mode별 event ID가 다르다.
+
 `FakeEyeAdapter.infer()`는 입력 `FrameContext`의 `sequence`, `frame_id`, 캡처 시각을 항상
 보존한다. 순서 역전 테스트는 `FakeGazeDelivery`가 인접한 두 샘플의 전달 순서만 바꾸며,
 샘플 내부 필드는 수정하지 않는다.
@@ -59,7 +81,13 @@ uv sync --locked
 uv run pytest
 uv run python scripts/prepare_eyetrax_model.py
 uv run python scripts/smoke_eyetrax.py
-uv run python scripts/live_eyetrax_demo.py --camera 0
+uv run python scripts/live_eyetrax_demo.py --camera 0 --smoothing raw
+```
+
+안정화 실험은 다음처럼 명시적으로 실행한다.
+
+```powershell
+uv run python scripts/live_eyetrax_demo.py --camera 0 --smoothing kalman_ema --ema-alpha 0.25
 ```
 
 모델 준비 스크립트는 `.cache/face_landmarker.task`를 내려받은 뒤 고정 SHA256을 검증한다.
@@ -69,4 +97,6 @@ runtime Adapter는 모델을 내려받지 않는다. 한글 경로에서는 검�
 실제 카메라 데모는 화면에 보정점과 실시간 gaze crosshair만 표시한다. 카메라 frame,
 이미지, landmark, 프레임별 gaze 좌표를 파일이나 로그에 남기지 않는다. Kiosk의 시간 기반
 AOI 판정은 기존 `apps/kiosk/src/app/reaction-batch.ts`가 소유하며 다음 연결 작업에서 실제
-`GazeSample`을 전달한다.
+`GazeSample`을 전달한다. 데모는 같은 원시 예측의 raw·stabilized valid 비율, jitter,
+검증점 오차와 처리 지연만 집계한다. standalone 데모에는 기존 AOI Mapper를 복제하지
+않으므로 AOI hit는 `null`이고 후속 Wiring에서 Mapper evaluator를 주입하면 계산된다.
