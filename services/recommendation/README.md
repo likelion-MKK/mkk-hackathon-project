@@ -2,7 +2,7 @@
 
 ## 소유자
 
-박형진(BE)이 소유한다. 신호별 feature·가중치와 최종 알고리즘은 논문 조사와 자체 검증 전까지 확정하지 않는다.
+박형진(BE)이 소유한다. MVP 연구용 추천은 Eye/AOI를 주점수로 하고, 유효한 Face 반응을 더 낮은 비중의 보조 점수로 반영한다. 신호별 feature·정확한 가중치와 최종 알고리즘은 자체 검증 전까지 확정하지 않는다.
 
 ## 입력
 
@@ -11,8 +11,18 @@
 - 세션 완료 또는 설정된 집계 trigger
 
 개별 `ProductAttentionEvent`, `ExpressionSample`은 API 집계 경계에서만 처리하고
-추천 엔진에 전달·영속화하지 않는다. MVP에서는 표정 score를 상품 feature나
-추천 점수에 사용하지 않는다.
+영속화하지 않는다. 활성 세션에서는 유효 Eye/AOI 관심 feature와, 단일 상품에
+안전하게 귀속된 유효 Face 반응 feature만 상품별로 집계해 추천 엔진에 전달한다.
+Face feature는 Eye/AOI보다 낮은 비중으로만 사용하며, 원본 표정 score·frame·좌표와
+개별 event payload는 엔진에 전달하지 않는다.
+
+Face score가 무효·결측이거나 상품 귀속이 불명확하면 그 상품의 Face 항을 제외하고
+Eye/AOI만으로 실행한다. 이를 중립·무관심 또는 0점짜리 Face 반응으로 바꾸지 않으며,
+Face 실패만으로 충분한 Eye/AOI 추천을 `insufficient_data`로 바꾸지 않는다.
+
+현재 `mock/` 구현은 개발·CI용 결정적 Eye/AOI 흐름만 제공한다. Face 보조 점수를 쓰는
+연구용 엔진은 [`ADR-0005`](../../docs/adr/0005-mvp-face-response-recommendation.md)의
+feature 정의와 Gate가 구현된 별도 PR에서 연결한다.
 
 ## 출력
 

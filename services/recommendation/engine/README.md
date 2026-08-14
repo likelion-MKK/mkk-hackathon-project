@@ -1,6 +1,9 @@
 # Recommendation Engine Boundary
 
 privacy-minimized 상품 feature와 version 정보를 받아 `RecommendationResult` payload로 변환 가능한 실행 결과를 반환하는 교체 지점이다. 실제 엔진은 입력 신호의 `valid`·quality·결측 의미를 보존하고 재현 가능한 algorithm version을 출력해야 한다.
+향후 MVP 연구용 Face 보조 엔진은 Eye/AOI 주 feature와 상품 귀속이 확인된 Face 반응 보조 feature를 함께 사용한다. Face 가중치는 Eye/AOI보다 낮아야 하며, 정확한 값·집계식·coverage Gate는 검증된 `algorithm_version`으로 고정한다.
+
+Face 반응은 실제 감정이나 구매 의도가 아니라 관찰 가능한 얼굴 동작에서 파생한 보조 feature다. 무효·결측·다중 얼굴·상품 귀속 불명확 Face 신호는 점수화하지 않고 Eye/AOI-only 경로를 유지한다. 현재 Mock과 `ResearchGazeScoreEngine`은 개발·CI·replay용 Eye/AOI-only 경로이며, Face feature는 별도 research-engine PR에서 연결한다.
 
 엔진은 `apps/api/`의 Pydantic 모델이나 store를 import하지 않는다. API adapter는 공개 event를 활성 세션에서 즉시 집계·폐기한 뒤, sanitized feature와 catalog payload만 전달한다. 엔진의 `RecommendationRun.to_payload()`는 `RecommendationResult` 계약으로 검증한 뒤 REST 응답에 사용한다.
 
@@ -12,7 +15,7 @@ privacy-minimized 상품 feature와 version 정보를 받아 `RecommendationResu
 
 - 원본 frame, 좌표, frame ID, 캡처 시각, 개별 event 또는 표정 score는 엔진 입력에 포함하지 않는다.
 - 여러 상품이 동시에 후보인 한 관찰은 관찰 비중과 `confidence_total`을 후보 수만큼 나눠 반영한다. 같은 100ms 안에서 후보가 바뀌어 상품별 최대 비중의 합이 100%를 넘으면 상품별 비율을 다시 줄여 한 구간의 총 시간이 100ms를 넘지 않게 한다. AOI의 최종 우선순위 규칙이 확정되면 이 부분은 별도 버전으로 교체한다.
-- 표정 정보는 이번 버전에 사용하지 않는다. EyeTrax 현재 valid sample의 confidence가 모두 `1.0`이면 confidence 25% 항목은 상품 간 순위를 구분하지 않으며, 품질 신호가 검증되기 전까지 초기 연구 가중치로만 본다.
+- 현재 `gaze-score-v0` 버전에서는 표정 정보를 사용하지 않는다. EyeTrax 현재 valid sample의 confidence가 모두 `1.0`이면 confidence 25% 항목은 상품 간 순위를 구분하지 않으며, 품질 신호가 검증되기 전까지 초기 연구 가중치로만 본다. Face 보조 점수는 ADR-0005의 Gate가 구현된 별도 research-engine 버전에서만 사용한다.
 - API의 기본값은 계속 `MockRecommendationEngine`이다. 연구 엔진은 명시적으로 주입한 테스트·replay 환경에서만 사용하며 결과에 `engine_mode: research_version`와 위 revision을 표시한다.
 
 ## 기본 엔진 전환 전 replay gate

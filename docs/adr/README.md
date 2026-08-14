@@ -13,3 +13,4 @@
 | [`ADR-0001 원격 Eye·Face 추론 서버 전환`](0001-remote-vision-inference.md) | Proposed | Kiosk 카메라 frame의 일시적 WSS 전송, 서버 추론, 개인정보·장애·배포 Gate |
 | [`ADR-0003 Face 모델·taxonomy·fallback 선정`](0003-face-model-taxonomy-fallback.md) | Proposed | MediaPipe 1차 선택안, 관찰 신호 taxonomy, fail-closed fallback과 D6 경계 |
 | [`ADR-0004 EyeTrax 해커톤 MVP 선정`](0004-eyetrax-mvp-selection.md) | Accepted (해커톤 MVP 한정) | EyeTrax revision·Dense5 보정·개발 PC Gate와 재평가 조건 |
+| [`ADR-0005 MVP Face 보조 추천 점수`](0005-mvp-face-response-recommendation.md) | Proposed | Eye/AOI 주점수에 유효 Face 반응을 낮은 비중으로 반영하는 상품 귀속·보관·검증 Gate |

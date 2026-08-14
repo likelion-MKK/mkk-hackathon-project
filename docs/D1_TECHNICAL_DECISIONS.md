@@ -2,7 +2,7 @@
 
 - 문서 상태: 팀장 기본안 v0.2
 - 작성일: 2026-08-11
-- 최근 수정: 2026-08-14 MVP 파생 반응 C안 반영
+- 최근 수정: 2026-08-15 MVP Face 보조 점수 반영 방향 추가
 - 기준 문서: `README.md`, `docs/OVERALL_DESIGN.md`, `docs/DETAILED_DESIGN_PLAN.md`
 - 목적: 팀원이 구현을 시작하기 전에 공통 실행 환경과 통합 기준을 고정한다.
 
@@ -20,7 +20,7 @@
 | D1-06 | 매니저 제품 요청 알림 | S04에서 고객이 제품 요청 버튼을 누를 때만 Top 2와 함께 `customer_product_request` 기록 | 이슈 #6, Consumer 검토 필요 | 박형진·조윤혜 |
 | D1-07 | PostgreSQL과 migration | PostgreSQL 17.10 Docker Compose, SQLAlchemy 2 + Alembic, migration 단일 순서 관리 | 잠정 결정 | 박형진 |
 | D1-08 | 룩북 영상과 상품 | 개발용 fixture로 병렬 개발, 실제 영상·상품은 version과 checksum을 고정한 뒤 manifest·catalog에 반영 | 실제 자산 확정 필요 | 전원 |
-| D1-09 | MVP 파생 반응 보관 | 개별 파생 event는 활성 세션에서 즉시 집계하고 영속화하지 않으며, 추천 완료 시 집계·중복 제거 상태를 폐기 | 잠정 결정, 실제 client 전 TTL·취소 정책 확정 필요 | 박형진·조윤혜 |
+| D1-09 | MVP 파생 반응 보관·추천 | 개별 파생 event는 활성 세션에서 즉시 집계하고 영속화하지 않으며, Eye/AOI 주점수와 유효 Face 반응 보조 점수를 추천에 반영한 뒤 상태를 폐기 | 잠정 결정, 실제 client 전 TTL·취소·Face feature Gate 확정 필요 | 박형진·정은미·조윤혜 |
 
 ### 상태의 의미
 
@@ -437,15 +437,20 @@ manifest_version:
 ### 적용 범위
 
 - `ReactionBatch`는 Kiosk·Vision 영역에서 Backend로 파생 신호를 전달하는 transport이며, event history 저장 형식이 아니다.
-- Backend는 활성 세션에서 `event_id`·`sequence`·`batch_id`로 재전송을 중복 제거하고, catalog 상품별 유효 관심 집계만 만든다.
+- Backend는 활성 세션에서 `event_id`·`sequence`·`batch_id`로 재전송을 중복 제거하고, catalog 상품별 유효 Eye/AOI 관심 집계와 상품 귀속이 확인된 Face 반응 집계를 만든다.
 - 개별 event payload, `frame_id`, 좌표, 캡처 시각, 표정 score와 원본 신호는 DB·파일·로그·cache·queue·backup에 남기지 않는다.
 - 추천 실행이 성공하면 활성 집계와 중복 제거 키를 폐기하고, 최종 `RecommendationResult`, Manager 요청 및 `ConversionOutcome`만 정해진 보유 정책에 따라 다룬다.
-- 표정 score는 상품 귀속·taxonomy·평가 기준이 승인되기 전까지 MVP 집계·영속화·추천 점수에 사용하지 않는다.
+- MVP의 연구용 추천은 Eye/AOI를 주점수로 하고, 유효한 Face 반응을 그보다 낮은 비중의 보조 점수로 반영한다. 정확한 가중치·집계식·최소 표본 수는 `algorithm_version`과 함께 검증 후 고정하며, Face 반응만으로 순위를 결정하지 않는다.
+- Face 보조 점수는 `valid=true`, `face_count=1`, 승인된 taxonomy와 품질 Gate를 만족하고 하나의 상품에만 안전하게 귀속할 수 있는 `ExpressionSample`에서만 만든다. 이 점수는 관찰 가능한 얼굴 동작의 파생 반응값이며 실제 감정·성격·구매 의도를 확정하지 않는다.
+- no-face·multi-face·timeout·low-quality·model unavailable과 귀속 불명확 신호는 Face 점수에 넣지 않는다. 이를 0점·중립·무관심으로 대체하지 않으며, Eye/AOI 신호가 충분하면 Face 실패만으로 `RecommendationResult.status=insufficient_data`로 바꾸지 않는다.
+
+Face 반응 feature의 정의와 Gate는 [`ADR-0005 MVP Face 보조 추천 점수`](adr/0005-mvp-face-response-recommendation.md)를 따른다.
 
 ### 후속 Gate
 
 - 실제 Kiosk client 연결 전 세션 TTL, 취소 API·멱등성, timeout·재시작 시 화면 동선과 활성 상태의 폐기 시점을 Contract PR로 확정한다.
 - PostgreSQL 도입 시 `reaction_batches` 또는 개별 sample table을 만들지 않고, 필요한 경우 만료 시각이 있는 집계 상태와 최종 결과만 migration으로 관리한다.
+- Face를 추천에 연결하기 전에는 상품 귀속 규칙, baseline·시간창, 사용 signal, Face/Eye 가중치 상한, 최소 valid coverage와 Eye-only fallback을 versioned fixture와 결과 평가로 검증한다.
 - 실제 고객의 개별 반응 이력을 분석·학습에 쓰려면 새로운 동의 version, 보유 기간, 삭제·접근 통제와 별도 Contract·migration 승인을 거친다.
 
 ---

@@ -38,8 +38,9 @@ class _MutableProductAttentionFeature:
 class ProductFeatureAccumulator:
     """Aggregate valid attention events without retaining their payloads.
 
-    Expression samples are deliberately ignored at this boundary until their
-    product attribution, taxonomy, and evaluation policy are approved.
+    The current Mock deliberately ignores expression samples. A separate
+    research-engine implementation will add only the product-attributed,
+    privacy-minimized Face feature required by ADR-0005.
     """
 
     def __init__(
