@@ -19,6 +19,7 @@ import {
   type KioskEvent,
 } from "./app/kiosk-machine.ts";
 import { buildD1ReactionBatch } from "./app/reaction-batch.ts";
+import type { FrameContext } from "./app/video-context.ts";
 import type {
   ExpressionSample,
   GazeSample,
@@ -32,13 +33,25 @@ import {
   MOCK_LOOKBOOK_ID_BY_CATEGORY,
   MockApiClient,
 } from "./clients/api/MockApiClient.ts";
-import { MockVisionClient } from "./clients/vision/MockVisionClient.ts";
+import { CameraAccessError, FrameSource } from "./camera/FrameSource.ts";
+import { FakeRemoteVisionClient } from "./clients/vision/FakeRemoteVisionClient.ts";
+import {
+  LookbookPlayer,
+  type CameraDisplayState,
+} from "./components/LookbookPlayer.tsx";
 import "./App.css";
 
 const apiClient = new MockApiClient({ sessionStartDelayMs: 450 });
-const visionClient = new MockVisionClient();
+const visionClient = new FakeRemoteVisionClient();
+const frameSource = new FrameSource();
+const temporaryLookbookVideoUrl = import.meta.env.VITE_LOOKBOOK_VIDEO_URL?.trim() ?? "";
 
-type ConsentIssue = "idle-timeout" | "session-timeout" | "session-error";
+type ConsentIssue =
+  | "idle-timeout"
+  | "session-timeout"
+  | "session-error"
+  | "camera-denied"
+  | "camera-error";
 
 const calibrationPattern = {
   pattern_id: "five-point-v1",
@@ -90,6 +103,13 @@ const screensaverImages = [
   screensaverImageTwo,
   screensaverImageThree,
 ];
+
+function getLookbookPoster(category: ProductCategory | null): string {
+  if (category === "가방") return bagImage;
+  if (category === "의류") return apparelImage;
+  if (category === "액세서리") return accessoryImage;
+  return screensaverImageOne;
+}
 
 function ArrowIcon() {
   return (
@@ -367,15 +387,29 @@ function CameraConsent({
           eyebrow: "MOCK API TIMEOUT",
           title: "세션 준비가 지연되고 있어요",
           description:
-            "카메라는 시작되지 않았습니다. 잠시 후 Mock 세션 연결을 다시 시도해주세요.",
+            "열렸던 카메라는 종료했습니다. 잠시 후 Mock 세션 연결을 다시 시도해주세요.",
           retryLabel: "다시 시도",
         },
         "session-error": {
           eyebrow: "MOCK API ERROR",
           title: "세션을 준비하지 못했어요",
           description:
-            "카메라는 시작되지 않았습니다. Mock API 상태를 확인한 뒤 다시 시도해주세요.",
+            "열렸던 카메라는 종료했습니다. Mock API 상태를 확인한 뒤 다시 시도해주세요.",
           retryLabel: "다시 시도",
+        },
+        "camera-denied": {
+          eyebrow: "CAMERA PERMISSION",
+          title: "카메라 권한이 필요해요",
+          description:
+            "브라우저에서 카메라 사용을 허용한 뒤 다시 시도해주세요. 권한을 허용하기 전에는 분석 세션을 시작하지 않습니다.",
+          retryLabel: "권한 다시 확인",
+        },
+        "camera-error": {
+          eyebrow: "CAMERA ERROR",
+          title: "카메라를 시작하지 못했어요",
+          description:
+            "카메라 연결 상태를 확인한 뒤 다시 시도해주세요. 열렸던 camera track은 모두 종료했습니다.",
+          retryLabel: "카메라 다시 연결",
         },
       }[issue]
     : null;
@@ -444,7 +478,7 @@ function CameraConsent({
           </dl>
 
           <div className="consent-meta">
-            <span>D02 MOCK · 현재 단계에서는 실제 카메라를 열지 않습니다.</span>
+            <span>D03 LOCAL CAMERA · 원격 전송 없이 fake 경계로 확인합니다.</span>
             <span role="timer" aria-label={`자동 종료까지 ${secondsRemaining}초`}>
               AUTO CLOSE · {String(secondsRemaining).padStart(2, "0")}S
             </span>
@@ -475,7 +509,7 @@ function CameraConsent({
               disabled={isStarting || issue !== null}
               aria-busy={isStarting}
             >
-              {isStarting ? "Mock 세션 준비 중..." : "동의하고 계속"}
+              {isStarting ? "카메라·Mock 세션 준비 중..." : "동의하고 계속"}
               {!isStarting && <ArrowIcon />}
             </button>
           </div>
@@ -635,6 +669,7 @@ function App() {
   const [flowError, setFlowError] = useState<string | null>(null);
   const [consentIssue, setConsentIssue] = useState<ConsentIssue | null>(null);
   const [isStarting, setIsStarting] = useState(false);
+  const [cameraState, setCameraState] = useState<CameraDisplayState>("idle");
   const [flowController] = useState(() => new AsyncFlowController());
   const latestGazeSample = useRef<GazeSample | null>(null);
   const latestExpressionSample = useRef<ExpressionSample | null>(null);
@@ -662,6 +697,7 @@ function App() {
       removeExpressionListener();
       flowController.invalidateCurrentFlow();
       abortSessionStart();
+      frameSource.stop();
       void flowController.runSerialized(() => visionClient.stopSession());
     };
   }, [abortSessionStart, flowController]);
@@ -675,6 +711,7 @@ function App() {
   const restart = useCallback(async () => {
     const generation = flowController.invalidateCurrentFlow();
     abortSessionStart();
+    frameSource.stop();
     if (session) apiClient.discardSession(session.session_id);
     latestGazeSample.current = null;
     latestExpressionSample.current = null;
@@ -685,6 +722,7 @@ function App() {
     setFlowError(null);
     setConsentIssue(null);
     setIsStarting(false);
+    setCameraState("idle");
     send("RESTART");
 
     try {
@@ -699,6 +737,7 @@ function App() {
   const cancelConsent = useCallback(async () => {
     const generation = flowController.invalidateCurrentFlow();
     abortSessionStart();
+    frameSource.stop();
     latestGazeSample.current = null;
     latestExpressionSample.current = null;
     setSelectedCategory(null);
@@ -708,6 +747,7 @@ function App() {
     setFlowError(null);
     setConsentIssue(null);
     setIsStarting(false);
+    setCameraState("idle");
     send("CANCEL");
 
     try {
@@ -722,9 +762,11 @@ function App() {
   const handleConsentTimeout = useCallback(() => {
     const generation = flowController.invalidateCurrentFlow();
     abortSessionStart();
+    frameSource.stop();
     latestGazeSample.current = null;
     latestExpressionSample.current = null;
     setIsStarting(false);
+    setCameraState("idle");
     setConsentIssue("idle-timeout");
 
     void flowController.runSerialized(() => visionClient.stopSession()).catch(() => {
@@ -743,8 +785,16 @@ function App() {
     setIsStarting(true);
     setFlowError(null);
     setConsentIssue(null);
+    setCameraState("requesting");
 
     try {
+      await frameSource.open();
+      if (!flowController.isCurrent(generation)) {
+        frameSource.stop();
+        return;
+      }
+      setCameraState("ready");
+
       const lookbookId = MOCK_LOOKBOOK_ID_BY_CATEGORY[selectedCategory];
       const { createdSession, lookbookManifest } = await runSessionStartWithTimeout(
         async (signal) => {
@@ -784,11 +834,24 @@ function App() {
       setManifest(lookbookManifest);
       send("AGREE");
     } catch (error: unknown) {
+      frameSource.stop();
       if (flowController.isCurrent(generation)) {
+        const isCameraError = error instanceof CameraAccessError;
+        setCameraState(
+          isCameraError
+            ? error.code === "permission_denied"
+              ? "denied"
+              : "error"
+            : "idle",
+        );
         setConsentIssue(
-          error instanceof SessionStartTimeoutError
-            ? "session-timeout"
-            : "session-error",
+          isCameraError
+            ? error.code === "permission_denied"
+              ? "camera-denied"
+              : "camera-error"
+            : error instanceof SessionStartTimeoutError
+              ? "session-timeout"
+              : "session-error",
         );
 
         void flowController.runSerialized(() => visionClient.stopSession()).catch(() => {
@@ -819,7 +882,9 @@ function App() {
 
       if (flowController.isCurrent(generation)) send("CALIBRATION_SUCCESS");
     } catch {
+      frameSource.stop();
       if (flowController.isCurrent(generation)) {
+        setCameraState("error");
         setFlowError("Mock 시선 보정을 완료하지 못했습니다.");
       }
     }
@@ -827,6 +892,8 @@ function App() {
 
   const completeLookbook = useCallback(async () => {
     const generation = flowController.captureGeneration();
+    frameSource.stop();
+    setCameraState("idle");
 
     if (!session || !manifest) {
       setFlowError("진행 중인 Mock 세션 정보를 찾지 못했습니다.");
@@ -867,6 +934,57 @@ function App() {
       }
     }
   }, [flowController, manifest, send, session]);
+
+  const captureCameraFrame = useCallback(
+    async (context: FrameContext) => {
+      const generation = flowController.captureGeneration();
+
+      try {
+        await frameSource.capture(context, async (frame, frameContext, signal) => {
+          await visionClient.sendFrame(frame, frameContext, { signal });
+        });
+      } catch (error: unknown) {
+        if (
+          !flowController.isCurrent(generation) ||
+          (error instanceof CameraAccessError && error.code === "cancelled")
+        ) {
+          return;
+        }
+
+        frameSource.stop();
+        setCameraState(
+          error instanceof CameraAccessError && error.code === "permission_denied"
+            ? "denied"
+            : "error",
+        );
+      }
+    },
+    [flowController],
+  );
+
+  const retryCamera = useCallback(async () => {
+    const generation = flowController.captureGeneration();
+    frameSource.stop();
+    setCameraState("requesting");
+
+    try {
+      await frameSource.open();
+      if (flowController.isCurrent(generation)) setCameraState("ready");
+      else frameSource.stop();
+    } catch (error: unknown) {
+      if (!flowController.isCurrent(generation)) return;
+      setCameraState(
+        error instanceof CameraAccessError && error.code === "permission_denied"
+          ? "denied"
+          : "error",
+      );
+    }
+  }, [flowController]);
+
+  const handlePlaybackUnavailable = useCallback(() => {
+    frameSource.stop();
+    setCameraState("idle");
+  }, []);
 
   const loadRecommendation = useCallback(async () => {
     const generation = flowController.captureGeneration();
@@ -913,6 +1031,8 @@ function App() {
       <CameraConsent
         category={selectedCategory}
         onBack={() => {
+          frameSource.stop();
+          setCameraState("idle");
           setSelectedCategory(null);
           setConsentIssue(null);
           send("BACK");
@@ -937,11 +1057,30 @@ function App() {
   }
 
   if (screen === "lookbook") {
+    if (!session || !manifest) {
+      return (
+        <ErrorPlaceholder
+          message="룩북 재생에 필요한 Mock 세션 정보를 찾지 못했습니다."
+          onHome={restart}
+        />
+      );
+    }
+
     return (
-      <TimedPlaceholder
-        message="Mock 룩북을 재생하고 있습니다."
+      <LookbookPlayer
+        key={manifest.video_id}
+        cameraState={cameraState}
+        categoryLabel={selectedCategory ?? "전체 컬렉션"}
+        chrome={<StoreChrome onHome={restart} step="03" overlay />}
+        posterUrl={getLookbookPoster(selectedCategory)}
+        sessionId={session.session_id}
+        videoId={manifest.video_id}
+        videoUrl={temporaryLookbookVideoUrl}
+        onCameraRetry={retryCamera}
         onComplete={completeLookbook}
+        onFrameCapture={captureCameraFrame}
         onHome={restart}
+        onPlaybackUnavailable={handlePlaybackUnavailable}
       />
     );
   }

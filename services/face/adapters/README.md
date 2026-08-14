@@ -22,4 +22,4 @@
 
 - [`fake/`](fake/README.md): 모델 없이 결정적인 개발·CI 신호를 만든다.
 - [`replay/`](replay/README.md): 승인된 파생 JSON fixture를 재생한다.
-- [`selected/`](selected/README.md): D5 선정 근거가 승인된 모델만 연결한다.
+- [`selected/`](selected/README.md): [ADR-0003](../../../docs/adr/0003-face-model-taxonomy-fallback.md)의 Proposed 결정과 Gate를 D6에서 구현한다.

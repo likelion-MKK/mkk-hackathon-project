@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
 
-    "test": "tsc -p tsconfig.test.json --noEmit && node --test test/*.test.mjs src/app/async-flow-controller.test.ts src/app/consent-flow.test.ts src/app/kiosk-machine.test.ts src/app/reaction-batch.test.ts src/clients/api/MockApiClient.test.ts src/clients/vision/MockVisionClient.test.ts src/contracts/contract-fixtures.test.ts",
+    "test": "tsc -p tsconfig.test.json --noEmit && node --test test/*.test.mjs src/app/async-flow-controller.test.ts src/app/consent-flow.test.ts src/app/kiosk-machine.test.ts src/app/reaction-batch.test.ts src/app/video-context.test.ts src/camera/FrameSource.test.ts src/clients/api/MockApiClient.test.ts src/clients/vision/FakeRemoteVisionClient.test.ts src/clients/vision/MockVisionClient.test.ts src/contracts/contract-fixtures.test.ts",
 
     "preview": "vite preview"
   },
