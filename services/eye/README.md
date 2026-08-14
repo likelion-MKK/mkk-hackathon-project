@@ -51,7 +51,8 @@ EyeTrax가 유효 좌표를 만들면 `confidence=1.0`을 사용한다. 이 값�
 viewport 밖 예측은 좌표 없이 `valid=false`로 유지한다.
 
 Dense5 학습과 8점 정확도 Gate에는 원시 좌표만 사용한다. 실제 얼굴 A/B에서 안정화 경로가
-목표 jitter 개선폭을 충족하지 못하고 오차 p95를 늘렸으므로 기본 모드는 `raw`다.
+오차 p95를 늘렸고, 기존 jitter 비교는 서로 다른 frame pair를 사용해 철회했으므로 기본
+모드는 `raw`다. 수정된 동일-pair jitter 지표는 실제 카메라 재실행 전까지 미검증이다.
 
 ```text
 원시 좌표 -> GazeSample
@@ -70,7 +71,8 @@ Dense5 학습과 8점 정확도 Gate에는 원시 좌표만 사용한다. 실제
 변경과 dispose 때 filter를 초기화한다. 화면 밖 filter 결과는 clamp하지 않는다.
 
 기본 원시 mode revision은 `<source>+raw-v1`, 실험 안정화 mode는
-`<source>+gaze-filter-v1`이다. 같은 capture context라도 mode별 event ID가 다르다.
+`<source>+gaze-filter-v1`이다. 같은 capture context라도 mode별 event ID가 다르다. 이
+revision의 EMA alpha는 `0.25`로 고정하며 CLI와 Adapter config는 다른 값을 거부한다.
 
 `FakeEyeAdapter.infer()`는 입력 `FrameContext`의 `sequence`, `frame_id`, 캡처 시각을 항상
 보존한다. 순서 역전 테스트는 `FakeGazeDelivery`가 인접한 두 샘플의 전달 순서만 바꾸며,
@@ -100,3 +102,5 @@ AOI 판정은 기존 `apps/kiosk/src/app/reaction-batch.ts`가 소유하며 다�
 `GazeSample`을 전달한다. 데모는 같은 원시 예측의 raw·stabilized valid 비율, jitter,
 검증점 오차와 처리 지연만 집계한다. standalone 데모에는 기존 AOI Mapper를 복제하지
 않으므로 AOI hit는 `null`이고 후속 Wiring에서 Mapper evaluator를 주입하면 계산된다.
+jitter는 두 모드가 현재와 직전 frame에서 모두 유효한 동일한 frame pair만 양쪽에 함께
+집계한다.

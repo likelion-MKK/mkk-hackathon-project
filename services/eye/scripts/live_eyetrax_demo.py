@@ -54,7 +54,7 @@ def metric_percentiles(values: list[float]) -> dict[str, float | int | None]:
 
 
 class _ModeMetrics:
-    """Keep only scalar metric samples and one previous live point in memory."""
+    """Keep scalar metric samples; live jitter pairs are supplied externally."""
 
     def __init__(self, width: int, height: int) -> None:
         self._width = width
@@ -69,14 +69,12 @@ class _ModeMetrics:
         self.latencies: list[float] = []
         self.aoi_total = 0
         self.aoi_hits = 0
-        self._previous_live: tuple[float, float] | None = None
-
     def observe(
         self,
         observation: GazeAbObservation,
         *,
         stabilized: bool,
-    ) -> None:
+    ) -> tuple[float, float] | None:
         if stabilized:
             valid = observation.stabilized_valid
             x_norm = observation.stabilized_x_norm
@@ -105,21 +103,24 @@ class _ModeMetrics:
                 if aoi_hit is not None:
                     self.aoi_total += 1
                     self.aoi_hits += int(aoi_hit)
-            return
+            return None
 
         self.live_total += 1
         if not valid or x_norm is None or y_norm is None:
-            self._previous_live = None
-            return
+            return None
         self.live_valid += 1
-        point = (x_norm, y_norm)
-        if self._previous_live is not None:
-            jitter_px = math.hypot(
-                (point[0] - self._previous_live[0]) * self._width,
-                (point[1] - self._previous_live[1]) * self._height,
-            )
-            self.jitter.append(jitter_px / self._diagonal)
-        self._previous_live = point
+        return x_norm, y_norm
+
+    def observe_jitter_pair(
+        self,
+        previous: tuple[float, float],
+        current: tuple[float, float],
+    ) -> None:
+        jitter_px = math.hypot(
+            (current[0] - previous[0]) * self._width,
+            (current[1] - previous[1]) * self._height,
+        )
+        self.jitter.append(jitter_px / self._diagonal)
 
     def summary(self) -> dict[str, object]:
         valid_total = self.live_total or self.validation_total
@@ -147,11 +148,33 @@ class AbMetricsCollector:
         self._raw = _ModeMetrics(width, height)
         self._stabilized = _ModeMetrics(width, height)
         self._filter_latencies: list[float] = []
+        self._previous_live_pair: tuple[
+            tuple[float, float],
+            tuple[float, float],
+        ] | None = None
 
     def observe(self, observation: GazeAbObservation) -> None:
-        self._raw.observe(observation, stabilized=False)
-        self._stabilized.observe(observation, stabilized=True)
+        raw_point = self._raw.observe(observation, stabilized=False)
+        stabilized_point = self._stabilized.observe(observation, stabilized=True)
         self._filter_latencies.append(observation.filter_latency_ms)
+        if observation.phase != "live":
+            return
+
+        current_pair = (
+            (raw_point, stabilized_point)
+            if raw_point is not None and stabilized_point is not None
+            else None
+        )
+        if current_pair is not None and self._previous_live_pair is not None:
+            self._raw.observe_jitter_pair(
+                self._previous_live_pair[0],
+                current_pair[0],
+            )
+            self._stabilized.observe_jitter_pair(
+                self._previous_live_pair[1],
+                current_pair[1],
+            )
+        self._previous_live_pair = current_pair
 
     def summary(self, selected_mode: str) -> dict[str, object]:
         return {
@@ -159,6 +182,8 @@ class AbMetricsCollector:
             "raw-v1": self._raw.summary(),
             "gaze-filter-v1": self._stabilized.summary(),
             "filter_additional_latency_ms": metric_percentiles(self._filter_latencies),
+            "jitter_pairing": "adjacent frames where both modes are valid",
+            "jitter_pair_count": len(self._raw.jitter),
             "frame_coordinates_saved": False,
             "aoi_note": (
                 "null until the existing Kiosk AOI Mapper is supplied during wiring"
@@ -356,7 +381,7 @@ def parse_args() -> argparse.Namespace:
         choices=("raw", "kalman_ema"),
         default="raw",
     )
-    parser.add_argument("--ema-alpha", type=float, default=0.25)
+    parser.add_argument("--ema-alpha", type=float, choices=(0.25,), default=0.25)
     parser.add_argument("--windowed", action="store_true")
     return parser.parse_args()
 

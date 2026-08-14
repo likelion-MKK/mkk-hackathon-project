@@ -185,8 +185,8 @@ def test_config_defaults_and_validation(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="smoothing_mode"):
         EyeTraxConfig(100, 100, smoothing_mode="unknown")  # type: ignore[arg-type]
-    with pytest.raises(ValueError, match="ema_alpha"):
-        EyeTraxConfig(100, 100, ema_alpha=1.1)
+    with pytest.raises(ValueError, match="fixed at 0.25"):
+        EyeTraxConfig(100, 100, ema_alpha=0.5)
 
 
 def test_initialize_and_warmup_are_separate_and_dispose_is_idempotent(
@@ -785,6 +785,70 @@ def test_observation_sink_receives_same_raw_point_without_frame_data(
         assert live[0].stabilized_y_norm == sample.screen_y_norm
         assert not hasattr(live[0], "frame")
         assert not hasattr(live[0], "image")
+    finally:
+        adapter.dispose()
+
+
+@pytest.mark.parametrize(
+    ("smoothing_mode", "expected_valid", "expected_reason"),
+    [
+        ("raw", True, None),
+        ("kalman_ema", False, "gaze_unavailable"),
+    ],
+)
+def test_filter_failure_isolated_by_selected_output_mode(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    smoothing_mode: str,
+    expected_valid: bool,
+    expected_reason: str | None,
+) -> None:
+    observations: list[GazeAbObservation] = []
+    adapter, _, _ = initialized_adapter(
+        tmp_path,
+        monkeypatch,
+        FixedCalibrationSource(),
+        smoothing_mode=smoothing_mode,
+        observation_sink=observations.append,
+    )
+
+    class FailingStabilizer:
+        def __init__(self) -> None:
+            self.reset_calls = 0
+
+        def process_valid(self, *_args: object) -> None:
+            raise RuntimeError("filter failed")
+
+        def reset(self) -> None:
+            self.reset_calls += 1
+
+    failing = FailingStabilizer()
+    try:
+        assert calibrate(adapter).valid is True
+        first_context = replace(
+            FrameContext(),
+            sequence=6,
+            frame_id="frame-00000006",
+            captured_at_mono_ms=1200.0,
+        )
+        assert adapter.infer(make_frame(25, 75), first_context).valid is True
+        adapter._stabilizer = failing  # type: ignore[assignment]
+        sample = adapter.infer(make_frame(25, 75), FrameContext())
+        live = [item for item in observations if item.phase == "live"]
+
+        assert sample.valid is expected_valid
+        assert sample.reason == expected_reason
+        assert failing.reset_calls == 1
+        if smoothing_mode == "raw":
+            assert sample.screen_x_norm == 0.25
+            assert sample.screen_y_norm == 0.75
+        else:
+            assert sample.screen_x_norm is None
+            assert sample.screen_y_norm is None
+        assert len(live) == 2
+        assert live[-1].raw_valid is True
+        assert live[-1].stabilized_valid is False
+        assert live[-1].stabilized_reason == "gaze_unavailable"
     finally:
         adapter.dispose()
 

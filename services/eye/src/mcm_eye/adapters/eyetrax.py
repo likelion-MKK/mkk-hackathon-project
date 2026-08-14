@@ -130,9 +130,9 @@ class EyeTraxConfig:
             isinstance(self.ema_alpha, bool)
             or not isinstance(self.ema_alpha, (int, float))
             or not math.isfinite(float(self.ema_alpha))
-            or not 0.0 <= float(self.ema_alpha) <= 1.0
+            or float(self.ema_alpha) != 0.25
         ):
-            raise ValueError("ema_alpha must be between 0.0 and 1.0")
+            raise ValueError("ema_alpha must be fixed at 0.25 for gaze-filter-v1")
         object.__setattr__(self, "face_model_path", Path(self.face_model_path).resolve())
         object.__setattr__(self, "ema_alpha", float(self.ema_alpha))
 
@@ -558,11 +558,20 @@ class EyeTraxAdapter:
         inference_latency_ms = (time.perf_counter_ns() - inference_started) / 1_000_000.0
         if self._filter_path_enabled:
             filter_started = time.perf_counter_ns()
-            decision = self._stabilizer.process_valid(
-                normalized[0] * self._config.viewport_width_px,
-                normalized[1] * self._config.viewport_height_px,
-                context.captured_at_mono_ms,
-            )
+            try:
+                decision = self._stabilizer.process_valid(
+                    normalized[0] * self._config.viewport_width_px,
+                    normalized[1] * self._config.viewport_height_px,
+                    context.captured_at_mono_ms,
+                )
+                stabilized = self._normalized_decision(decision)
+            except Exception:
+                self._reset_stabilizer_after_error()
+                decision = StabilizerDecision(
+                    valid=False,
+                    reason="gaze_unavailable",
+                )
+                stabilized = (None, decision.reason)
             filter_latency_ms = (
                 time.perf_counter_ns() - filter_started
             ) / 1_000_000.0
@@ -573,8 +582,8 @@ class EyeTraxAdapter:
                 x_px=int(round(normalized[0] * self._config.viewport_width_px)),
                 y_px=int(round(normalized[1] * self._config.viewport_height_px)),
             )
+            stabilized = self._normalized_decision(decision)
             filter_latency_ms = 0.0
-        stabilized = self._normalized_decision(decision)
 
         if self._config.smoothing_mode == "raw":
             sample = GazeSample(
@@ -869,10 +878,17 @@ class EyeTraxAdapter:
         inference_latency_ms = (time.perf_counter_ns() - inference_started_ns) / 1_000_000.0
         if self._filter_path_enabled:
             filter_started = time.perf_counter_ns()
-            decision = self._stabilizer.observe_invalid(
-                context.captured_at_mono_ms,
-                reason,
-            )
+            try:
+                decision = self._stabilizer.observe_invalid(
+                    context.captured_at_mono_ms,
+                    reason,
+                )
+            except Exception:
+                self._reset_stabilizer_after_error()
+                decision = StabilizerDecision(
+                    valid=False,
+                    reason="gaze_unavailable",
+                )
             filter_latency_ms = (
                 time.perf_counter_ns() - filter_started
             ) / 1_000_000.0
@@ -928,6 +944,13 @@ class EyeTraxAdapter:
         self._stream_identity = None
         self._last_order = None
         self._sample_cache.clear()
+
+    def _reset_stabilizer_after_error(self) -> None:
+        try:
+            self._stabilizer.reset()
+        except Exception:
+            # A broken optional filter must not replace a usable raw result.
+            pass
 
     @property
     def _filter_path_enabled(self) -> bool:
