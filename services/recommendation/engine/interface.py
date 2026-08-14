@@ -37,6 +37,7 @@ class ProductAttentionFeature:
     confidence_total: float
     attention_duration_ms: float
     confidence_weighted_attention_ms: float
+    # v0 observation-run candidate; not a validated count of user revisits.
     revisit_count: int
     first_attention_sequence: int
     first_candidate_index: int

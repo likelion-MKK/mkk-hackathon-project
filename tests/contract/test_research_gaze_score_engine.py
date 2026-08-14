@@ -6,7 +6,10 @@ import pytest
 
 from services.recommendation.engine.features import ProductFeatureAccumulator
 from services.recommendation.engine.interface import ContractRecord, RecommendationFeatures
-from services.recommendation.engine.research_gaze import ResearchGazeScoreEngine
+from services.recommendation.engine.research_gaze import (
+    GazeScoreWeights,
+    ResearchGazeScoreEngine,
+)
 
 
 def product(product_id: str) -> ContractRecord:
@@ -118,11 +121,10 @@ def test_attention_deduplicates_multiple_aoi_candidates_for_the_same_product() -
     assert by_product["P002"].attention_duration_ms == pytest.approx(50)
 
 
-def test_attention_revisit_count_uses_separate_video_time_runs() -> None:
+def test_observation_run_candidate_increases_after_a_missing_frame() -> None:
     snapshot = features(
         attention("attention-1", 1, 100, ["P001"]),
-        attention("attention-2", 2, 200, ["P001"]),
-        attention("attention-3", 3, 600, ["P001"]),
+        attention("attention-2", 2, 600, ["P001"]),
     )
 
     assert snapshot.product_attention[0].revisit_count == 1
@@ -136,6 +138,91 @@ def test_attention_revisit_count_tolerates_a_250ms_capture_cadence() -> None:
     )
 
     assert snapshot.product_attention[0].revisit_count == 0
+
+
+def test_observation_run_candidate_increases_after_other_product_then_return() -> None:
+    snapshot = features(
+        attention("attention-1", 1, 100, ["P001"]),
+        attention("attention-2", 2, 350, ["P002"]),
+        attention("attention-3", 3, 600, ["P001"]),
+    )
+
+    assert snapshot.product_attention[0].revisit_count == 1
+
+
+def test_observation_run_candidate_increases_after_empty_aoi_then_return() -> None:
+    snapshot = features(
+        attention("attention-1", 1, 100, ["P001"]),
+        attention("attention-2", 2, 350, []),
+        attention("attention-3", 3, 600, ["P001"]),
+    )
+
+    assert snapshot.product_attention[0].revisit_count == 1
+
+
+def test_observation_run_candidate_increases_after_invalid_sample_then_return() -> None:
+    snapshot = features(
+        attention("attention-1", 1, 100, ["P001"]),
+        attention("attention-2", 2, 350, ["P001"], valid=False),
+        attention("attention-3", 3, 600, ["P001"]),
+    )
+
+    assert snapshot.product_attention[0].revisit_count == 1
+
+
+@pytest.mark.parametrize(
+    ("first_time_ms", "second_time_ms", "expected_runs"),
+    [
+        pytest.param(100, 399, 0, id="299ms"),
+        pytest.param(100, 400, 0, id="300ms"),
+        pytest.param(100, 401, 0, id="301ms-same-bucket-position"),
+        pytest.param(199, 500, 1, id="301ms-crosses-bucket-boundary"),
+    ],
+)
+def test_observation_run_candidate_exposes_bucket_boundary_heuristic(
+    first_time_ms: int,
+    second_time_ms: int,
+    expected_runs: int,
+) -> None:
+    snapshot = features(
+        attention("attention-1", 1, first_time_ms, ["P001"]),
+        attention("attention-2", 2, second_time_ms, ["P001"]),
+    )
+
+    assert snapshot.product_attention[0].revisit_count == expected_runs
+
+
+def test_observation_run_candidate_resets_across_seek_epoch() -> None:
+    snapshot = features(
+        attention("attention-1", 1, 100, ["P001"], playback_epoch=0),
+        attention("attention-2", 2, 100, ["P001"], playback_epoch=1),
+    )
+
+    assert snapshot.product_attention[0].revisit_count == 1
+
+
+def test_confidence_is_an_initial_research_signal_when_values_differ() -> None:
+    result = run(
+        features(
+            attention("attention-1", 1, 100, ["P001"], confidence=0.9),
+            attention("attention-2", 2, 100, ["P002"], confidence=0.4),
+        )
+    )
+
+    assert [(item.rank, item.product_id) for item in result.items] == [
+        (1, "P001"),
+        (2, "P002"),
+    ]
+
+
+def test_algorithm_revision_captures_weight_changes() -> None:
+    default_engine = ResearchGazeScoreEngine()
+    custom_engine = ResearchGazeScoreEngine(
+        GazeScoreWeights(attention_duration=0.5, attention_confidence=0.4, revisit_count=0.1)
+    )
+
+    assert default_engine.algorithm_version == "gaze-score-v0-b100-g300-w0p65-c0p25-r0p1"
+    assert custom_engine.algorithm_version == "gaze-score-v0-b100-g300-w0p5-c0p4-r0p1"
 
 
 def test_gaze_score_prefers_longer_observed_attention_over_short_high_confidence_attention() -> None:
@@ -156,7 +243,7 @@ def test_gaze_score_prefers_longer_observed_attention_over_short_high_confidence
         (2, "P002"),
     ]
     assert result.engine_mode == "research_version"
-    assert result.algorithm_version == "gaze-score-v0"
+    assert result.algorithm_version == "gaze-score-v0-b100-g300-w0p65-c0p25-r0p1"
 
 
 def test_gaze_score_uses_first_observation_as_a_deterministic_tie_breaker() -> None:

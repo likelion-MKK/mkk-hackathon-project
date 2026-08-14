@@ -91,7 +91,9 @@ def test_complete_session_can_use_the_research_gaze_score_engine() -> None:
 
     assert recommendation.status_code == 200
     assert recommendation.json()["engine_mode"] == "research_version"
-    assert recommendation.json()["algorithm_version"] == "gaze-score-v0"
+    assert recommendation.json()["algorithm_version"] == (
+        "gaze-score-v0-b100-g300-w0p65-c0p25-r0p1"
+    )
     assert recommendation.json()["items"] == [
         {"rank": 1, "product_id": "P001"},
         {"rank": 2, "product_id": "P002"},

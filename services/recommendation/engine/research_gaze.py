@@ -11,6 +11,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from math import isfinite
 
+from services.recommendation.engine.features import (
+    DEFAULT_ATTENTION_BUCKET_MS,
+    DEFAULT_REVISIT_GAP_MS,
+)
 from services.recommendation.engine.interface import (
     ContractRecord,
     ProductAttentionFeature,
@@ -20,13 +24,25 @@ from services.recommendation.engine.interface import (
 )
 
 
+DEFAULT_ATTENTION_DURATION_WEIGHT = 0.65
+DEFAULT_ATTENTION_CONFIDENCE_WEIGHT = 0.25
+DEFAULT_REVISIT_CANDIDATE_WEIGHT = 0.10
+GAZE_SCORE_VERSION_PREFIX = "gaze-score-v0"
+
+
+def _format_weight(value: float) -> str:
+    """Format a weight so policy changes are visible in the revision."""
+
+    return f"{value:.6f}".rstrip("0").rstrip(".").replace(".", "p")
+
+
 @dataclass(frozen=True, slots=True)
 class GazeScoreWeights:
     """The initial, adjustable share of each gaze-only signal."""
 
-    attention_duration: float = 0.65
-    attention_confidence: float = 0.25
-    revisit_count: float = 0.10
+    attention_duration: float = DEFAULT_ATTENTION_DURATION_WEIGHT
+    attention_confidence: float = DEFAULT_ATTENTION_CONFIDENCE_WEIGHT
+    revisit_count: float = DEFAULT_REVISIT_CANDIDATE_WEIGHT
 
     def __post_init__(self) -> None:
         values = (self.attention_duration, self.attention_confidence, self.revisit_count)
@@ -35,20 +51,34 @@ class GazeScoreWeights:
         if abs(sum(values) - 1.0) > 1e-9:
             raise ValueError("gaze score weights must add up to 1")
 
+    @property
+    def algorithm_revision(self) -> str:
+        """Return a reproducible revision for this score policy."""
+
+        return (
+            f"{GAZE_SCORE_VERSION_PREFIX}"
+            f"-b{DEFAULT_ATTENTION_BUCKET_MS}"
+            f"-g{DEFAULT_REVISIT_GAP_MS}"
+            f"-w{_format_weight(self.attention_duration)}"
+            f"-c{_format_weight(self.attention_confidence)}"
+            f"-r{_format_weight(self.revisit_count)}"
+        )
+
 
 class ResearchGazeScoreEngine:
-    """Rank products by observed gaze time, quality, and repeat visits.
+    """Rank products by observed gaze time, quality, and run candidates.
 
     The weights are a development hypothesis, not a claim of recommendation
     quality.  Callers must keep this engine distinguishable from the Mock
-    engine through ``engine_mode`` and ``algorithm_version``.
+    engine through ``engine_mode`` and ``algorithm_version``. A run candidate
+    is not treated as a confirmed user revisit.
     """
 
     mode = "research_version"
-    algorithm_version = "gaze-score-v0"
 
     def __init__(self, weights: GazeScoreWeights | None = None) -> None:
         self._weights = weights or GazeScoreWeights()
+        self.algorithm_version = self._weights.algorithm_revision
 
     def run(
         self,
@@ -85,11 +115,11 @@ class ResearchGazeScoreEngine:
             )
 
         max_duration = max(feature.attention_duration_ms for feature in candidates)
-        max_revisit_count = max(feature.revisit_count for feature in candidates)
+        max_run_candidate_count = max(feature.revisit_count for feature in candidates)
         ranked = sorted(
             candidates,
             key=lambda feature: (
-                -self._score(feature, max_duration, max_revisit_count),
+                -self._score(feature, max_duration, max_run_candidate_count),
                 feature.first_seen_key(),
             ),
         )
@@ -113,12 +143,14 @@ class ResearchGazeScoreEngine:
         self,
         feature: ProductAttentionFeature,
         max_duration: float,
-        max_revisit_count: int,
+        max_run_candidate_count: int,
     ) -> float:
         duration_score = feature.attention_duration_ms / max_duration
         confidence_score = feature.average_attention_confidence()
         revisit_score = (
-            feature.revisit_count / max_revisit_count if max_revisit_count else 0.0
+            feature.revisit_count / max_run_candidate_count
+            if max_run_candidate_count
+            else 0.0
         )
         return (
             self._weights.attention_duration * duration_score

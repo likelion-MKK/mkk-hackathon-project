@@ -14,6 +14,8 @@ from services.recommendation.engine.interface import (
 
 DEFAULT_ATTENTION_BUCKET_MS = 100
 DEFAULT_REVISIT_GAP_MS = 300
+# These are research-v0 defaults. If either value changes, the emitted
+# recommendation algorithm revision must change with it.
 
 
 @dataclass(slots=True)
@@ -164,6 +166,13 @@ class ProductFeatureAccumulator:
         feature: _MutableProductAttentionFeature,
         bucket_scales: Mapping[tuple[int, int], float],
     ) -> tuple[float, float, int]:
+        """Summarize duration, confidence, and v0 observation-run candidates.
+
+        ``revisit_count`` is deliberately a candidate signal. A new run can
+        be caused by a real product departure, an invalid sample, or a dropped
+        frame, so it is not a validated count of user revisits.
+        """
+
         duration_ms = 0.0
         confidence_weighted_duration_ms = 0.0
         buckets_by_epoch: dict[int, list[int]] = {}
