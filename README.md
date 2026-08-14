@@ -112,6 +112,7 @@ Kiosk는 기본적으로 `http://localhost:5173`, Manager는 `http://localhost:5
 - [전체 설계](docs/OVERALL_DESIGN.md)
 - [상세 설계 및 병렬 개발 계획](docs/DETAILED_DESIGN_PLAN.md)
 - [D1 기술·운영 의사결정서](docs/D1_TECHNICAL_DECISIONS.md)
+- [D2 Eye Tracker 전수 조사·추천 계획](docs/benchmarks/EYE_CANDIDATE_RESEARCH_PLAN.md)
 - [Vision 추론 서버 선정·비용 결정 계획](docs/benchmarks/VISION_SERVER_SELECTION_PLAN.md)
 - [Contract v1](contracts/README.md)
 - [개발 및 PR 운영 규칙](CONTRIBUTING.md)
