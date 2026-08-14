@@ -14,3 +14,7 @@
 - 라이선스·revision 고정·offline 실행·화면 좌표 변환 Hard Gate를 통과하지 못한 후보를 점수만으로 선택하지 않는다.
 - 정답 label이 없는 시연 영상 결과를 정확도라고 부르지 않는다.
 - 실험 의존성을 공용 서비스나 루트 lock 파일에 섞지 않는다.
+
+## 현재 후보 실험
+
+- [`eyetrax/`](eyetrax/README.md): 단일 사용자·개발 PC에서 실행하는 EyeTrax 라이브 보정·AOI 정확도 benchmark

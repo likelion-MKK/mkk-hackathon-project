@@ -32,6 +32,7 @@ README.md
 | [`docs/adr/README.md`](adr/README.md) | 기술·모델 결정을 바꿀 때 | 결정 근거와 대안을 어디에 남기는가? |
 | [`ADR-0001 원격 Eye·Face 추론 서버 전환`](adr/0001-remote-vision-inference.md) | AI 실행 위치·실시간 frame transport·서버 배포 작업 | Kiosk와 서버의 책임, 비저장 경계, 장애·승인 Gate는 무엇인가? |
 | [`docs/benchmarks/README.md`](benchmarks/README.md) | Eye·Face 후보 평가 | 비교 결과와 재현 방법을 어디에 남기는가? |
+| [`Face D4 후보 benchmark`](benchmarks/face/README.md) | Face 후보 1차 성능·label 비교 | 동일 synthetic workload의 실행 방법과 D4 결과는 무엇인가? |
 | [`Vision 추론 서버 선정·비용 결정 계획`](benchmarks/VISION_SERVER_SELECTION_PLAN.md) | 목표 서버·region·CPU/GPU·비용 결정 | workload와 모델을 고정한 뒤 어떤 Gate 순서로 cloud와 instance를 선택하는가? |
 | [`docs/sjf/README.md`](sjf/README.md) | 과거 협업 자료가 필요할 때만 | 참고 자료는 어디에 있는가? |
 
