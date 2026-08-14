@@ -56,6 +56,14 @@ MVP 파생 데이터 정책은 선택지 C를 사용한다. 개별 `GazeSample`,
 
 실제 API·Vision client 연결 전에는 Backend 세션 취소 API, 세션 생성 멱등성 키와 생성 후 미사용 세션의 TTL 정책을 계약으로 확정해야 한다. Kiosk가 `session_id`를 받은 뒤 Vision 시작이 실패하면 취소 API를 호출하고, 응답을 받지 못한 생성 요청은 Backend TTL로 정리할 수 있어야 한다. 이 계약이 준비되기 전 D2 세션 시작 흐름은 Mock 전용이다.
 
+## D3 PR 1 영상 재생과 FrameContext
+
+S03의 임시 룩북 영상은 `VITE_LOOKBOOK_VIDEO_URL`로 연결한다. 로컬 파일을 사용할 때는 파일을 `public/` 아래에 두고 `/파일명.mp4`처럼 설정한다. 영상 URL이 비어 있거나 로드에 실패하면 카테고리 포스터와 연결 안내를 표시하며 재생 버튼은 비활성화한다.
+
+플레이어는 재생·일시정지·탐색과 현재 `video_time_ms`를 제공한다. `object-fit: contain`으로 표시한 video element의 위치와 원본 영상 비율을 이용해 letterbox를 제외한 실제 content 영역을 `VideoLayout`으로 계산한다. `FrameContext`는 `session_id`, frame 식별자, 단조 증가 캡처 시각, `video_id`, 캡처 순간의 `video_time_ms`, `playback_epoch`과 layout을 한 번에 복사해 고정한다. 현재 화면에는 PR 2 연결 전 확인용 context preview만 표시한다.
+
+이 PR에서는 웹캠 권한, `FrameSource`, 카메라 frame 읽기, `FakeRemoteVisionClient`와 원격 전송을 구현하지 않는다. 해당 경계는 D3 PR 2에서 연결한다.
+
 ## 책임
 
 - S01 대기 화면부터 S04 분석 결과 화면까지의 상태 전이를 관리한다.

@@ -796,6 +796,187 @@
   text-align: center;
 }
 
+.lookbook-screen {
+  color: var(--white);
+  background: #070707;
+}
+
+.lookbook-screen .store-header--overlay {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: #070707;
+}
+
+.lookbook-stage {
+  position: relative;
+  height: calc(100svh - 112px);
+  min-height: 560px;
+  overflow: hidden;
+  isolation: isolate;
+  background: #050505;
+}
+
+.lookbook-video,
+.lookbook-stage__shade {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.lookbook-video {
+  object-fit: contain;
+  object-position: center;
+  background: #050505;
+}
+
+.lookbook-stage__shade {
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.48), transparent 30%),
+    linear-gradient(0deg, rgba(0, 0, 0, 0.82), transparent 44%);
+}
+
+.lookbook-stage__heading {
+  position: absolute;
+  z-index: 2;
+  top: clamp(1.5rem, 4vh, 3.5rem);
+  left: clamp(1.25rem, 3.6vw, 4rem);
+}
+
+.lookbook-stage__heading h1 {
+  margin: 0.55rem 0 0.75rem;
+  font-size: clamp(1.8rem, 3.4vw, 4.2rem);
+  font-weight: 450;
+  line-height: 1.08;
+  letter-spacing: -0.055em;
+}
+
+.lookbook-stage__heading > span {
+  font-size: 0.58rem;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
+.lookbook-media-message {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  min-width: min(420px, calc(100% - 2.5rem));
+  padding: 1.25rem 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  flex-direction: column;
+  gap: 0.45rem;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.68);
+  backdrop-filter: blur(12px);
+  transform: translate(-50%, -50%);
+}
+
+.lookbook-media-message strong {
+  font-size: 0.92rem;
+}
+
+.lookbook-media-message span {
+  font-size: 0.65rem;
+  opacity: 0.68;
+}
+
+.lookbook-controls {
+  position: absolute;
+  z-index: 3;
+  right: clamp(1.25rem, 3.6vw, 4rem);
+  bottom: clamp(1.25rem, 3.5vh, 3rem);
+  left: clamp(1.25rem, 3.6vw, 4rem);
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr) 84px;
+  align-items: end;
+  gap: clamp(1rem, 2.5vw, 2.5rem);
+}
+
+.lookbook-play-button,
+.lookbook-exit-button {
+  min-height: 48px;
+  padding: 0;
+  color: var(--white);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  border: 0;
+  cursor: pointer;
+  background: transparent;
+}
+
+.lookbook-play-button {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  text-align: left;
+}
+
+.lookbook-play-button > span {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  padding-left: 0.1em;
+  color: var(--black);
+  border-radius: 50%;
+  background: var(--white);
+}
+
+.lookbook-play-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.lookbook-exit-button {
+  text-align: right;
+  text-decoration: underline;
+  text-underline-offset: 0.28rem;
+}
+
+.lookbook-timeline {
+  display: grid;
+  min-width: 0;
+  gap: 0.65rem;
+}
+
+.lookbook-timeline__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.58rem;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+}
+
+.lookbook-timeline input[type="range"] {
+  width: 100%;
+  height: 2px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--white);
+}
+
+.lookbook-timeline input[type="range"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.lookbook-layout-status {
+  overflow: hidden;
+  font-size: 0.52rem;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: 0.62;
+}
+
 .placeholder-screen {
   display: grid;
   place-content: center;
@@ -960,6 +1141,23 @@
   .calibration-stage {
     min-height: 55vh;
   }
+
+  .lookbook-stage {
+    height: calc(100svh - 112px);
+  }
+
+  .lookbook-controls {
+    grid-template-columns: 1fr auto;
+  }
+
+  .lookbook-timeline {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .lookbook-timeline__meta span:last-child {
+    display: none;
+  }
 }
 
 @media (max-width: 560px) {
@@ -975,6 +1173,19 @@
 
   .wordmark {
     font-size: 2rem;
+  }
+
+  .lookbook-stage {
+    height: calc(100svh - 104px);
+    min-height: 520px;
+  }
+
+  .lookbook-stage__heading h1 {
+    font-size: 1.8rem;
+  }
+
+  .lookbook-controls {
+    bottom: 1.25rem;
   }
 
   .screensaver__copy {

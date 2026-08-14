@@ -33,10 +33,12 @@ import {
   MockApiClient,
 } from "./clients/api/MockApiClient.ts";
 import { MockVisionClient } from "./clients/vision/MockVisionClient.ts";
+import { LookbookPlayer } from "./components/LookbookPlayer.tsx";
 import "./App.css";
 
 const apiClient = new MockApiClient({ sessionStartDelayMs: 450 });
 const visionClient = new MockVisionClient();
+const temporaryLookbookVideoUrl = import.meta.env.VITE_LOOKBOOK_VIDEO_URL?.trim() ?? "";
 
 type ConsentIssue = "idle-timeout" | "session-timeout" | "session-error";
 
@@ -90,6 +92,13 @@ const screensaverImages = [
   screensaverImageTwo,
   screensaverImageThree,
 ];
+
+function getLookbookPoster(category: ProductCategory | null): string {
+  if (category === "가방") return bagImage;
+  if (category === "의류") return apparelImage;
+  if (category === "액세서리") return accessoryImage;
+  return screensaverImageOne;
+}
 
 function ArrowIcon() {
   return (
@@ -937,9 +946,24 @@ function App() {
   }
 
   if (screen === "lookbook") {
+    if (!session || !manifest) {
+      return (
+        <ErrorPlaceholder
+          message="룩북 재생에 필요한 Mock 세션 정보를 찾지 못했습니다."
+          onHome={restart}
+        />
+      );
+    }
+
     return (
-      <TimedPlaceholder
-        message="Mock 룩북을 재생하고 있습니다."
+      <LookbookPlayer
+        key={manifest.video_id}
+        categoryLabel={selectedCategory ?? "전체 컬렉션"}
+        chrome={<StoreChrome onHome={restart} step="03" overlay />}
+        posterUrl={getLookbookPoster(selectedCategory)}
+        sessionId={session.session_id}
+        videoId={manifest.video_id}
+        videoUrl={temporaryLookbookVideoUrl}
         onComplete={completeLookbook}
         onHome={restart}
       />
