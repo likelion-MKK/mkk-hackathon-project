@@ -75,3 +75,29 @@ test("앞 작업이 실패해도 종료 작업을 이어서 실행한다", async
 
   assert.deepEqual(executionOrder, ["failed-start", "cleanup"]);
 });
+
+test("재시도 후 이전 cleanup 실패가 새 flow 오류를 덮지 않는다", async () => {
+  const controller = new AsyncFlowController();
+  const cleanupGate = createDeferred();
+  const previousGeneration = controller.captureGeneration();
+  let flowError: string | null = null;
+
+  const previousCleanup = controller
+    .runSerialized(async () => {
+      await cleanupGate.promise;
+      throw new Error("previous_cleanup_failed");
+    })
+    .catch(() => {
+      if (controller.isCurrent(previousGeneration)) {
+        flowError = "이전 cleanup 오류";
+      }
+    });
+
+  const retryGeneration = controller.invalidateCurrentFlow();
+  cleanupGate.resolve();
+  await previousCleanup;
+
+  assert.equal(controller.isCurrent(previousGeneration), false);
+  assert.equal(controller.isCurrent(retryGeneration), true);
+  assert.equal(flowError, null);
+});

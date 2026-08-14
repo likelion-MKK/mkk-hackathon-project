@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import {
+  runSessionStartWithTimeout,
+  SessionStartTimeoutError,
+} from "../../app/consent-flow.ts";
 import type { ProductCategory, ReactionBatch } from "../../app/kiosk-types.ts";
 import {
   MOCK_LOOKBOOK_ID_BY_CATEGORY,
@@ -129,6 +133,12 @@ test("mock API가 선택한 manifest와 reaction batch 중복 상태를 제공�
 
   assert.equal((await client.appendReactionBatch(session.session_id, batch)).status, "accepted");
   assert.equal((await client.appendReactionBatch(session.session_id, batch)).status, "duplicate");
+
+  await client.completeSessionAnalysis(session.session_id);
+  await assert.rejects(
+    client.appendReactionBatch(session.session_id, batch),
+    /Completed mock sessions cannot accept reaction batches/,
+  );
 });
 
 test("mock API가 알 수 없는 세션을 정상 응답으로 꾸미지 않는다", async () => {
@@ -152,4 +162,48 @@ test("mock API가 알 수 없는 lookbook으로 세션을 만들지 않는다", 
     /Unknown mock lookbook/,
   );
   await assert.rejects(client.getLookbookManifest("missing-lookbook"), /Unknown mock lookbook/);
+});
+
+test("mock API의 세션 시작 지연값을 안전하게 검증한다", () => {
+  assert.throws(
+    () => new MockApiClient({ sessionStartDelayMs: -1 }),
+    /non-negative finite number/,
+  );
+});
+
+test("화면 세션이 끝나면 Mock 추천 상태와 익명 세션 metadata를 폐기한다", async () => {
+  const client = new MockApiClient();
+  const session = await client.createSession({
+    kiosk_id: "kiosk-d2-retention",
+    lookbook_id: MOCK_LOOKBOOK_ID_BY_CATEGORY.가방,
+    consent_version: "consent-v2",
+  });
+
+  client.discardSession(session.session_id);
+
+  await assert.rejects(
+    client.getSessionRecommendation(session.session_id),
+    /Unknown mock session/,
+  );
+});
+
+test("timeout된 Mock 세션은 늦게 생성되지 않고 재시도가 첫 세션을 만든다", async () => {
+  const client = new MockApiClient({ sessionStartDelayMs: 25 });
+  const request = {
+    kiosk_id: "kiosk-d2-timeout",
+    lookbook_id: MOCK_LOOKBOOK_ID_BY_CATEGORY.가방,
+    consent_version: "consent-v1",
+  };
+
+  await assert.rejects(
+    runSessionStartWithTimeout(
+      (signal) => client.createSession(request, { signal }),
+      { timeoutMs: 5 },
+    ),
+    SessionStartTimeoutError,
+  );
+  await new Promise((resolve) => globalThis.setTimeout(resolve, 30));
+
+  const retrySession = await client.createSession(request);
+  assert.equal(retrySession.session_id, "session-d1-mock-001");
 });

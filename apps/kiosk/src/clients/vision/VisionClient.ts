@@ -10,9 +10,15 @@ import type {
 export type Unsubscribe = () => void;
 export type GazeSampleListener = (sample: GazeSample) => void;
 export type ExpressionSampleListener = (sample: ExpressionSample) => void;
+export type VisionOperationOptions = {
+  signal?: AbortSignal;
+};
 
 export interface VisionClient {
-  startSession(context: VisionSessionContext): Promise<void>;
+  startSession(
+    context: VisionSessionContext,
+    options?: VisionOperationOptions,
+  ): Promise<void>;
   startCalibration(pattern: CalibrationPattern): Promise<CalibrationResult>;
   startInference(): Promise<void>;
   onGazeSample(listener: GazeSampleListener): Unsubscribe;

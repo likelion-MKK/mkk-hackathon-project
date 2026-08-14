@@ -7,6 +7,13 @@ import screensaverImageTwo from "./assets/categories/screensaver-02.jpg";
 import screensaverImageThree from "./assets/categories/screensaver-03.jpg";
 import { AsyncFlowController } from "./app/async-flow-controller.ts";
 import {
+  CONSENT_IDLE_TIMEOUT_MS,
+  CONSENT_VERSION,
+  getConsentSecondsRemaining,
+  runSessionStartWithTimeout,
+  SessionStartTimeoutError,
+} from "./app/consent-flow.ts";
+import {
   INITIAL_KIOSK_SCREEN,
   transitionKioskScreen,
   type KioskEvent,
@@ -28,8 +35,10 @@ import {
 import { MockVisionClient } from "./clients/vision/MockVisionClient.ts";
 import "./App.css";
 
-const apiClient = new MockApiClient();
+const apiClient = new MockApiClient({ sessionStartDelayMs: 450 });
 const visionClient = new MockVisionClient();
+
+type ConsentIssue = "idle-timeout" | "session-timeout" | "session-error";
 
 const calibrationPattern = {
   pattern_id: "five-point-v1",
@@ -297,14 +306,80 @@ function ConsentMedia({ category }: { category: ProductCategory | null }) {
 function CameraConsent({
   category,
   onBack,
+  onCancel,
   onContinue,
   onHome,
+  onRetry,
+  onTimeout,
+  isStarting,
+  issue,
 }: {
   category: ProductCategory | null;
   onBack: () => void;
+  onCancel: () => void;
   onContinue: () => void;
   onHome: () => void;
+  onRetry: () => void;
+  onTimeout: () => void;
+  isStarting: boolean;
+  issue: ConsentIssue | null;
 }) {
+  const [secondsRemaining, setSecondsRemaining] = useState(
+    getConsentSecondsRemaining(CONSENT_IDLE_TIMEOUT_MS, 0),
+  );
+
+  useEffect(() => {
+    if (isStarting || issue) return;
+
+    const deadlineMs = Date.now() + CONSENT_IDLE_TIMEOUT_MS;
+    let didTimeout = false;
+    const resetTimer = window.setTimeout(() => {
+      setSecondsRemaining(getConsentSecondsRemaining(deadlineMs, Date.now()));
+    }, 0);
+
+    const countdownTimer = window.setInterval(() => {
+      const nextSeconds = getConsentSecondsRemaining(deadlineMs, Date.now());
+      setSecondsRemaining(nextSeconds);
+
+      if (nextSeconds === 0 && !didTimeout) {
+        didTimeout = true;
+        window.clearInterval(countdownTimer);
+        onTimeout();
+      }
+    }, 250);
+
+    return () => {
+      window.clearTimeout(resetTimer);
+      window.clearInterval(countdownTimer);
+    };
+  }, [isStarting, issue, onTimeout]);
+
+  const issueContent = issue
+    ? {
+        "idle-timeout": {
+          eyebrow: "SESSION TIMEOUT",
+          title: "입력 시간이 지났어요",
+          description:
+            "동의가 확인되지 않아 카메라와 Mock 세션을 시작하지 않았습니다.",
+          retryLabel: "내용 다시 확인하기",
+        },
+        "session-timeout": {
+          eyebrow: "MOCK API TIMEOUT",
+          title: "세션 준비가 지연되고 있어요",
+          description:
+            "카메라는 시작되지 않았습니다. 잠시 후 Mock 세션 연결을 다시 시도해주세요.",
+          retryLabel: "다시 시도",
+        },
+        "session-error": {
+          eyebrow: "MOCK API ERROR",
+          title: "세션을 준비하지 못했어요",
+          description:
+            "카메라는 시작되지 않았습니다. Mock API 상태를 확인한 뒤 다시 시도해주세요.",
+          retryLabel: "다시 시도",
+        },
+      }[issue]
+    : null;
+
   return (
     <main className="store-screen consent-screen screen-enter">
       <StoreChrome onHome={onHome} step="02" />
@@ -324,34 +399,115 @@ function CameraConsent({
           </h1>
           <p className="consent-page__lead">
             <strong>{category ?? "선택한 카테고리"}</strong> 룩북을 감상하는 동안
-            시선과 표정 관련 신호를 분석해 관심 있는 스타일을 찾습니다.
+            시선과 표정 관련 신호를 분석해 관심 있는 스타일을 찾습니다. 아래 내용에
+            동의하기 전에는 카메라와 세션이 시작되지 않습니다.
           </p>
 
           <dl className="privacy-list">
             <div>
               <dt>01</dt>
               <dd>
-                <strong>원본 영상을 저장하지 않습니다</strong>
-                <span>카메라 프레임은 기기 안에서만 일시적으로 처리됩니다.</span>
+                <strong>카메라 영상만 사용합니다</strong>
+                <span>동의 후 룩북 재생 중에만 사용하며 음성은 수집·전송하지 않습니다.</span>
               </dd>
             </div>
             <div>
               <dt>02</dt>
               <dd>
-                <strong>분석된 신호만 사용합니다</strong>
-                <span>현재 세션의 추천을 위한 파생 신호만 처리합니다.</span>
+                <strong>원격 분석 서버로 일시 전송합니다</strong>
+                <span>
+                  프레임은 암호화된 연결로 별도 Vision 서버에 전송되어 시선·표정 분석에만
+                  사용됩니다.
+                </span>
+              </dd>
+            </div>
+            <div>
+              <dt>03</dt>
+              <dd>
+                <strong>원본 프레임은 저장하지 않습니다</strong>
+                <span>
+                  서버 메모리에서 처리한 뒤 즉시 해제하며 파일·DB·로그·cache에 남기지
+                  않습니다.
+                </span>
+              </dd>
+            </div>
+            <div>
+              <dt>04</dt>
+              <dd>
+                <strong>개별 파생 신호는 저장하지 않습니다</strong>
+                <span>
+                  시선·표정 관련 신호는 현재 세션에서 관심도를 집계하는 데만 사용하고 추천
+                  생성 후 폐기합니다. 추천 결과와 익명 세션 상태는 현재 세션에만 유지합니다.
+                </span>
               </dd>
             </div>
           </dl>
 
+          <div className="consent-meta">
+            <span>D02 MOCK · 현재 단계에서는 실제 카메라를 열지 않습니다.</span>
+            <span role="timer" aria-label={`자동 종료까지 ${secondsRemaining}초`}>
+              AUTO CLOSE · {String(secondsRemaining).padStart(2, "0")}S
+            </span>
+          </div>
+
+          <button
+            className="back-link consent-back"
+            type="button"
+            onClick={onBack}
+            disabled={isStarting || issue !== null}
+          >
+            ← 카테고리 다시 선택
+          </button>
+
           <div className="consent-actions">
-            <button className="store-button store-button--outline" type="button" onClick={onBack}>
-              동의하지 않음
+            <button
+              className="store-button store-button--outline"
+              type="button"
+              onClick={onCancel}
+              disabled={isStarting || issue !== null}
+            >
+              동의하지 않고 종료
             </button>
-            <button className="store-button store-button--solid" type="button" onClick={onContinue}>
-              동의하고 계속 <ArrowIcon />
+            <button
+              className="store-button store-button--solid"
+              type="button"
+              onClick={onContinue}
+              disabled={isStarting || issue !== null}
+              aria-busy={isStarting}
+            >
+              {isStarting ? "Mock 세션 준비 중..." : "동의하고 계속"}
+              {!isStarting && <ArrowIcon />}
             </button>
           </div>
+
+          {issueContent && (
+            <section
+              className="consent-feedback"
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="consent-feedback-title"
+            >
+              <p className="section-label">{issueContent.eyebrow}</p>
+              <h2 id="consent-feedback-title">{issueContent.title}</h2>
+              <p>{issueContent.description}</p>
+              <div className="consent-feedback__actions">
+                <button
+                  className="store-button store-button--outline"
+                  type="button"
+                  onClick={onCancel}
+                >
+                  처음 화면으로
+                </button>
+                <button
+                  className="store-button store-button--solid"
+                  type="button"
+                  onClick={onRetry}
+                >
+                  {issueContent.retryLabel}
+                </button>
+              </div>
+            </section>
+          )}
         </div>
       </section>
     </main>
@@ -477,10 +633,17 @@ function App() {
   const [manifest, setManifest] = useState<LookbookManifest | null>(null);
   const [recommendation, setRecommendation] = useState<RecommendationResult | null>(null);
   const [flowError, setFlowError] = useState<string | null>(null);
+  const [consentIssue, setConsentIssue] = useState<ConsentIssue | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [flowController] = useState(() => new AsyncFlowController());
   const latestGazeSample = useRef<GazeSample | null>(null);
   const latestExpressionSample = useRef<ExpressionSample | null>(null);
+  const sessionStartAbortController = useRef<AbortController | null>(null);
+
+  const abortSessionStart = useCallback(() => {
+    sessionStartAbortController.current?.abort();
+    sessionStartAbortController.current = null;
+  }, []);
 
   const send = useCallback((event: KioskEvent) => {
     setScreen((currentScreen) => transitionKioskScreen(currentScreen, event));
@@ -498,17 +661,21 @@ function App() {
       removeGazeListener();
       removeExpressionListener();
       flowController.invalidateCurrentFlow();
+      abortSessionStart();
       void flowController.runSerialized(() => visionClient.stopSession());
     };
-  }, [flowController]);
+  }, [abortSessionStart, flowController]);
 
   const selectCategory = (category: ProductCategory) => {
     setSelectedCategory(category);
+    setConsentIssue(null);
     send("SELECT_CATEGORY");
   };
 
   const restart = useCallback(async () => {
     const generation = flowController.invalidateCurrentFlow();
+    abortSessionStart();
+    if (session) apiClient.discardSession(session.session_id);
     latestGazeSample.current = null;
     latestExpressionSample.current = null;
     setSelectedCategory(null);
@@ -516,6 +683,7 @@ function App() {
     setManifest(null);
     setRecommendation(null);
     setFlowError(null);
+    setConsentIssue(null);
     setIsStarting(false);
     send("RESTART");
 
@@ -526,44 +694,113 @@ function App() {
         setFlowError("이전 Vision 세션을 종료하지 못했습니다.");
       }
     }
-  }, [flowController, send]);
+  }, [abortSessionStart, flowController, send, session]);
+
+  const cancelConsent = useCallback(async () => {
+    const generation = flowController.invalidateCurrentFlow();
+    abortSessionStart();
+    latestGazeSample.current = null;
+    latestExpressionSample.current = null;
+    setSelectedCategory(null);
+    setSession(null);
+    setManifest(null);
+    setRecommendation(null);
+    setFlowError(null);
+    setConsentIssue(null);
+    setIsStarting(false);
+    send("CANCEL");
+
+    try {
+      await flowController.runSerialized(() => visionClient.stopSession());
+    } catch {
+      if (flowController.isCurrent(generation)) {
+        setFlowError("이전 Vision 세션을 종료하지 못했습니다.");
+      }
+    }
+  }, [abortSessionStart, flowController, send]);
+
+  const handleConsentTimeout = useCallback(() => {
+    const generation = flowController.invalidateCurrentFlow();
+    abortSessionStart();
+    latestGazeSample.current = null;
+    latestExpressionSample.current = null;
+    setIsStarting(false);
+    setConsentIssue("idle-timeout");
+
+    void flowController.runSerialized(() => visionClient.stopSession()).catch(() => {
+      if (flowController.isCurrent(generation)) {
+        setFlowError("시간 초과 후 Vision 세션을 정리하지 못했습니다.");
+      }
+    });
+  }, [abortSessionStart, flowController]);
 
   const beginSession = async () => {
-    if (!selectedCategory || isStarting) return;
+    if (!selectedCategory || isStarting || sessionStartAbortController.current) return;
 
-    const generation = flowController.captureGeneration();
+    const generation = flowController.invalidateCurrentFlow();
+    const abortController = new AbortController();
+    sessionStartAbortController.current = abortController;
     setIsStarting(true);
     setFlowError(null);
+    setConsentIssue(null);
 
     try {
       const lookbookId = MOCK_LOOKBOOK_ID_BY_CATEGORY[selectedCategory];
-      const createdSession = await apiClient.createSession({
-        kiosk_id: "mcm-kiosk-d1",
-        lookbook_id: lookbookId,
-        consent_version: "consent-v1",
-      });
-      if (!flowController.isCurrent(generation)) return;
+      const { createdSession, lookbookManifest } = await runSessionStartWithTimeout(
+        async (signal) => {
+          const lookbookManifest = await apiClient.getLookbookManifest(lookbookId, {
+            signal,
+          });
+          signal.throwIfAborted();
 
-      const lookbookManifest = await apiClient.getLookbookManifest(lookbookId);
-      if (!flowController.isCurrent(generation)) return;
+          const createdSession = await apiClient.createSession(
+            {
+              kiosk_id: "mcm-kiosk-d1",
+              lookbook_id: lookbookId,
+              consent_version: CONSENT_VERSION,
+            },
+            { signal },
+          );
+          signal.throwIfAborted();
 
-      await flowController.runSerialized(() =>
-        visionClient.startSession({
-          session_id: createdSession.session_id,
-          video_id: lookbookManifest.video_id,
-        }),
+          await flowController.runSerialized(() =>
+            visionClient.startSession(
+              {
+                session_id: createdSession.session_id,
+                video_id: lookbookManifest.video_id,
+              },
+              { signal },
+            ),
+          );
+          signal.throwIfAborted();
+
+          return { createdSession, lookbookManifest };
+        },
+        { signal: abortController.signal },
       );
-
       if (!flowController.isCurrent(generation)) return;
 
       setSession(createdSession);
       setManifest(lookbookManifest);
       send("AGREE");
-    } catch {
+    } catch (error: unknown) {
       if (flowController.isCurrent(generation)) {
-        setFlowError("Mock 세션을 시작하지 못했습니다.");
+        setConsentIssue(
+          error instanceof SessionStartTimeoutError
+            ? "session-timeout"
+            : "session-error",
+        );
+
+        void flowController.runSerialized(() => visionClient.stopSession()).catch(() => {
+          if (flowController.isCurrent(generation)) {
+            setFlowError("세션 시작 실패 후 Vision 세션을 정리하지 못했습니다.");
+          }
+        });
       }
     } finally {
+      if (sessionStartAbortController.current === abortController) {
+        sessionStartAbortController.current = null;
+      }
       if (flowController.isCurrent(generation)) setIsStarting(false);
     }
   };
@@ -623,6 +860,11 @@ function App() {
       if (flowController.isCurrent(generation)) {
         setFlowError("Mock 룩북 분석을 완료하지 못했습니다.");
       }
+    } finally {
+      if (flowController.isCurrent(generation)) {
+        latestGazeSample.current = null;
+        latestExpressionSample.current = null;
+      }
     }
   }, [flowController, manifest, send, session]);
 
@@ -672,10 +914,20 @@ function App() {
         category={selectedCategory}
         onBack={() => {
           setSelectedCategory(null);
+          setConsentIssue(null);
           send("BACK");
         }}
+        onCancel={() => void cancelConsent()}
         onContinue={() => void beginSession()}
         onHome={restart}
+        onRetry={() => {
+          const shouldRestartSession = consentIssue !== "idle-timeout";
+          setConsentIssue(null);
+          if (shouldRestartSession) void beginSession();
+        }}
+        onTimeout={handleConsentTimeout}
+        isStarting={isStarting}
+        issue={consentIssue}
       />
     );
   }
