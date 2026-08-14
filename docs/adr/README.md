@@ -11,3 +11,4 @@
 | ADR | 상태 | 결정 범위 |
 | --- | --- | --- |
 | [`ADR-0001 원격 Eye·Face 추론 서버 전환`](0001-remote-vision-inference.md) | Proposed | Kiosk 카메라 frame의 일시적 WSS 전송, 서버 추론, 개인정보·장애·배포 Gate |
+| [`ADR-0003 Face 모델·taxonomy·fallback 선정`](0003-face-model-taxonomy-fallback.md) | Proposed | MediaPipe 1차 선택안, 관찰 신호 taxonomy, fail-closed fallback과 D6 경계 |

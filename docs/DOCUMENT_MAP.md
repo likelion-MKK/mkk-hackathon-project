@@ -31,6 +31,7 @@ README.md
 | [`CONTRIBUTING.md`](../CONTRIBUTING.md) | branch·PR·병합 | 어떤 순서와 크기로 PR을 만드는가? |
 | [`docs/adr/README.md`](adr/README.md) | 기술·모델 결정을 바꿀 때 | 결정 근거와 대안을 어디에 남기는가? |
 | [`ADR-0001 원격 Eye·Face 추론 서버 전환`](adr/0001-remote-vision-inference.md) | AI 실행 위치·실시간 frame transport·서버 배포 작업 | Kiosk와 서버의 책임, 비저장 경계, 장애·승인 Gate는 무엇인가? |
+| [`ADR-0003 Face 모델·taxonomy·fallback 선정`](adr/0003-face-model-taxonomy-fallback.md) | Face Selected Adapter·taxonomy 작업 | 어떤 모델과 신호 의미·실패 정책을 D6에서 따라야 하는가? |
 | [`docs/benchmarks/README.md`](benchmarks/README.md) | Eye·Face 후보 평가 | 비교 결과와 재현 방법을 어디에 남기는가? |
 | [`Face D4 후보 benchmark`](benchmarks/face/README.md) | Face 후보 1차 성능·label 비교 | 동일 synthetic workload의 실행 방법과 D4 결과는 무엇인가? |
 | [`Vision 추론 서버 선정·비용 결정 계획`](benchmarks/VISION_SERVER_SELECTION_PLAN.md) | 목표 서버·region·CPU/GPU·비용 결정 | workload와 모델을 고정한 뒤 어떤 Gate 순서로 cloud와 instance를 선택하는가? |
