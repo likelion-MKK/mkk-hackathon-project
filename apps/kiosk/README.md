@@ -56,13 +56,21 @@ MVP 파생 데이터 정책은 선택지 C를 사용한다. 개별 `GazeSample`,
 
 실제 API·Vision client 연결 전에는 Backend 세션 취소 API, 세션 생성 멱등성 키와 생성 후 미사용 세션의 TTL 정책을 계약으로 확정해야 한다. Kiosk가 `session_id`를 받은 뒤 Vision 시작이 실패하면 취소 API를 호출하고, 응답을 받지 못한 생성 요청은 Backend TTL로 정리할 수 있어야 한다. 이 계약이 준비되기 전 D2 세션 시작 흐름은 Mock 전용이다.
 
-## D3 PR 1 영상 재생과 FrameContext
+## D3 커밋 1 영상 재생과 FrameContext
 
 S03의 임시 룩북 영상은 `VITE_LOOKBOOK_VIDEO_URL`로 연결한다. 로컬 파일을 사용할 때는 파일을 `public/` 아래에 두고 `/파일명.mp4`처럼 설정한다. 영상 URL이 비어 있거나 로드에 실패하면 카테고리 포스터와 연결 안내를 표시하며 재생 버튼은 비활성화한다.
 
 플레이어는 재생·일시정지·탐색과 현재 `video_time_ms`를 제공한다. `object-fit: contain`으로 표시한 video element의 위치와 원본 영상 비율을 이용해 letterbox를 제외한 실제 content 영역을 `VideoLayout`으로 계산한다. `FrameContext`는 `session_id`, frame 식별자, 단조 증가 캡처 시각, `video_id`, 캡처 순간의 `video_time_ms`, `playback_epoch`과 layout을 한 번에 복사해 고정한다. 현재 화면에는 PR 2 연결 전 확인용 context preview만 표시한다.
 
-이 PR에서는 웹캠 권한, `FrameSource`, 카메라 frame 읽기, `FakeRemoteVisionClient`와 원격 전송을 구현하지 않는다. 해당 경계는 D3 PR 2에서 연결한다.
+첫 번째 커밋에서는 웹캠 권한, `FrameSource`, 카메라 frame 읽기와 `FakeRemoteVisionClient`를 구현하지 않는다. 해당 경계는 아래 두 번째 커밋에서 연결한다.
+
+## D3 커밋 2 웹캠과 FrameSource
+
+`동의하고 계속`을 누른 뒤에만 브라우저 카메라 권한을 요청한다. audio는 항상 `false`이며 video는 1280×720, 30fps를 선호값으로 요청하되 실제 장치 설정과 같다고 가정하지 않는다. 권한 거부와 장치·시작 실패는 구분해 안내하고 다시 시도할 수 있다.
+
+한 세션은 단일 `FrameSource`만 사용한다. 룩북 재생 중 D3 fake 확인용 250ms 간격으로 최신 camera frame을 읽고, 같은 순간의 `FrameContext`와 함께 `FakeRemoteVisionClient`에 전달한다. 실제 sampling FPS는 D5 성능 검증 후 확정한다. 이전 frame 처리 중에는 새 frame을 쌓지 않고 drop한다. fake client는 네트워크를 열거나 frame을 보관하지 않으며 session·video ID 경계만 확인한다. 임시 `ImageBitmap`은 전달 성공·실패와 관계없이 `FrameSource`가 즉시 `close()`한다.
+
+처음 화면 이동, 동의 취소·timeout, 세션 시작 실패, 보정 실패, 영상 로드 실패, 룩북 종료와 앱 unmount에서 camera track과 video 참조를 해제한다. 실제 WSS, binary encoding, AI 서버와 Eye·Face 모델 연결은 포함하지 않는다.
 
 ## 책임
 

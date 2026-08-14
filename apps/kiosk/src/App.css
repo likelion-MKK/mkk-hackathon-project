@@ -860,6 +860,31 @@
   opacity: 0.72;
 }
 
+.lookbook-camera-status {
+  position: absolute;
+  z-index: 3;
+  top: clamp(1.5rem, 4vh, 3.5rem);
+  right: clamp(1.25rem, 3.6vw, 4rem);
+  padding: 0.65rem 0.85rem;
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(10px);
+}
+
+.lookbook-camera-status.is-ready::before {
+  display: inline-block;
+  width: 0.42rem;
+  height: 0.42rem;
+  margin-right: 0.48rem;
+  border-radius: 50%;
+  content: "";
+  background: #d6ff65;
+  box-shadow: 0 0 0 4px rgba(214, 255, 101, 0.13);
+}
+
 .lookbook-media-message {
   position: absolute;
   z-index: 3;
@@ -884,6 +909,18 @@
 .lookbook-media-message span {
   font-size: 0.65rem;
   opacity: 0.68;
+}
+
+.lookbook-camera-retry {
+  min-height: 42px;
+  margin-top: 0.45rem;
+  padding: 0 1.25rem;
+  color: var(--black);
+  font-size: 0.68rem;
+  font-weight: 700;
+  border: 0;
+  cursor: pointer;
+  background: var(--white);
 }
 
 .lookbook-controls {
@@ -1182,6 +1219,12 @@
 
   .lookbook-stage__heading h1 {
     font-size: 1.8rem;
+  }
+
+  .lookbook-camera-status {
+    top: auto;
+    right: 1.25rem;
+    bottom: 7.5rem;
   }
 
   .lookbook-controls {

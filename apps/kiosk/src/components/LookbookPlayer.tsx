@@ -13,16 +13,28 @@ import {
 } from "../app/video-context.ts";
 
 type MediaState = "missing" | "loading" | "ready" | "error";
+export type CameraDisplayState =
+  | "idle"
+  | "requesting"
+  | "ready"
+  | "denied"
+  | "error";
+
+const D3_FAKE_FRAME_SAMPLE_INTERVAL_MS = 250;
 
 type LookbookPlayerProps = {
+  cameraState: CameraDisplayState;
   categoryLabel: string;
   chrome: ReactNode;
   posterUrl: string;
   sessionId: string;
   videoId: string;
   videoUrl: string;
+  onCameraRetry: () => Promise<void>;
   onComplete: () => Promise<void>;
+  onFrameCapture: (context: FrameContext) => Promise<void>;
   onHome: () => void;
+  onPlaybackUnavailable: () => void;
 };
 
 function formatMediaTime(timeMs: number): string {
@@ -44,17 +56,22 @@ function toPixelRect(rect: DOMRect): PixelRect {
 }
 
 export function LookbookPlayer({
+  cameraState,
   categoryLabel,
   chrome,
   posterUrl,
   sessionId,
   videoId,
   videoUrl,
+  onCameraRetry,
   onComplete,
+  onFrameCapture,
   onHome,
+  onPlaybackUnavailable,
 }: LookbookPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const playbackEpochRef = useRef(0);
+  const frameSequenceRef = useRef(0);
   const didCompleteRef = useRef(false);
   const [mediaState, setMediaState] = useState<MediaState>(
     videoUrl ? "loading" : "missing",
@@ -70,10 +87,10 @@ export function LookbookPlayer({
     setPlaybackEpoch(playbackEpochRef.current);
   };
 
-  const updateContextPreview = useCallback(() => {
+  const readFrameContext = useCallback((sequence: number, frameId: string) => {
     const video = videoRef.current;
 
-    if (!video || video.videoWidth <= 0 || video.videoHeight <= 0) return;
+    if (!video || video.videoWidth <= 0 || video.videoHeight <= 0) return null;
 
     const layout = calculateContainedVideoLayout({
       viewport_width_px: document.documentElement.clientWidth,
@@ -82,20 +99,25 @@ export function LookbookPlayer({
       source_height_px: video.videoHeight,
       element_rect: toPixelRect(video.getBoundingClientRect()),
     });
-    const context = createFrameContext({
+    return createFrameContext({
       session_id: sessionId,
-      sequence: 0,
-      frame_id: "frame-context-preview",
+      sequence,
+      frame_id: frameId,
       captured_at_mono_ms: performance.now(),
       video_id: videoId,
       video_time_seconds: video.currentTime,
       playback_epoch: playbackEpochRef.current,
       layout,
     });
+  }, [sessionId, videoId]);
+
+  const updateContextPreview = useCallback(() => {
+    const context = readFrameContext(0, "frame-context-preview");
+    if (!context) return;
 
     setCurrentTimeMs(context.video_time_ms);
     setContextPreview(context);
-  }, [sessionId, videoId]);
+  }, [readFrameContext]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -110,6 +132,46 @@ export function LookbookPlayer({
       window.removeEventListener("resize", updateContextPreview);
     };
   }, [updateContextPreview]);
+
+  useEffect(() => {
+    if (videoUrl) return;
+    onPlaybackUnavailable();
+  }, [onPlaybackUnavailable, videoUrl]);
+
+  useEffect(() => {
+    if (cameraState === "ready") return;
+    videoRef.current?.pause();
+  }, [cameraState]);
+
+  useEffect(() => {
+    if (mediaState !== "ready" || cameraState !== "ready" || !isPlaying) return;
+
+    let isActive = true;
+    const captureCurrentFrame = () => {
+      if (!isActive) return;
+
+      const sequence = frameSequenceRef.current;
+      const context = readFrameContext(
+        sequence,
+        `frame-${String(sequence).padStart(8, "0")}`,
+      );
+      if (!context) return;
+
+      frameSequenceRef.current += 1;
+      void onFrameCapture(context).catch(() => undefined);
+    };
+
+    captureCurrentFrame();
+    const captureTimer = window.setInterval(
+      captureCurrentFrame,
+      D3_FAKE_FRAME_SAMPLE_INTERVAL_MS,
+    );
+
+    return () => {
+      isActive = false;
+      window.clearInterval(captureTimer);
+    };
+  }, [cameraState, isPlaying, mediaState, onFrameCapture, readFrameContext]);
 
   const handleLoadedMetadata = () => {
     const video = videoRef.current;
@@ -131,7 +193,7 @@ export function LookbookPlayer({
 
   const togglePlayback = async () => {
     const video = videoRef.current;
-    if (!video || mediaState !== "ready") return;
+    if (!video || mediaState !== "ready" || cameraState !== "ready") return;
 
     if (!video.paused) {
       video.pause();
@@ -148,7 +210,15 @@ export function LookbookPlayer({
     } catch {
       setMediaState("error");
       setIsPlaying(false);
+      onPlaybackUnavailable();
     }
+  };
+
+  const handleMediaError = () => {
+    videoRef.current?.pause();
+    setMediaState("error");
+    setIsPlaying(false);
+    onPlaybackUnavailable();
   };
 
   const handleEnded = () => {
@@ -188,7 +258,7 @@ export function LookbookPlayer({
           onPlay={() => setIsPlaying(true)}
           onPause={() => setIsPlaying(false)}
           onEnded={handleEnded}
-          onError={() => setMediaState("error")}
+          onError={handleMediaError}
         />
 
         <div className="lookbook-stage__shade" aria-hidden="true" />
@@ -199,10 +269,40 @@ export function LookbookPlayer({
           <span>{videoId}</span>
         </div>
 
-        {mediaMessage && (
+        <span className={`lookbook-camera-status is-${cameraState}`} role="status">
+          {cameraState === "ready"
+            ? "CAMERA ACTIVE · LOCAL FAKE"
+            : cameraState === "requesting"
+              ? "CAMERA CONNECTING"
+              : "CAMERA OFF"}
+        </span>
+
+        {(mediaMessage || cameraState !== "ready") && (
           <div className="lookbook-media-message" role="status">
-            <strong>{mediaMessage}</strong>
-            <span>개발 환경의 VITE_LOOKBOOK_VIDEO_URL을 확인해주세요.</span>
+            <strong>
+              {mediaMessage ??
+                (cameraState === "requesting"
+                  ? "카메라 연결을 확인하고 있습니다."
+                  : cameraState === "denied"
+                    ? "카메라 권한이 필요합니다."
+                    : "카메라를 시작하지 못했습니다.")}
+            </strong>
+            <span>
+              {mediaMessage
+                ? "개발 환경의 VITE_LOOKBOOK_VIDEO_URL을 확인해주세요."
+                : "원격 전송 없이 현재 브라우저의 카메라와 fake 경계만 사용합니다."}
+            </span>
+            {!mediaMessage &&
+              cameraState !== "requesting" &&
+              cameraState !== "ready" && (
+                <button
+                  className="lookbook-camera-retry"
+                  type="button"
+                  onClick={() => void onCameraRetry()}
+                >
+                  카메라 다시 연결
+                </button>
+              )}
           </div>
         )}
 
@@ -211,7 +311,7 @@ export function LookbookPlayer({
             className="lookbook-play-button"
             type="button"
             onClick={() => void togglePlayback()}
-            disabled={mediaState !== "ready"}
+            disabled={mediaState !== "ready" || cameraState !== "ready"}
             aria-label={isPlaying ? "룩북 일시정지" : "룩북 재생"}
           >
             <span aria-hidden="true">{isPlaying ? "Ⅱ" : "▶"}</span>
