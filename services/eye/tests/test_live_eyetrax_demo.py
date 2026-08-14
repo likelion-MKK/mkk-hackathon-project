@@ -5,7 +5,10 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
+
+from mcm_eye.adapters.eyetrax import GazeAbObservation
 
 
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "live_eyetrax_demo.py"
@@ -67,6 +70,8 @@ def test_window_initialization_failure_releases_camera_and_adapter(
         requested_width=1280,
         requested_height=720,
         requested_fps=30.0,
+        smoothing="kalman_ema",
+        ema_alpha=0.25,
         windowed=False,
     )
     with pytest.raises(RuntimeError, match="window initialization failed"):
@@ -76,3 +81,108 @@ def test_window_initialization_failure_releases_camera_and_adapter(
     assert adapters[0].dispose_calls == 1
     assert camera.release_calls == 1
     assert len(destroy_calls) == 1
+
+
+def test_ab_metrics_use_same_observation_and_never_emit_coordinates() -> None:
+    collector = demo.AbMetricsCollector(600, 800)
+    for index, offset in enumerate((-0.02, 0.02, -0.01, 0.01)):
+        collector.observe(
+            GazeAbObservation(
+                phase="validation" if index < 2 else "live",
+                captured_at_mono_ms=index * 33.0,
+                target_x_norm=0.5 if index < 2 else None,
+                target_y_norm=0.5 if index < 2 else None,
+                raw_valid=True,
+                raw_reason=None,
+                raw_x_norm=0.5 + offset,
+                raw_y_norm=0.5,
+                stabilized_valid=True,
+                stabilized_reason=None,
+                stabilized_x_norm=0.5 + offset / 2.0,
+                stabilized_y_norm=0.5,
+                raw_aoi_hit=True if index < 2 else None,
+                stabilized_aoi_hit=True if index < 2 else None,
+                inference_latency_ms=2.0,
+                filter_latency_ms=0.2,
+            )
+        )
+
+    summary = collector.summary("kalman_ema")
+    encoded = str(summary)
+    assert summary["selected_mode"] == "kalman_ema"
+    assert summary["raw-v1"]["aoi_hit_ratio"] == 1.0
+    assert summary["gaze-filter-v1"]["aoi_hit_ratio"] == 1.0
+    assert summary["jitter_pairing"] == "adjacent frames where both modes are valid"
+    assert summary["jitter_pair_count"] == 1
+    assert summary["raw-v1"]["jitter_diagonal"]["count"] == 1
+    assert summary["gaze-filter-v1"]["jitter_diagonal"]["count"] == 1
+    assert summary["frame_coordinates_saved"] is False
+    assert "raw_x_norm" not in encoded
+    assert "stabilized_x_norm" not in encoded
+    assert np.isclose(
+        summary["filter_additional_latency_ms"]["p95"],
+        0.2,
+    )
+
+
+def test_parse_args_defaults_to_raw(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "argv", [str(SCRIPT_PATH)])
+    args = demo.parse_args()
+    assert args.smoothing == "raw"
+    assert args.ema_alpha == 0.25
+
+
+def test_ab_jitter_uses_only_identical_valid_frame_pairs() -> None:
+    collector = demo.AbMetricsCollector(100, 100)
+
+    def observe(
+        captured_at_mono_ms: float,
+        raw_x: float,
+        stabilized_x: float | None,
+    ) -> None:
+        collector.observe(
+            GazeAbObservation(
+                phase="live",
+                captured_at_mono_ms=captured_at_mono_ms,
+                target_x_norm=None,
+                target_y_norm=None,
+                raw_valid=True,
+                raw_reason=None,
+                raw_x_norm=raw_x,
+                raw_y_norm=0.5,
+                stabilized_valid=stabilized_x is not None,
+                stabilized_reason=(
+                    None if stabilized_x is not None else "rapid_shift_pending"
+                ),
+                stabilized_x_norm=stabilized_x,
+                stabilized_y_norm=None if stabilized_x is None else 0.5,
+                raw_aoi_hit=None,
+                stabilized_aoi_hit=None,
+                inference_latency_ms=1.0,
+                filter_latency_ms=0.1,
+            )
+        )
+
+    observe(0.0, 0.1, 0.1)
+    observe(33.0, 0.8, None)
+    observe(66.0, 0.8, 0.8)
+    observe(99.0, 0.81, 0.805)
+
+    summary = collector.summary("raw")
+    assert summary["jitter_pair_count"] == 1
+    assert summary["raw-v1"]["jitter_diagonal"]["count"] == 1
+    assert summary["gaze-filter-v1"]["jitter_diagonal"]["count"] == 1
+    assert summary["raw-v1"]["jitter_diagonal"]["p95"] < 0.01
+    assert summary["gaze-filter-v1"]["jitter_diagonal"]["p95"] < 0.01
+
+
+def test_parse_args_rejects_non_pinned_ema_alpha(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [str(SCRIPT_PATH), "--ema-alpha", "0.5"],
+    )
+    with pytest.raises(SystemExit):
+        demo.parse_args()

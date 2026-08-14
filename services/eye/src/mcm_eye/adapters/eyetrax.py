@@ -12,13 +12,14 @@ import math
 import os
 import shutil
 import tempfile
+import time
 import urllib.request
 import uuid
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 import numpy as np
 from numpy.typing import NDArray
@@ -31,6 +32,7 @@ from ..contracts import (
     GazeFrameContext,
     GazeSample,
 )
+from .gaze_stabilizer import GazeStabilizer, StabilizerDecision
 
 BgrFrame = NDArray[np.uint8]
 
@@ -112,6 +114,8 @@ class EyeTraxConfig:
     viewport_width_px: int
     viewport_height_px: int
     face_model_path: Path = DEFAULT_FACE_MODEL_PATH
+    smoothing_mode: Literal["raw", "kalman_ema"] = "raw"
+    ema_alpha: float = 0.25
 
     def __post_init__(self) -> None:
         for name, value in (
@@ -120,7 +124,46 @@ class EyeTraxConfig:
         ):
             if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
                 raise ValueError(f"{name} must be a positive integer")
+        if self.smoothing_mode not in ("raw", "kalman_ema"):
+            raise ValueError("smoothing_mode must be 'raw' or 'kalman_ema'")
+        if (
+            isinstance(self.ema_alpha, bool)
+            or not isinstance(self.ema_alpha, (int, float))
+            or not math.isfinite(float(self.ema_alpha))
+            or float(self.ema_alpha) != 0.25
+        ):
+            raise ValueError("ema_alpha must be fixed at 0.25 for gaze-filter-v1")
         object.__setattr__(self, "face_model_path", Path(self.face_model_path).resolve())
+        object.__setattr__(self, "ema_alpha", float(self.ema_alpha))
+
+
+@dataclass(frozen=True, slots=True)
+class GazeAbObservation:
+    """Ephemeral raw/stabilized values for same-frame summary metrics only."""
+
+    phase: Literal["validation", "live"]
+    captured_at_mono_ms: float
+    target_x_norm: float | None
+    target_y_norm: float | None
+    raw_valid: bool
+    raw_reason: str | None
+    raw_x_norm: float | None
+    raw_y_norm: float | None
+    stabilized_valid: bool
+    stabilized_reason: str | None
+    stabilized_x_norm: float | None
+    stabilized_y_norm: float | None
+    raw_aoi_hit: bool | None
+    stabilized_aoi_hit: bool | None
+    inference_latency_ms: float
+    filter_latency_ms: float
+
+
+GazeAbObservationSink = Callable[[GazeAbObservation], None]
+ValidationAoiEvaluator = Callable[
+    [tuple[float, float], tuple[float, float]],
+    bool,
+]
 
 
 class _RidgeModel(Protocol):
@@ -299,15 +342,8 @@ class EyeTraxAdapter:
     """Single-session EyeTrax Adapter with the fixed hackathon calibration."""
 
     PRODUCER_ID = "eyetrax-eye-adapter"
-    MODEL_REVISION = EYETRAX_SOURCE_REVISION
-
-    _METADATA = AdapterMetadata(
-        adapter_id=PRODUCER_ID,
-        model_id="eyetrax",
-        model_revision=MODEL_REVISION,
-        runtime="python-3.12.10/eyetrax-0.4.0/mediapipe-1.0.0",
-        calibration_supported=True,
-    )
+    MODEL_REVISION = f"{EYETRAX_SOURCE_REVISION}+raw-v1"
+    _SAMPLE_CACHE_LIMIT = 64
 
     def __init__(
         self,
@@ -315,12 +351,25 @@ class EyeTraxAdapter:
         calibration_source: CalibrationFrameSource,
         *,
         estimator_factory: EstimatorFactory | None = None,
+        observation_sink: GazeAbObservationSink | None = None,
+        validation_aoi_evaluator: ValidationAoiEvaluator | None = None,
     ) -> None:
         if not callable(calibration_source):
             raise TypeError("calibration_source must be callable")
         self._config = config
         self._calibration_source = calibration_source
         self._estimator_factory = estimator_factory or _default_estimator_factory
+        self._observation_sink = observation_sink
+        self._validation_aoi_evaluator = validation_aoi_evaluator
+        revision_suffix = (
+            "raw-v1" if config.smoothing_mode == "raw" else "gaze-filter-v1"
+        )
+        self._model_revision = f"{EYETRAX_SOURCE_REVISION}+{revision_suffix}"
+        self._stabilizer = GazeStabilizer(
+            config.viewport_width_px,
+            config.viewport_height_px,
+            ema_alpha=config.ema_alpha,
+        )
         self._estimator: _GazeEstimator | None = None
         self._owned_model_copy: Path | None = None
         self._initialized = False
@@ -328,9 +377,18 @@ class EyeTraxAdapter:
         self._calibrating = False
         self._calibrated = False
         self._calibration_id: str | None = None
+        self._stream_identity: tuple[str, str, int] | None = None
+        self._last_order: tuple[float, int] | None = None
+        self._sample_cache: dict[str, GazeSample] = {}
 
     def metadata(self) -> AdapterMetadata:
-        return self._METADATA
+        return AdapterMetadata(
+            adapter_id=self.PRODUCER_ID,
+            model_id="eyetrax",
+            model_revision=self._model_revision,
+            runtime="python-3.12.10/eyetrax-0.4.0/mediapipe-1.0.0",
+            calibration_supported=True,
+        )
 
     def initialize(self) -> None:
         if self._initialized:
@@ -371,6 +429,7 @@ class EyeTraxAdapter:
         self._warmed = False
         self._calibrated = False
         self._calibration_id = None
+        self._reset_runtime_state()
 
     def warmup(self) -> None:
         self._require_initialized()
@@ -389,6 +448,7 @@ class EyeTraxAdapter:
 
     def calibrate(self, request: CalibrationRequest) -> CalibrationResult:
         self._require_warmed()
+        self._reset_runtime_state()
         self._calibration_id = request.calibration_id
         self._calibrated = False
         self._calibrating = True
@@ -427,17 +487,53 @@ class EyeTraxAdapter:
             raise AdapterStateError("EyeTraxAdapter must be calibrated before inference")
 
         event_id = self._event_id(context)
+        cached = self._sample_cache.get(event_id)
+        if cached is not None:
+            return cached
+
+        stream_identity = (context.session_id, context.video_id, context.playback_epoch)
+        if self._stream_identity != stream_identity:
+            self._reset_runtime_state()
+            self._stream_identity = stream_identity
+
+        order = (context.captured_at_mono_ms, context.sequence)
+        if self._last_order is not None:
+            last_captured_at_ms, last_sequence = self._last_order
+            if (
+                context.captured_at_mono_ms < last_captured_at_ms
+                or context.sequence < last_sequence
+            ):
+                return self._cache_sample(
+                    event_id,
+                    self._invalid_sample(context, event_id, "out_of_order"),
+                )
+        self._last_order = order
+
         if self._calibrating or not self._calibrated:
-            return self._invalid_sample(context, event_id, "gaze_unavailable")
+            return self._cache_sample(
+                event_id,
+                self._invalid_sample(context, event_id, "gaze_unavailable"),
+            )
 
         frame = _validate_bgr_frame(frame_ref)
         estimator = self._require_estimator()
+        inference_started = time.perf_counter_ns()
         try:
             features, blink = estimator.extract_features(frame)
             if features is None:
-                return self._invalid_sample(context, event_id, "no_face")
+                return self._invalid_runtime_sample(
+                    context,
+                    event_id,
+                    "no_face",
+                    inference_started,
+                )
             if blink:
-                return self._invalid_sample(context, event_id, "blink")
+                return self._invalid_runtime_sample(
+                    context,
+                    event_id,
+                    "blink",
+                    inference_started,
+                )
             prediction = estimator.predict(np.asarray([features]))[0]
             normalized, reason = _normalize_prediction(
                 prediction,
@@ -445,18 +541,96 @@ class EyeTraxAdapter:
                 self._config.viewport_height_px,
             )
             if normalized is None:
-                return self._invalid_sample(context, event_id, reason or "invalid_prediction")
+                return self._invalid_runtime_sample(
+                    context,
+                    event_id,
+                    reason or "invalid_prediction",
+                    inference_started,
+                )
         except Exception:
-            return self._invalid_sample(context, event_id, "inference_error")
+            return self._invalid_runtime_sample(
+                context,
+                event_id,
+                "inference_error",
+                inference_started,
+            )
 
-        return GazeSample(
-            **self._common_fields(context, event_id),
-            valid=True,
-            confidence=1.0,
-            reason=None,
-            screen_x_norm=normalized[0],
-            screen_y_norm=normalized[1],
+        inference_latency_ms = (time.perf_counter_ns() - inference_started) / 1_000_000.0
+        if self._filter_path_enabled:
+            filter_started = time.perf_counter_ns()
+            try:
+                decision = self._stabilizer.process_valid(
+                    normalized[0] * self._config.viewport_width_px,
+                    normalized[1] * self._config.viewport_height_px,
+                    context.captured_at_mono_ms,
+                )
+                stabilized = self._normalized_decision(decision)
+            except Exception:
+                self._reset_stabilizer_after_error()
+                decision = StabilizerDecision(
+                    valid=False,
+                    reason="gaze_unavailable",
+                )
+                stabilized = (None, decision.reason)
+            filter_latency_ms = (
+                time.perf_counter_ns() - filter_started
+            ) / 1_000_000.0
+        else:
+            decision = StabilizerDecision(
+                valid=True,
+                reason=None,
+                x_px=int(round(normalized[0] * self._config.viewport_width_px)),
+                y_px=int(round(normalized[1] * self._config.viewport_height_px)),
+            )
+            stabilized = self._normalized_decision(decision)
+            filter_latency_ms = 0.0
+
+        if self._config.smoothing_mode == "raw":
+            sample = GazeSample(
+                **self._common_fields(context, event_id),
+                valid=True,
+                confidence=1.0,
+                reason=None,
+                screen_x_norm=normalized[0],
+                screen_y_norm=normalized[1],
+            )
+        elif stabilized[0] is None:
+            sample = self._invalid_sample(
+                context,
+                event_id,
+                stabilized[1] or "invalid_prediction",
+            )
+        else:
+            sample = GazeSample(
+                **self._common_fields(context, event_id),
+                valid=True,
+                confidence=1.0,
+                reason=None,
+                screen_x_norm=stabilized[0][0],
+                screen_y_norm=stabilized[0][1],
+            )
+
+        self._emit_observation(
+            GazeAbObservation(
+                phase="live",
+                captured_at_mono_ms=context.captured_at_mono_ms,
+                target_x_norm=None,
+                target_y_norm=None,
+                raw_valid=True,
+                raw_reason=None,
+                raw_x_norm=normalized[0],
+                raw_y_norm=normalized[1],
+                stabilized_valid=stabilized[0] is not None,
+                stabilized_reason=stabilized[1],
+                stabilized_x_norm=None if stabilized[0] is None else stabilized[0][0],
+                stabilized_y_norm=None if stabilized[0] is None else stabilized[0][1],
+                raw_aoi_hit=None,
+                stabilized_aoi_hit=None,
+                inference_latency_ms=inference_latency_ms,
+                filter_latency_ms=filter_latency_ms,
+            )
         )
+        return self._cache_sample(event_id, sample)
 
     def dispose(self) -> None:
         estimator = self._estimator
@@ -468,6 +642,7 @@ class EyeTraxAdapter:
         self._calibrating = False
         self._calibrated = False
         self._calibration_id = None
+        self._reset_runtime_state()
 
         close_error: Exception | None = None
         try:
@@ -528,6 +703,15 @@ class EyeTraxAdapter:
 
     def _validate_once(self, attempt: int) -> _ValidationMetrics:
         estimator = self._require_estimator()
+        comparison_stabilizer = (
+            GazeStabilizer(
+                self._config.viewport_width_px,
+                self._config.viewport_height_px,
+                ema_alpha=self._config.ema_alpha,
+            )
+            if self._observation_sink is not None
+            else None
+        )
         total_frames = 0
         valid_frames = 0
         frames_per_point: list[int] = []
@@ -554,17 +738,44 @@ class EyeTraxAdapter:
             for frame in self._calibration_source(capture):
                 point_frames += 1
                 total_frames += 1
+                captured_at_mono_ms = time.perf_counter_ns() / 1_000_000.0
+                inference_started = time.perf_counter_ns()
                 features, blink = estimator.extract_features(_validate_bgr_frame(frame))
                 if features is None or blink:
+                    if comparison_stabilizer is not None:
+                        reason = "no_face" if features is None else "blink"
+                        self._observe_validation_invalid(
+                            comparison_stabilizer,
+                            captured_at_mono_ms=captured_at_mono_ms,
+                            target=(x_norm, y_norm),
+                            reason=reason,
+                            inference_started_ns=inference_started,
+                        )
                     continue
                 prediction = estimator.predict(np.asarray([features]))[0]
-                normalized, _ = _normalize_prediction(
+                normalized, prediction_reason = _normalize_prediction(
                     prediction,
                     self._config.viewport_width_px,
                     self._config.viewport_height_px,
                 )
                 if normalized is None:
+                    if comparison_stabilizer is not None:
+                        self._observe_validation_invalid(
+                            comparison_stabilizer,
+                            captured_at_mono_ms=captured_at_mono_ms,
+                            target=(x_norm, y_norm),
+                            reason=prediction_reason or "invalid_prediction",
+                            inference_started_ns=inference_started,
+                        )
                     continue
+                if comparison_stabilizer is not None:
+                    self._observe_validation_valid(
+                        comparison_stabilizer,
+                        captured_at_mono_ms=captured_at_mono_ms,
+                        target=(x_norm, y_norm),
+                        raw=normalized,
+                        inference_started_ns=inference_started,
+                    )
                 valid_frames += 1
                 predicted_x = normalized[0] * self._config.viewport_width_px
                 predicted_y = normalized[1] * self._config.viewport_height_px
@@ -610,7 +821,7 @@ class EyeTraxAdapter:
         identity = "\x1f".join(
             (
                 self.PRODUCER_ID,
-                self.MODEL_REVISION,
+                self._model_revision,
                 self._calibration_id or "calibration-missing",
                 context.session_id,
                 str(context.sequence),
@@ -640,7 +851,7 @@ class EyeTraxAdapter:
             "video_time_ms": context.video_time_ms,
             "playback_epoch": context.playback_epoch,
             "producer_id": self.PRODUCER_ID,
-            "model_revision": self.MODEL_REVISION,
+            "model_revision": self._model_revision,
             "calibration_id": self._calibration_id,
         }
 
@@ -657,6 +868,217 @@ class EyeTraxAdapter:
             reason=reason,
         )
 
+    def _invalid_runtime_sample(
+        self,
+        context: GazeFrameContext,
+        event_id: str,
+        reason: str,
+        inference_started_ns: int,
+    ) -> GazeSample:
+        inference_latency_ms = (time.perf_counter_ns() - inference_started_ns) / 1_000_000.0
+        if self._filter_path_enabled:
+            filter_started = time.perf_counter_ns()
+            try:
+                decision = self._stabilizer.observe_invalid(
+                    context.captured_at_mono_ms,
+                    reason,
+                )
+            except Exception:
+                self._reset_stabilizer_after_error()
+                decision = StabilizerDecision(
+                    valid=False,
+                    reason="gaze_unavailable",
+                )
+            filter_latency_ms = (
+                time.perf_counter_ns() - filter_started
+            ) / 1_000_000.0
+        else:
+            decision = StabilizerDecision(valid=False, reason=reason)
+            filter_latency_ms = 0.0
+        self._emit_observation(
+            GazeAbObservation(
+                phase="live",
+                captured_at_mono_ms=context.captured_at_mono_ms,
+                target_x_norm=None,
+                target_y_norm=None,
+                raw_valid=False,
+                raw_reason=reason,
+                raw_x_norm=None,
+                raw_y_norm=None,
+                stabilized_valid=False,
+                stabilized_reason=decision.reason,
+                stabilized_x_norm=None,
+                stabilized_y_norm=None,
+                raw_aoi_hit=None,
+                stabilized_aoi_hit=None,
+                inference_latency_ms=inference_latency_ms,
+                filter_latency_ms=filter_latency_ms,
+            )
+        )
+        return self._cache_sample(
+            event_id,
+            self._invalid_sample(context, event_id, reason),
+        )
+
+    def _normalized_decision(
+        self,
+        decision: StabilizerDecision,
+    ) -> tuple[tuple[float, float] | None, str | None]:
+        if not decision.valid:
+            return None, decision.reason
+        assert decision.x_px is not None and decision.y_px is not None
+        return _normalize_prediction(
+            (decision.x_px, decision.y_px),
+            self._config.viewport_width_px,
+            self._config.viewport_height_px,
+        )
+
+    def _cache_sample(self, event_id: str, sample: GazeSample) -> GazeSample:
+        self._sample_cache[event_id] = sample
+        if len(self._sample_cache) > self._SAMPLE_CACHE_LIMIT:
+            self._sample_cache.pop(next(iter(self._sample_cache)))
+        return sample
+
+    def _reset_runtime_state(self) -> None:
+        self._stabilizer.reset()
+        self._stream_identity = None
+        self._last_order = None
+        self._sample_cache.clear()
+
+    def _reset_stabilizer_after_error(self) -> None:
+        try:
+            self._stabilizer.reset()
+        except Exception:
+            # A broken optional filter must not replace a usable raw result.
+            pass
+
+    @property
+    def _filter_path_enabled(self) -> bool:
+        return self._config.smoothing_mode == "kalman_ema" or self._observation_sink is not None
+
+    def _emit_observation(self, observation: GazeAbObservation) -> None:
+        if self._observation_sink is not None:
+            try:
+                self._observation_sink(observation)
+            except Exception:
+                # Optional metrics must never change gaze or calibration outcomes.
+                pass
+
+    def _observe_validation_invalid(
+        self,
+        stabilizer: GazeStabilizer,
+        *,
+        captured_at_mono_ms: float,
+        target: tuple[float, float],
+        reason: str,
+        inference_started_ns: int,
+    ) -> None:
+        try:
+            inference_latency_ms = (
+                time.perf_counter_ns() - inference_started_ns
+            ) / 1_000_000.0
+            filter_started = time.perf_counter_ns()
+            decision = stabilizer.observe_invalid(captured_at_mono_ms, reason)
+            filter_latency_ms = (
+                time.perf_counter_ns() - filter_started
+            ) / 1_000_000.0
+            self._emit_validation_observation(
+                captured_at_mono_ms=captured_at_mono_ms,
+                target=target,
+                raw=None,
+                raw_reason=reason,
+                stabilized=decision,
+                inference_latency_ms=inference_latency_ms,
+                filter_latency_ms=filter_latency_ms,
+            )
+        except Exception:
+            pass
+
+    def _observe_validation_valid(
+        self,
+        stabilizer: GazeStabilizer,
+        *,
+        captured_at_mono_ms: float,
+        target: tuple[float, float],
+        raw: tuple[float, float],
+        inference_started_ns: int,
+    ) -> None:
+        try:
+            inference_latency_ms = (
+                time.perf_counter_ns() - inference_started_ns
+            ) / 1_000_000.0
+            filter_started = time.perf_counter_ns()
+            decision = stabilizer.process_valid(
+                raw[0] * self._config.viewport_width_px,
+                raw[1] * self._config.viewport_height_px,
+                captured_at_mono_ms,
+            )
+            filter_latency_ms = (
+                time.perf_counter_ns() - filter_started
+            ) / 1_000_000.0
+            self._emit_validation_observation(
+                captured_at_mono_ms=captured_at_mono_ms,
+                target=target,
+                raw=raw,
+                raw_reason=None,
+                stabilized=decision,
+                inference_latency_ms=inference_latency_ms,
+                filter_latency_ms=filter_latency_ms,
+            )
+        except Exception:
+            pass
+
+    def _emit_validation_observation(
+        self,
+        *,
+        captured_at_mono_ms: float,
+        target: tuple[float, float],
+        raw: tuple[float, float] | None,
+        raw_reason: str | None,
+        stabilized: StabilizerDecision,
+        inference_latency_ms: float,
+        filter_latency_ms: float,
+    ) -> None:
+        stabilized_normalized = self._normalized_decision(stabilized)
+        raw_aoi_hit = self._validation_aoi_hit(target, raw)
+        stabilized_aoi_hit = self._validation_aoi_hit(
+            target,
+            stabilized_normalized[0],
+        )
+        self._emit_observation(
+            GazeAbObservation(
+                phase="validation",
+                captured_at_mono_ms=captured_at_mono_ms,
+                target_x_norm=target[0],
+                target_y_norm=target[1],
+                raw_valid=raw is not None,
+                raw_reason=raw_reason,
+                raw_x_norm=None if raw is None else raw[0],
+                raw_y_norm=None if raw is None else raw[1],
+                stabilized_valid=stabilized_normalized[0] is not None,
+                stabilized_reason=stabilized_normalized[1],
+                stabilized_x_norm=(
+                    None if stabilized_normalized[0] is None else stabilized_normalized[0][0]
+                ),
+                stabilized_y_norm=(
+                    None if stabilized_normalized[0] is None else stabilized_normalized[0][1]
+                ),
+                raw_aoi_hit=raw_aoi_hit,
+                stabilized_aoi_hit=stabilized_aoi_hit,
+                inference_latency_ms=inference_latency_ms,
+                filter_latency_ms=filter_latency_ms,
+            )
+        )
+
+    def _validation_aoi_hit(
+        self,
+        target: tuple[float, float],
+        prediction: tuple[float, float] | None,
+    ) -> bool | None:
+        if prediction is None or self._validation_aoi_evaluator is None:
+            return None
+        return bool(self._validation_aoi_evaluator(target, prediction))
+
 
 __all__ = [
     "CalibrationCancelled",
@@ -667,6 +1089,9 @@ __all__ = [
     "DEFAULT_FACE_MODEL_PATH",
     "EyeTraxAdapter",
     "EyeTraxConfig",
+    "GazeAbObservation",
+    "GazeAbObservationSink",
+    "ValidationAoiEvaluator",
     "EyeTraxModelError",
     "EyeTraxRuntimeError",
     "FACE_MODEL_SHA256",

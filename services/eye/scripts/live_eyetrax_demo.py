@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import json
+import math
 import sys
 import time
 from dataclasses import dataclass
@@ -22,6 +24,7 @@ from mcm_eye.adapters.eyetrax import (  # noqa: E402
     CalibrationPhase,
     EyeTraxAdapter,
     EyeTraxConfig,
+    GazeAbObservation,
 )
 from mcm_eye.contracts import CalibrationRequest  # noqa: E402
 
@@ -37,6 +40,155 @@ class DemoFrameContext:
     video_id: str
     video_time_ms: int
     playback_epoch: int = 0
+
+
+def metric_percentiles(values: list[float]) -> dict[str, float | int | None]:
+    if not values:
+        return {"count": 0, "p50": None, "p95": None}
+    array = np.asarray(values, dtype=np.float64)
+    return {
+        "count": int(array.size),
+        "p50": round(float(np.percentile(array, 50)), 4),
+        "p95": round(float(np.percentile(array, 95)), 4),
+    }
+
+
+class _ModeMetrics:
+    """Keep scalar metric samples; live jitter pairs are supplied externally."""
+
+    def __init__(self, width: int, height: int) -> None:
+        self._width = width
+        self._height = height
+        self._diagonal = math.hypot(width, height)
+        self.validation_total = 0
+        self.validation_valid = 0
+        self.live_total = 0
+        self.live_valid = 0
+        self.errors: list[float] = []
+        self.jitter: list[float] = []
+        self.latencies: list[float] = []
+        self.aoi_total = 0
+        self.aoi_hits = 0
+    def observe(
+        self,
+        observation: GazeAbObservation,
+        *,
+        stabilized: bool,
+    ) -> tuple[float, float] | None:
+        if stabilized:
+            valid = observation.stabilized_valid
+            x_norm = observation.stabilized_x_norm
+            y_norm = observation.stabilized_y_norm
+            aoi_hit = observation.stabilized_aoi_hit
+            latency = observation.inference_latency_ms + observation.filter_latency_ms
+        else:
+            valid = observation.raw_valid
+            x_norm = observation.raw_x_norm
+            y_norm = observation.raw_y_norm
+            aoi_hit = observation.raw_aoi_hit
+            latency = observation.inference_latency_ms
+        self.latencies.append(latency)
+
+        if observation.phase == "validation":
+            self.validation_total += 1
+            if valid and x_norm is not None and y_norm is not None:
+                self.validation_valid += 1
+                assert observation.target_x_norm is not None
+                assert observation.target_y_norm is not None
+                error_px = math.hypot(
+                    (x_norm - observation.target_x_norm) * self._width,
+                    (y_norm - observation.target_y_norm) * self._height,
+                )
+                self.errors.append(error_px / self._diagonal)
+                if aoi_hit is not None:
+                    self.aoi_total += 1
+                    self.aoi_hits += int(aoi_hit)
+            return None
+
+        self.live_total += 1
+        if not valid or x_norm is None or y_norm is None:
+            return None
+        self.live_valid += 1
+        return x_norm, y_norm
+
+    def observe_jitter_pair(
+        self,
+        previous: tuple[float, float],
+        current: tuple[float, float],
+    ) -> None:
+        jitter_px = math.hypot(
+            (current[0] - previous[0]) * self._width,
+            (current[1] - previous[1]) * self._height,
+        )
+        self.jitter.append(jitter_px / self._diagonal)
+
+    def summary(self) -> dict[str, object]:
+        valid_total = self.live_total or self.validation_total
+        valid_count = self.live_valid if self.live_total else self.validation_valid
+        return {
+            "valid_ratio": round(valid_count / valid_total, 4) if valid_total else 0.0,
+            "validation_valid_ratio": (
+                round(self.validation_valid / self.validation_total, 4)
+                if self.validation_total
+                else None
+            ),
+            "jitter_diagonal": metric_percentiles(self.jitter),
+            "error_diagonal": metric_percentiles(self.errors),
+            "processing_latency_ms": metric_percentiles(self.latencies),
+            "aoi_hit_ratio": (
+                round(self.aoi_hits / self.aoi_total, 4) if self.aoi_total else None
+            ),
+        }
+
+
+class AbMetricsCollector:
+    """Aggregate same-prediction raw and stabilized paths without saving points."""
+
+    def __init__(self, width: int, height: int) -> None:
+        self._raw = _ModeMetrics(width, height)
+        self._stabilized = _ModeMetrics(width, height)
+        self._filter_latencies: list[float] = []
+        self._previous_live_pair: tuple[
+            tuple[float, float],
+            tuple[float, float],
+        ] | None = None
+
+    def observe(self, observation: GazeAbObservation) -> None:
+        raw_point = self._raw.observe(observation, stabilized=False)
+        stabilized_point = self._stabilized.observe(observation, stabilized=True)
+        self._filter_latencies.append(observation.filter_latency_ms)
+        if observation.phase != "live":
+            return
+
+        current_pair = (
+            (raw_point, stabilized_point)
+            if raw_point is not None and stabilized_point is not None
+            else None
+        )
+        if current_pair is not None and self._previous_live_pair is not None:
+            self._raw.observe_jitter_pair(
+                self._previous_live_pair[0],
+                current_pair[0],
+            )
+            self._stabilized.observe_jitter_pair(
+                self._previous_live_pair[1],
+                current_pair[1],
+            )
+        self._previous_live_pair = current_pair
+
+    def summary(self, selected_mode: str) -> dict[str, object]:
+        return {
+            "selected_mode": selected_mode,
+            "raw-v1": self._raw.summary(),
+            "gaze-filter-v1": self._stabilized.summary(),
+            "filter_additional_latency_ms": metric_percentiles(self._filter_latencies),
+            "jitter_pairing": "adjacent frames where both modes are valid",
+            "jitter_pair_count": len(self._raw.jitter),
+            "frame_coordinates_saved": False,
+            "aoi_note": (
+                "null until the existing Kiosk AOI Mapper is supplied during wiring"
+            ),
+        }
 
 
 def logical_viewport_size() -> tuple[int, int]:
@@ -224,6 +376,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--requested-width", type=int, default=1280)
     parser.add_argument("--requested-height", type=int, default=720)
     parser.add_argument("--requested-fps", type=float, default=30.0)
+    parser.add_argument(
+        "--smoothing",
+        choices=("raw", "kalman_ema"),
+        default="raw",
+    )
+    parser.add_argument("--ema-alpha", type=float, choices=(0.25,), default=0.25)
     parser.add_argument("--windowed", action="store_true")
     return parser.parse_args()
 
@@ -232,11 +390,19 @@ def run_demo(args: argparse.Namespace) -> int:
     width, height = logical_viewport_size()
     cap = open_camera(args)
     adapter: EyeTraxAdapter | None = None
+    metrics = AbMetricsCollector(width, height)
     try:
         source = OpenCvCalibrationSource(cap, width, height)
         adapter = EyeTraxAdapter(
-            EyeTraxConfig(width, height, args.model_path),
+            EyeTraxConfig(
+                width,
+                height,
+                args.model_path,
+                smoothing_mode=args.smoothing,
+                ema_alpha=args.ema_alpha,
+            ),
             source,
+            observation_sink=metrics.observe,
         )
 
         cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
@@ -266,7 +432,10 @@ def run_demo(args: argparse.Namespace) -> int:
             print(f"Calibration failed: {result.reason}")
             return 2
 
-        print("Calibration passed. Live gaze overlay started; press ESC to finish.")
+        print(
+            "Calibration passed. Live gaze overlay started; "
+            f"mode={args.smoothing}, ema_alpha={args.ema_alpha:g}; press ESC to finish."
+        )
         started = time.perf_counter()
         sequence = 0
         while True:
@@ -325,6 +494,8 @@ def run_demo(args: argparse.Namespace) -> int:
             cv2.imshow(WINDOW_NAME, canvas)
             if cv2.waitKey(1) & 0xFF == 27:
                 break
+        print("A/B summary (no frame-level coordinates):")
+        print(json.dumps(metrics.summary(args.smoothing), ensure_ascii=False, sort_keys=True))
         return 0
     finally:
         try:
