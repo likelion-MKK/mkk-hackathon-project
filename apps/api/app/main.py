@@ -26,6 +26,7 @@ from apps.api.app.schemas import (
     SessionCreated,
 )
 from apps.api.app.store import DomainError, MemoryStore
+from services.recommendation.engine.interface import RecommendationEngine
 from services.recommendation.mock.engine import MockRecommendationEngine
 
 
@@ -40,8 +41,11 @@ def _error_response(code: str, message: str, status_code: int) -> JSONResponse:
     return JSONResponse(status_code=status_code, content=body.model_dump(mode="json"))
 
 
-def create_app(store: MemoryStore | None = None) -> FastAPI:
-    """Create an app with an injectable store for deterministic tests."""
+def create_app(
+    store: MemoryStore | None = None,
+    recommendation_engine: RecommendationEngine | None = None,
+) -> FastAPI:
+    """Create an app with injectable storage and recommendation seams for tests."""
 
     app = FastAPI(
         title="MCM AI Lookbook Kiosk API",
@@ -49,7 +53,7 @@ def create_app(store: MemoryStore | None = None) -> FastAPI:
         description="Contract-first API scaffold; raw webcam frames are not accepted.",
     )
     app.state.store = store or MemoryStore()
-    app.state.recommendation_engine = MockRecommendationEngine()
+    app.state.recommendation_engine = recommendation_engine or MockRecommendationEngine()
 
     @app.exception_handler(DomainError)
     async def handle_domain_error(_: Request, exc: DomainError) -> JSONResponse:
