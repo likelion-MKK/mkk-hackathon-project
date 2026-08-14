@@ -63,6 +63,21 @@ def passing_artifact(candidate: str) -> dict[str, object]:
         "quality_evaluation": "not_available_without_ground_truth",
         "stability_observation": "pass",
         "status": "pass",
+        "warm": {
+            "status": "pass",
+            "workloads": {
+                "3": {
+                    "deadline_miss_count": 0,
+                    "failure_count": 0,
+                    "frame_count": 3,
+                    "latency_p50_ms": 1.0,
+                    "latency_p95_ms": 2.0,
+                    "measured_sample_count": 3,
+                    "stability_observation": "pass",
+                    "status": "pass",
+                }
+            },
+        },
     }
 
 
@@ -119,6 +134,33 @@ class FaceLabelNormalizationTests(unittest.TestCase):
         artifact["cold_runs"][0]["first_output"]["scores_finite"] = False
 
         with self.assertRaisesRegex(ValueError, "non-finite"):
+            NORMALIZATION.validate_benchmark_artifact(
+                NORMALIZATION.OPENVINO, artifact
+            )
+
+    def test_warm_failure_is_rejected_even_when_top_level_says_pass(self) -> None:
+        artifact = passing_artifact(NORMALIZATION.OPENVINO)
+        artifact["warm"]["workloads"]["3"]["failure_count"] = 1
+
+        with self.assertRaisesRegex(ValueError, "inference failures"):
+            NORMALIZATION.validate_benchmark_artifact(
+                NORMALIZATION.OPENVINO, artifact
+            )
+
+    def test_warm_deadline_miss_is_rejected(self) -> None:
+        artifact = passing_artifact(NORMALIZATION.OPENVINO)
+        artifact["warm"]["workloads"]["3"]["deadline_miss_count"] = 1
+
+        with self.assertRaisesRegex(ValueError, "deadline misses"):
+            NORMALIZATION.validate_benchmark_artifact(
+                NORMALIZATION.OPENVINO, artifact
+            )
+
+    def test_warm_missing_samples_are_rejected(self) -> None:
+        artifact = passing_artifact(NORMALIZATION.OPENVINO)
+        artifact["warm"]["workloads"]["3"]["measured_sample_count"] = 0
+
+        with self.assertRaisesRegex(ValueError, "incomplete measurements"):
             NORMALIZATION.validate_benchmark_artifact(
                 NORMALIZATION.OPENVINO, artifact
             )

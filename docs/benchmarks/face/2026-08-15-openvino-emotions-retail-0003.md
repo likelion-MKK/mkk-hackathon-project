@@ -56,15 +56,16 @@ Cold는 새 프로세스 3회다. 표의 load·warmup·first는 3회 중앙값�
 
 Offline warm 결과:
 
-| 요청 workload | frame 수 | p50(ms) | p95(ms) | 처리 capacity FPS | deadline miss | failure | timeout |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| 30초 × 3 FPS | 90 | 4.124 | 6.883 | 238.670 | 0 | 0 | 0 |
-| 30초 × 5 FPS | 150 | 3.827 | 6.512 | 252.186 | 0 | 0 | 0 |
+| 요청 workload | frame 수 | p50(ms) | p95(ms) | 처리 capacity FPS | deadline miss | failure |
+|---|---:|---:|---:|---:|---:|---:|
+| 30초 × 3 FPS | 90 | 4.124 | 6.883 | 238.670 | 0 | 0 |
+| 30초 × 5 FPS | 150 | 3.827 | 6.512 | 252.186 | 0 | 0 |
 
 - 반복 입력별 output signature 안정성: `pass`
 - offline warm process peak working set: 105.348 MiB
 - VRAM: 사용하지 않음
 - 3 FPS·5 FPS frame interval 내 deadline miss: 모두 `0`
+- worker process timeout: 발생하지 않음
 
 `capacity_fps`는 crop 생성과 로컬 CPU 분류 처리량이다. 얼굴 검출, encode·network·Gateway·동시 세션을 포함하지 않는다.
 

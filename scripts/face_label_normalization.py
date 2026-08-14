@@ -170,6 +170,38 @@ def validate_catalog(entries: list[MappingEntry]) -> None:
         raise ValueError("provisional labels must be unmapped or end in _like")
 
 
+def validate_warm_benchmark(warm: Any) -> None:
+    if not isinstance(warm, dict) or warm.get("status") != "pass":
+        raise ValueError("warm benchmark status is not pass")
+    workloads = warm.get("workloads")
+    if not isinstance(workloads, dict) or not workloads:
+        raise ValueError("warm benchmark has no workloads")
+    for fps, workload in workloads.items():
+        if not isinstance(workload, dict) or workload.get("status") != "pass":
+            raise ValueError(f"warm workload {fps} status is not pass")
+        frame_count = workload.get("frame_count")
+        measured_sample_count = workload.get("measured_sample_count")
+        if (
+            not isinstance(frame_count, int)
+            or frame_count < 1
+            or measured_sample_count != frame_count
+        ):
+            raise ValueError(f"warm workload {fps} has incomplete measurements")
+        if workload.get("failure_count") != 0:
+            raise ValueError(f"warm workload {fps} contains inference failures")
+        if workload.get("deadline_miss_count") != 0:
+            raise ValueError(f"warm workload {fps} contains deadline misses")
+        if workload.get("stability_observation") != "pass":
+            raise ValueError(f"warm workload {fps} is unstable")
+        if "timeout_count" in workload:
+            raise ValueError("deprecated per-frame timeout_count is not allowed")
+        if (
+            workload.get("latency_p50_ms") is None
+            or workload.get("latency_p95_ms") is None
+        ):
+            raise ValueError(f"warm workload {fps} has no latency samples")
+
+
 def validate_benchmark_artifact(candidate: str, artifact: dict[str, Any]) -> dict[str, Any]:
     if artifact.get("candidate") != candidate:
         raise ValueError("benchmark artifact candidate does not match")
@@ -196,6 +228,7 @@ def validate_benchmark_artifact(candidate: str, artifact: dict[str, Any]) -> dic
 
     if artifact.get("hard_gate") != "pass" or artifact.get("status") != "pass":
         raise ValueError("benchmark candidate did not pass its execution gate")
+    validate_warm_benchmark(artifact.get("warm"))
     cold_runs = artifact.get("cold_runs")
     if not isinstance(cold_runs, list) or not cold_runs:
         raise ValueError("benchmark artifact has no cold runs")

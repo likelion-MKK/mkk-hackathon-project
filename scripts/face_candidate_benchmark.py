@@ -104,6 +104,18 @@ class RuntimeSession:
     model_sha256: dict[str, str]
 
 
+class BenchmarkWorkerTimeoutError(RuntimeError):
+    """Raised when an isolated benchmark worker exceeds its process deadline."""
+
+    def __init__(self, arguments: list[str], timeout_seconds: int) -> None:
+        self.stage = arguments[0].lstrip("_") if arguments else "unknown"
+        self.timeout_seconds = timeout_seconds
+        super().__init__(
+            f"benchmark worker timed out during {self.stage} after "
+            f"{timeout_seconds} seconds"
+        )
+
+
 def file_sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as source:
@@ -381,6 +393,19 @@ def warm_worker(
                 if not summarize_output(output)["scores_finite"]:
                     failures += 1
             workload_elapsed_ms = (time.perf_counter_ns() - workload_started) / 1_000_000
+            measured_sample_count = len(latencies)
+            stability_observation = (
+                "pass"
+                if all(len(values) == 1 for values in signatures.values())
+                else "fail"
+            )
+            workload_status = warm_workload_status(
+                frame_count=frame_count,
+                measured_sample_count=measured_sample_count,
+                failure_count=failures,
+                deadline_miss_count=deadline_misses,
+                stability_observation=stability_observation,
+            )
             workloads[str(fps)] = {
                 "accelerated_schedule": True,
                 "capacity_fps": round(1000 / (sum(latencies) / len(latencies)), 3)
@@ -395,21 +420,48 @@ def warm_worker(
                 "latency_p95_ms": round(percentile(latencies, 95), 6)
                 if latencies
                 else None,
+                "measured_sample_count": measured_sample_count,
                 "requested_fps": fps,
-                "stability_observation": (
-                    "pass" if all(len(values) == 1 for values in signatures.values()) else "fail"
-                ),
-                "timeout_count": 0,
+                "stability_observation": stability_observation,
+                "status": workload_status,
                 "workload_duration_seconds": duration_seconds,
                 "workload_elapsed_ms": round(workload_elapsed_ms, 6),
             }
         return {
             "memory": process_memory(),
             "model_sha256": session.model_sha256,
+            "status": (
+                "pass"
+                if workloads
+                and all(
+                    workload["status"] == "pass"
+                    for workload in workloads.values()
+                )
+                else "fail"
+            ),
             "workloads": workloads,
         }
     finally:
         session.close()
+
+
+def warm_workload_status(
+    *,
+    frame_count: int,
+    measured_sample_count: int,
+    failure_count: int,
+    deadline_miss_count: int,
+    stability_observation: str,
+) -> str:
+    complete = frame_count > 0 and measured_sample_count == frame_count
+    return (
+        "pass"
+        if complete
+        and failure_count == 0
+        and deadline_miss_count == 0
+        and stability_observation == "pass"
+        else "fail"
+    )
 
 
 def package_versions(candidate: str) -> dict[str, str]:
@@ -423,13 +475,16 @@ def package_versions(candidate: str) -> dict[str, str]:
 
 
 def run_child(arguments: list[str], *, timeout_seconds: int = 180) -> dict[str, Any]:
-    completed = subprocess.run(
-        [sys.executable, str(Path(__file__).resolve()), *arguments],
-        capture_output=True,
-        check=False,
-        text=True,
-        timeout=timeout_seconds,
-    )
+    try:
+        completed = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve()), *arguments],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise BenchmarkWorkerTimeoutError(arguments, timeout_seconds) from error
     if completed.returncode != 0:
         summary = completed.stderr.strip().splitlines()[-1:] or ["worker failed"]
         raise RuntimeError(f"benchmark worker failed: {summary[0]}")
@@ -467,55 +522,83 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
         result = hard_gate_result(args.candidate, offline=args.offline)
     else:
         mode_flag = "--offline" if args.offline else "--online"
-        cold_runs = [
-            run_child(["_cold", args.candidate, mode_flag])
-            for _ in range(args.cold_runs)
-        ]
-        warm = run_child(
-            [
-                "_warm",
-                args.candidate,
-                mode_flag,
-                "--duration-seconds",
-                str(args.duration_seconds),
-                "--fps",
-                *(str(value) for value in args.fps),
+        try:
+            cold_runs = [
+                run_child(["_cold", args.candidate, mode_flag])
+                for _ in range(args.cold_runs)
             ]
-        )
-        no_face = cold_runs[0]["no_face_output"]
-        no_face_supported = args.candidate == MEDIAPIPE
-        result = {
-            "accuracy_claim": "none",
-            "candidate": args.candidate,
-            "cold_run_count": len(cold_runs),
-            "cold_runs": cold_runs,
-            "device": "CPU",
-            "fixture_version": FIXTURE_VERSION,
-            "hard_gate": "pass",
-            "inference_benchmark": "measured",
-            "latency_measurement": "measured",
-            "model_sha256": warm["model_sha256"],
-            "no_face_return": no_face_supported and no_face["face_count"] == 0,
-            "no_face_validation": (
+            warm = run_child(
+                [
+                    "_warm",
+                    args.candidate,
+                    mode_flag,
+                    "--duration-seconds",
+                    str(args.duration_seconds),
+                    "--fps",
+                    *(str(value) for value in args.fps),
+                ]
+            )
+        except BenchmarkWorkerTimeoutError as error:
+            result = {
+                "accuracy_claim": "none",
+                "candidate": args.candidate,
+                "device": "CPU",
+                "hard_gate": "fail",
+                "inference_benchmark": "failed",
+                "latency_measurement": "not_measured_worker_timeout",
+                "offline": args.offline,
+                "package_versions": package_versions(args.candidate),
+                "python_version": platform.python_version(),
+                "quality_evaluation": "not_available_without_ground_truth",
+                "reason": "worker_timeout",
+                "stability_observation": "not_measured_worker_timeout",
+                "status": "fail",
+                "timeout_stage": error.stage,
+                "worker_timeout_seconds": error.timeout_seconds,
+            }
+        else:
+            no_face = cold_runs[0]["no_face_output"]
+            no_face_supported = args.candidate == MEDIAPIPE
+            benchmark_status = warm.get("status", "fail")
+            result = {
+                "accuracy_claim": "none",
+                "candidate": args.candidate,
+                "cold_run_count": len(cold_runs),
+                "cold_runs": cold_runs,
+                "device": "CPU",
+                "fixture_version": FIXTURE_VERSION,
+                "hard_gate": "pass",
+                "inference_benchmark": (
+                    "measured" if benchmark_status == "pass" else "failed"
+                ),
+                "latency_measurement": "measured",
+                "model_sha256": warm["model_sha256"],
+                "no_face_return": no_face_supported and no_face["face_count"] == 0,
+                "no_face_validation": (
+                    "pass"
+                    if no_face_supported and no_face["face_count"] == 0
+                    else "not_supported_classifier_requires_face_crop"
+                ),
+                "offline": args.offline,
+                "package_versions": package_versions(args.candidate),
+                "python_version": platform.python_version(),
+                "quality_evaluation": "not_available_without_ground_truth",
+                "status": benchmark_status,
+                "synthetic_input_sha256": synthetic_input_sha256(),
+                "synthetic_seed": SYNTHETIC_SEED,
+                "warm": warm,
+            }
+            stability = [
+                workload["stability_observation"]
+                for workload in warm["workloads"].values()
+            ]
+            result["stability_observation"] = (
                 "pass"
-                if no_face_supported and no_face["face_count"] == 0
-                else "not_supported_classifier_requires_face_crop"
-            ),
-            "offline": args.offline,
-            "package_versions": package_versions(args.candidate),
-            "python_version": platform.python_version(),
-            "quality_evaluation": "not_available_without_ground_truth",
-            "status": "pass",
-            "synthetic_input_sha256": synthetic_input_sha256(),
-            "synthetic_seed": SYNTHETIC_SEED,
-            "warm": warm,
-        }
-        stability = [
-            workload["stability_observation"] for workload in warm["workloads"].values()
-        ]
-        result["stability_observation"] = (
-            "pass" if all(value == "pass" for value in stability) else "fail"
-        )
+                if stability and all(value == "pass" for value in stability)
+                else "fail"
+            )
+            if benchmark_status == "fail":
+                result["reason"] = "warm_workload_failed"
 
     result["environment"] = {
         "architecture": platform.machine(),
@@ -597,6 +680,8 @@ def main() -> None:
             sort_keys=True,
         )
     )
+    if result["status"] == "fail":
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

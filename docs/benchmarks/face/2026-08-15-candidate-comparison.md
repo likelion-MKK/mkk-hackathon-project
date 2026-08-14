@@ -25,7 +25,7 @@
 | OpenVINO emotions-retail-0003 | 측정 | pass | 581.774 | 5.132 | 4.124 / 6.883 | 3.827 / 6.512 | 238.670 / 252.186 | 105.348 MiB | pass | 미지원; crop classifier |
 | HSEmotion enet_b0_8_best_afew | 제외 | fail | — | — | — | — | — | — | 미측정 | 미측정 |
 
-- MediaPipe와 OpenVINO 모두 failure·timeout·3/5 FPS deadline miss가 `0`이었다.
+- MediaPipe와 OpenVINO 모두 failure·3/5 FPS deadline miss가 `0`이었고 worker process timeout은 발생하지 않았다.
 - MediaPipe는 face-like crop에서 52 blendshape를, no-face에서 빈 결과를 반환했다.
 - OpenVINO는 입력마다 5개 유한 score를 반환했지만 detector가 없어 no-face를 구분하지 못했다.
 - HSEmotion은 checksum·license·package 설치까지 확인했지만 안전한 loader가 없어 추론하지 않았다.
