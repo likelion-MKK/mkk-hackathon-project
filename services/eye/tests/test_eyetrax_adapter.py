@@ -91,10 +91,12 @@ class FixedCalibrationSource:
         training_counts: dict[int, int] | None = None,
         validation_shift_px: dict[int, int] | None = None,
         validation_invalid_frames: int = 0,
+        validation_counts_by_point: dict[tuple[int, int], int] | None = None,
     ) -> None:
         self.training_counts = training_counts or {1: 15, 2: 15}
         self.validation_shift_px = validation_shift_px or {1: 0, 2: 0}
         self.validation_invalid_frames = validation_invalid_frames
+        self.validation_counts_by_point = validation_counts_by_point or {}
         self.calls: list[CalibrationCapture] = []
 
     def __call__(self, capture: CalibrationCapture):
@@ -103,7 +105,10 @@ class FixedCalibrationSource:
             count = self.training_counts[capture.attempt]
             shift = 0
         else:
-            count = 20
+            count = self.validation_counts_by_point.get(
+                (capture.attempt, capture.point_index),
+                20,
+            )
             shift = self.validation_shift_px[capture.attempt]
         x = int(capture.target_x_norm * 100) + shift
         y = int(capture.target_y_norm * 100)
@@ -363,6 +368,27 @@ def test_quality_gate_failure_retries_once_then_returns_invalid(
         assert unavailable.valid is False
         assert unavailable.reason == "gaze_unavailable"
         assert unavailable.calibration_id == "calibration-test"
+    finally:
+        adapter.dispose()
+
+
+def test_missing_validation_points_retry_once_then_fail_gate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    validation_counts = {
+        (attempt, point_index): 20 if point_index == 1 else 0
+        for attempt in (1, 2)
+        for point_index in range(1, 9)
+    }
+    source = FixedCalibrationSource(validation_counts_by_point=validation_counts)
+    adapter, _, _ = initialized_adapter(tmp_path, monkeypatch, source)
+    try:
+        result = calibrate(adapter)
+        assert result.valid is False
+        assert result.reason == "quality_gate_failed"
+        assert sum(call.attempt == 1 for call in source.calls) == 33
+        assert sum(call.attempt == 2 for call in source.calls) == 33
     finally:
         adapter.dispose()
 

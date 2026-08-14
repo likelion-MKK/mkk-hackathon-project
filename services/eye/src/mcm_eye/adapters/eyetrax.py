@@ -66,6 +66,7 @@ TRAINING_COLLECT_SECONDS = 1.0
 VALIDATION_ADAPT_SECONDS = 0.75
 VALIDATION_COLLECT_SECONDS = 1.0
 MIN_TRAINING_SAMPLES_PER_POINT = 15
+MIN_VALIDATION_FRAMES_PER_POINT = 15
 RIDGE_ALPHA_CANDIDATES = (0.001, 0.01, 0.1, 1.0, 10.0)
 VALID_RATIO_GATE = 0.90
 ERROR_DIAGONAL_P50_GATE = 0.10
@@ -147,6 +148,7 @@ EstimatorFactory = Callable[[Path], _GazeEstimator]
 class _ValidationMetrics:
     total_frames: int
     valid_frames: int
+    frames_per_point: tuple[int, ...]
     valid_ratio: float
     error_diagonal_p50: float | None
     error_diagonal_p95: float | None
@@ -155,6 +157,9 @@ class _ValidationMetrics:
     def passed(self) -> bool:
         return (
             self.total_frames > 0
+            and len(self.frames_per_point) == len(VALIDATION_POINTS)
+            and min(self.frames_per_point, default=0)
+            >= MIN_VALIDATION_FRAMES_PER_POINT
             and self.valid_ratio >= VALID_RATIO_GATE
             and self.error_diagonal_p50 is not None
             and self.error_diagonal_p50 <= ERROR_DIAGONAL_P50_GATE
@@ -525,6 +530,7 @@ class EyeTraxAdapter:
         estimator = self._require_estimator()
         total_frames = 0
         valid_frames = 0
+        frames_per_point: list[int] = []
         diagonal_errors: list[float] = []
         diagonal = math.hypot(
             self._config.viewport_width_px,
@@ -544,7 +550,9 @@ class EyeTraxAdapter:
             )
             target_x = float(int(x_norm * self._config.viewport_width_px))
             target_y = float(int(y_norm * self._config.viewport_height_px))
+            point_frames = 0
             for frame in self._calibration_source(capture):
+                point_frames += 1
                 total_frames += 1
                 features, blink = estimator.extract_features(_validate_bgr_frame(frame))
                 if features is None or blink:
@@ -563,6 +571,7 @@ class EyeTraxAdapter:
                 diagonal_errors.append(
                     math.hypot(predicted_x - target_x, predicted_y - target_y) / diagonal
                 )
+            frames_per_point.append(point_frames)
 
         valid_ratio = valid_frames / total_frames if total_frames else 0.0
         if diagonal_errors:
@@ -577,6 +586,7 @@ class EyeTraxAdapter:
         return _ValidationMetrics(
             total_frames=total_frames,
             valid_frames=valid_frames,
+            frames_per_point=tuple(frames_per_point),
             valid_ratio=valid_ratio,
             error_diagonal_p50=p50_value,
             error_diagonal_p95=p95_value,

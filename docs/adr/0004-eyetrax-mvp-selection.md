@@ -52,8 +52,10 @@ leave-one-calibration-point-out 방식으로 비교한다. 픽셀 오차 p50이 
 선택하고 동률이면 p95를 사용한다. 검증점은 alpha 선택에 사용하지 않는다.
 
 학습 완료 후 현재 예제 룩북의 좌·우 상품 영역 안에 둔 별도 8점을 각각 0.75초 적응,
-1초 수집으로 검증한다. 모든 유효 frame의 오차를 하나의 배열에 합쳐 NumPy percentile을
-계산하며, 이 해커톤 구현에서는 지점별 가중 percentile을 사용하지 않는다.
+1초 수집으로 검증한다. 각 검증점은 정상 형식 frame을 최소 15개 제공해야 하며,
+`no_face`, `blink`, 비유효한 예측과 viewport 밖 예측도 이 최소 수집량에는 포함한다. 모든
+유효 frame의 오차를 하나의 배열에 합쳐 NumPy percentile을 계산하며, 이 해커톤 구현에서는
+지점별 가중 percentile을 사용하지 않는다.
 
 ```text
 valid 비율 = 8개 검증 구간의 유효 frame / 전체 정상 형식 frame

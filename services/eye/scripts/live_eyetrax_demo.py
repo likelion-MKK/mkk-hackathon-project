@@ -231,27 +231,33 @@ def parse_args() -> argparse.Namespace:
 def run_demo(args: argparse.Namespace) -> int:
     width, height = logical_viewport_size()
     cap = open_camera(args)
-    source = OpenCvCalibrationSource(cap, width, height)
-    adapter = EyeTraxAdapter(
-        EyeTraxConfig(width, height, args.model_path),
-        source,
-    )
-
-    cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
-    if not args.windowed:
-        cv2.setWindowProperty(WINDOW_NAME, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-    if sys.platform == "win32":
-        cv2.setWindowProperty(WINDOW_NAME, cv2.WND_PROP_TOPMOST, 1)
-
-    print(
-        "Camera opened: "
-        f"requested={args.requested_width}x{args.requested_height}@{args.requested_fps:g} "
-        f"actual={int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))}x"
-        f"{int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))}@"
-        f"{cap.get(cv2.CAP_PROP_FPS):g} backend={cap.getBackendName()}"
-    )
-
+    adapter: EyeTraxAdapter | None = None
     try:
+        source = OpenCvCalibrationSource(cap, width, height)
+        adapter = EyeTraxAdapter(
+            EyeTraxConfig(width, height, args.model_path),
+            source,
+        )
+
+        cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
+        if not args.windowed:
+            cv2.setWindowProperty(
+                WINDOW_NAME,
+                cv2.WND_PROP_FULLSCREEN,
+                cv2.WINDOW_FULLSCREEN,
+            )
+        if sys.platform == "win32":
+            cv2.setWindowProperty(WINDOW_NAME, cv2.WND_PROP_TOPMOST, 1)
+
+        print(
+            "Camera opened: "
+            f"requested={args.requested_width}x{args.requested_height}@"
+            f"{args.requested_fps:g} "
+            f"actual={int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))}x"
+            f"{int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))}@"
+            f"{cap.get(cv2.CAP_PROP_FPS):g} backend={cap.getBackendName()}"
+        )
+
         adapter.initialize()
         adapter.warmup()
         wait_for_space(cap, width, height)
@@ -322,10 +328,13 @@ def run_demo(args: argparse.Namespace) -> int:
         return 0
     finally:
         try:
-            adapter.dispose()
+            if adapter is not None:
+                adapter.dispose()
         finally:
-            cap.release()
-            cv2.destroyAllWindows()
+            try:
+                cap.release()
+            finally:
+                cv2.destroyAllWindows()
 
 
 def main() -> int:
