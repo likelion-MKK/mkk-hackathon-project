@@ -1,4 +1,4 @@
-export const CONSENT_VERSION = "consent-v1";
+export const CONSENT_VERSION = "consent-v2";
 export const CONSENT_IDLE_TIMEOUT_MS = 30_000;
 export const SESSION_START_TIMEOUT_MS = 5_000;
 

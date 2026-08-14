@@ -434,10 +434,10 @@ function CameraConsent({
             <div>
               <dt>04</dt>
               <dd>
-                <strong>파생 신호와 추천 결과만 활용합니다</strong>
+                <strong>개별 파생 신호는 저장하지 않습니다</strong>
                 <span>
-                  추천 제공과 품질 검증을 위해 저장될 수 있으며, 세부 보유 기간은 운영 정책
-                  확정 후 반영됩니다.
+                  시선·표정 관련 신호는 현재 세션에서 관심도를 집계하는 데만 사용하고 추천
+                  생성 후 폐기합니다. 추천 결과와 익명 세션 상태는 현재 세션에만 유지합니다.
                 </span>
               </dd>
             </div>
@@ -675,6 +675,7 @@ function App() {
   const restart = useCallback(async () => {
     const generation = flowController.invalidateCurrentFlow();
     abortSessionStart();
+    if (session) apiClient.discardSession(session.session_id);
     latestGazeSample.current = null;
     latestExpressionSample.current = null;
     setSelectedCategory(null);
@@ -693,7 +694,7 @@ function App() {
         setFlowError("이전 Vision 세션을 종료하지 못했습니다.");
       }
     }
-  }, [abortSessionStart, flowController, send]);
+  }, [abortSessionStart, flowController, send, session]);
 
   const cancelConsent = useCallback(async () => {
     const generation = flowController.invalidateCurrentFlow();
@@ -858,6 +859,11 @@ function App() {
     } catch {
       if (flowController.isCurrent(generation)) {
         setFlowError("Mock 룩북 분석을 완료하지 못했습니다.");
+      }
+    } finally {
+      if (flowController.isCurrent(generation)) {
+        latestGazeSample.current = null;
+        latestExpressionSample.current = null;
       }
     }
   }, [flowController, manifest, send, session]);

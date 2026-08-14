@@ -133,6 +133,12 @@ test("mock API가 선택한 manifest와 reaction batch 중복 상태를 제공�
 
   assert.equal((await client.appendReactionBatch(session.session_id, batch)).status, "accepted");
   assert.equal((await client.appendReactionBatch(session.session_id, batch)).status, "duplicate");
+
+  await client.completeSessionAnalysis(session.session_id);
+  await assert.rejects(
+    client.appendReactionBatch(session.session_id, batch),
+    /Completed mock sessions cannot accept reaction batches/,
+  );
 });
 
 test("mock API가 알 수 없는 세션을 정상 응답으로 꾸미지 않는다", async () => {
@@ -162,6 +168,22 @@ test("mock API의 세션 시작 지연값을 안전하게 검증한다", () => {
   assert.throws(
     () => new MockApiClient({ sessionStartDelayMs: -1 }),
     /non-negative finite number/,
+  );
+});
+
+test("화면 세션이 끝나면 Mock 추천 상태와 익명 세션 metadata를 폐기한다", async () => {
+  const client = new MockApiClient();
+  const session = await client.createSession({
+    kiosk_id: "kiosk-d2-retention",
+    lookbook_id: MOCK_LOOKBOOK_ID_BY_CATEGORY.가방,
+    consent_version: "consent-v2",
+  });
+
+  client.discardSession(session.session_id);
+
+  await assert.rejects(
+    client.getSessionRecommendation(session.session_id),
+    /Unknown mock session/,
   );
 });
 

@@ -149,6 +149,7 @@ const mockProducts: Record<string, Product> = {
 type MockSession = {
   request: SessionCreate;
   analysisCompleted: boolean;
+  acceptedBatchIds: Set<string>;
 };
 
 export type MockApiClientOptions = {
@@ -178,7 +179,6 @@ function waitForDelay(delayMs: number, signal?: AbortSignal): Promise<void> {
 export class MockApiClient implements ApiClient {
   private sessionSequence = 0;
   private readonly sessions = new Map<string, MockSession>();
-  private readonly acceptedBatchIds = new Set<string>();
   private readonly sessionStartDelayMs: number;
 
   constructor({ sessionStartDelayMs = 0 }: MockApiClientOptions = {}) {
@@ -204,6 +204,7 @@ export class MockApiClient implements ApiClient {
     this.sessions.set(sessionId, {
       request: { ...request },
       analysisCompleted: false,
+      acceptedBatchIds: new Set<string>(),
     });
 
     return {
@@ -236,8 +237,13 @@ export class MockApiClient implements ApiClient {
       throw new Error("Reaction batch video_id does not match the session lookbook_id.");
     }
 
-    const duplicate = this.acceptedBatchIds.has(batch.batch_id);
-    this.acceptedBatchIds.add(batch.batch_id);
+    if (session.analysisCompleted) {
+      throw new Error("Completed mock sessions cannot accept reaction batches.");
+    }
+
+    // D02의 C 정책: payload는 검증 뒤 보관하지 않고, 수집 중 중복 제거용 ID만 유지한다.
+    const duplicate = session.acceptedBatchIds.has(batch.batch_id);
+    session.acceptedBatchIds.add(batch.batch_id);
 
     return {
       batch_id: batch.batch_id,
@@ -248,6 +254,7 @@ export class MockApiClient implements ApiClient {
   async completeSessionAnalysis(sessionId: string): Promise<RecommendationAccepted> {
     const session = this.requireSession(sessionId);
     session.analysisCompleted = true;
+    session.acceptedBatchIds.clear();
 
     return {
       session_id: sessionId,
@@ -299,6 +306,10 @@ export class MockApiClient implements ApiClient {
     }
 
     return { ...product };
+  }
+
+  discardSession(sessionId: string): void {
+    this.sessions.delete(sessionId);
   }
 
   async health(): Promise<ApiHealth> {

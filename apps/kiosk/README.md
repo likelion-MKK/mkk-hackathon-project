@@ -45,6 +45,10 @@ D1 Mock 룩북에는 별도의 영상 layout 정보가 없으므로 Mock 시선�
 
 S02 동의 화면은 카메라 사용, 원격 Vision 서버로의 일시 전송, 원본 frame 비저장, 파생 신호·추천 결과의 이용 목적을 구분해 안내한다. `동의하고 계속`을 누르기 전에는 Mock 세션과 Vision 세션을 시작하지 않는다. D2에서는 실제 카메라나 원격 stream을 열지 않는다.
 
+MVP 파생 데이터 정책은 선택지 C를 사용한다. 개별 `GazeSample`, `ExpressionSample`, `ProductAttentionEvent`는 현재 세션의 관심도 집계에만 사용하고 PostgreSQL·파일·브라우저 저장소에 보관하지 않는다. D2 Mock API는 `ReactionBatch` payload를 검증한 뒤 폐기하고 수집 중 중복 제거용 batch ID만 메모리에 유지하며, 분석 완료 시 이 ID도 비운다. Kiosk가 보유한 최신 개별 신호 참조도 추천 요청 완료 또는 실패 시 해제한다. 최종 추천 결과와 익명 세션 상태는 현재 세션 화면 제공에 필요한 동안만 메모리에 유지한다. 실제 알고리즘 검증에서 replay 필요성이 확인되기 전에는 파생 event 영속 저장을 활성화하지 않는다.
+
+이 결정은 D2 Mock의 동작과 동의 문구에 적용한 범위다. 현재 `reaction-batch` v1의 영속 저장 의미, 실제 Backend의 세션 집계·TTL과 PostgreSQL 경계는 공용 Contract를 먼저 갱신한 뒤 Producer와 Consumer 순서로 연결해야 하며, 그 전에는 실제 API·Vision client를 연결하지 않는다.
+
 - `카테고리 다시 선택`: 세션을 만들지 않고 S02 메뉴로 돌아간다.
 - `동의하지 않고 종료`: 진행 중 flow를 무효화하고 S01로 돌아간다.
 - 동의 대기 30초 초과: 세션을 만들지 않고 timeout 안내와 재시작 선택지를 표시한다.

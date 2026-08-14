@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  CONSENT_VERSION,
   getConsentSecondsRemaining,
   runSessionStartWithTimeout,
   SessionStartTimeoutError,
 } from "./consent-flow.ts";
+
+test("개별 파생 신호 비저장 정책을 새 동의 version으로 구분한다", () => {
+  assert.equal(CONSENT_VERSION, "consent-v2");
+});
 
 test("동의 화면의 남은 시간을 초 단위로 계산한다", () => {
   assert.equal(getConsentSecondsRemaining(30_000, 0), 30);
