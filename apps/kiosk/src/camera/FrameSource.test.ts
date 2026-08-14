@@ -75,6 +75,25 @@ function createCameraFixture() {
   };
 }
 
+function createWaitingVideo(onPlay: () => void): HTMLVideoElement {
+  return {
+    readyState: 0,
+    videoWidth: 0,
+    videoHeight: 0,
+    muted: false,
+    playsInline: false,
+    srcObject: null,
+    play: async () => {
+      onPlay();
+    },
+    pause: () => undefined,
+    load: () => undefined,
+    removeAttribute: () => undefined,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  } as unknown as HTMLVideoElement;
+}
+
 test("동시에 열어도 카메라 stream은 한 번만 요청한다", async () => {
   const fixture = createCameraFixture();
   let requestCount = 0;
@@ -179,6 +198,131 @@ test("화면을 나가면 모든 camera track과 video 참조를 해제한다", 
     (error: unknown) =>
       error instanceof CameraAccessError && error.code === "camera_not_ready",
   );
+});
+
+test("카메라 초기화 중 stop하면 pending stream을 즉시 해제한다", async () => {
+  const fixture = createCameraFixture();
+  let markVideoPlayStarted: (() => void) | undefined;
+  const videoPlayStarted = new Promise<void>((resolve) => {
+    markVideoPlayStarted = resolve;
+  });
+  const source = new FrameSource({
+    mediaDevices: { getUserMedia: async () => fixture.stream },
+    createVideoElement: () =>
+      createWaitingVideo(() => {
+        markVideoPlayStarted?.();
+      }),
+    readyTimeoutMs: 1_000,
+  });
+
+  const opening = source.open();
+  const openingRejected = assert.rejects(
+    opening,
+    (error: unknown) =>
+      error instanceof CameraAccessError && error.code === "cancelled",
+  );
+  await videoPlayStarted;
+
+  source.stop();
+
+  assert.equal(fixture.stopCount, 1);
+  assert.equal(source.isOpen(), false);
+  await openingRejected;
+  assert.equal(fixture.stopCount, 1);
+});
+
+test("취소된 open과 분리해 재시도는 새 camera 요청을 시작한다", async () => {
+  const firstFixture = createCameraFixture();
+  const retryFixture = createCameraFixture();
+  let requestCount = 0;
+  let videoCount = 0;
+  let markFirstVideoPlayStarted: (() => void) | undefined;
+  const firstVideoPlayStarted = new Promise<void>((resolve) => {
+    markFirstVideoPlayStarted = resolve;
+  });
+  const source = new FrameSource({
+    mediaDevices: {
+      getUserMedia: async () => {
+        requestCount += 1;
+        return requestCount === 1 ? firstFixture.stream : retryFixture.stream;
+      },
+    },
+    createVideoElement: () => {
+      videoCount += 1;
+      return videoCount === 1
+        ? createWaitingVideo(() => {
+            markFirstVideoPlayStarted?.();
+          })
+        : retryFixture.video;
+    },
+    readyTimeoutMs: 1_000,
+  });
+
+  const firstOpening = source.open();
+  const firstOpeningRejected = assert.rejects(
+    firstOpening,
+    (error: unknown) =>
+      error instanceof CameraAccessError && error.code === "cancelled",
+  );
+  await firstVideoPlayStarted;
+
+  source.stop();
+  await source.open();
+
+  assert.equal(requestCount, 2);
+  assert.equal(firstFixture.stopCount, 1);
+  assert.equal(source.isOpen(), true);
+  await firstOpeningRejected;
+  assert.equal(firstFixture.stopCount, 1);
+
+  source.stop();
+  assert.equal(retryFixture.stopCount, 1);
+});
+
+test("consumer 처리 중 stop하면 취소 신호를 보내고 delivered 완료를 막는다", async () => {
+  const fixture = createCameraFixture();
+  let closeCount = 0;
+  let observedSignal: AbortSignal | undefined;
+  let markConsumerStarted: (() => void) | undefined;
+  let finishConsumer: (() => void) | undefined;
+  const consumerStarted = new Promise<void>((resolve) => {
+    markConsumerStarted = resolve;
+  });
+  const consumerFinished = new Promise<void>((resolve) => {
+    finishConsumer = resolve;
+  });
+  const source = new FrameSource({
+    mediaDevices: { getUserMedia: async () => fixture.stream },
+    createVideoElement: () => fixture.video,
+    createFrame: async () => ({
+      width: 640,
+      height: 360,
+      close: () => {
+        closeCount += 1;
+      },
+    }),
+  });
+
+  await source.open();
+  const capture = source.capture(createContext(), async (_frame, _context, signal) => {
+    observedSignal = signal;
+    markConsumerStarted?.();
+    await consumerFinished;
+  });
+  const captureRejected = assert.rejects(
+    capture,
+    (error: unknown) =>
+      error instanceof CameraAccessError && error.code === "cancelled",
+  );
+  await consumerStarted;
+
+  source.stop();
+
+  assert.equal(observedSignal?.aborted, true);
+  assert.equal(closeCount, 1);
+  finishConsumer?.();
+  await captureRejected;
+  assert.equal(closeCount, 1);
 });
 
 test("권한 대기 중 취소되면 늦게 열린 stream도 즉시 닫는다", async () => {

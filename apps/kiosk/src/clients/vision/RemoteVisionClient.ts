@@ -13,9 +13,14 @@ export type FrameDeliveryResult = {
   reason: null | "in_flight";
 };
 
+export type FrameDeliveryOptions = {
+  signal?: AbortSignal;
+};
+
 export interface RemoteVisionClient extends VisionClient {
   sendFrame(
     frame: EphemeralVideoFrame,
     context: FrameContext,
+    options?: FrameDeliveryOptions,
   ): Promise<FrameDeliveryResult>;
 }

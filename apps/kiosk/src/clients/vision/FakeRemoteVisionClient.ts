@@ -13,6 +13,7 @@ import type {
   VisionOperationOptions,
 } from "./VisionClient.ts";
 import type {
+  FrameDeliveryOptions,
   EphemeralVideoFrame,
   FrameDeliveryResult,
   RemoteVisionClient,
@@ -55,7 +56,10 @@ export class FakeRemoteVisionClient implements RemoteVisionClient {
   async sendFrame(
     frame: EphemeralVideoFrame,
     context: FrameContext,
+    { signal }: FrameDeliveryOptions = {},
   ): Promise<FrameDeliveryResult> {
+    signal?.throwIfAborted();
+
     const sessionContext = this.sessionContext;
     if (!sessionContext) throw new Error("Fake remote Vision session has not started.");
     if (
@@ -78,6 +82,7 @@ export class FakeRemoteVisionClient implements RemoteVisionClient {
     this.frameInFlight = true;
     try {
       await Promise.resolve();
+      signal?.throwIfAborted();
       return {
         frame_id: context.frame_id,
         status: "accepted",

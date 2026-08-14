@@ -61,3 +61,23 @@ test("활성 session과 다른 FrameContext는 전송하지 않는다", async ()
     /does not match/,
   );
 });
+
+test("frame 전달 중 취소되면 accepted로 완료하지 않는다", async () => {
+  const client = new FakeRemoteVisionClient();
+  const frame = { width: 640, height: 360, close: () => undefined };
+  const abortController = new AbortController();
+
+  await client.startSession({
+    session_id: context.session_id,
+    video_id: context.video_id,
+  });
+  const delivery = client.sendFrame(frame, context, {
+    signal: abortController.signal,
+  });
+  abortController.abort();
+
+  await assert.rejects(delivery, (error: unknown) => {
+    return error instanceof DOMException && error.name === "AbortError";
+  });
+  assert.equal((await client.sendFrame(frame, context)).status, "accepted");
+});

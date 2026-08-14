@@ -30,7 +30,28 @@ export type FrameCaptureOutcome = "delivered" | "dropped";
 export type FrameConsumer = (
   frame: EphemeralVideoFrame,
   context: FrameContext,
+  signal: AbortSignal,
 ) => Promise<void>;
+
+type OpenOperation = {
+  generation: number;
+  controller: AbortController;
+  stream: MediaStream | null;
+  video: HTMLVideoElement | null;
+};
+
+type OpenTask = {
+  operation: OpenOperation;
+  promise: Promise<void>;
+};
+
+type CaptureOperation = {
+  generation: number;
+  controller: AbortController;
+  stream: MediaStream;
+  video: HTMLVideoElement;
+  frame: EphemeralVideoFrame | null;
+};
 
 type FrameSourceDependencies = {
   mediaDevices?: Pick<MediaDevices, "getUserMedia"> | null;
@@ -41,6 +62,33 @@ type FrameSourceDependencies = {
 
 function stopStream(stream: MediaStream): void {
   stream.getTracks().forEach((track) => track.stop());
+}
+
+function releaseVideo(video: HTMLVideoElement): void {
+  video.pause();
+  video.srcObject = null;
+  video.removeAttribute("src");
+  video.load();
+}
+
+function createCancelledError(message: string): CameraAccessError {
+  return new CameraAccessError("cancelled", message);
+}
+
+function releaseOpenResources(operation: OpenOperation): void {
+  const video = operation.video;
+  const stream = operation.stream;
+  operation.video = null;
+  operation.stream = null;
+
+  if (video) releaseVideo(video);
+  if (stream) stopStream(stream);
+}
+
+function releaseCaptureFrame(operation: CaptureOperation): void {
+  const frame = operation.frame;
+  operation.frame = null;
+  frame?.close();
 }
 
 function classifyCameraError(error: unknown): CameraAccessError {
@@ -76,9 +124,45 @@ function classifyCameraError(error: unknown): CameraAccessError {
   });
 }
 
-function waitForVideoData(video: HTMLVideoElement, timeoutMs: number): Promise<void> {
+function waitForAbortablePromise<T>(
+  promise: Promise<T>,
+  signal: AbortSignal,
+  message: string,
+): Promise<T> {
+  if (signal.aborted) return Promise.reject(createCancelledError(message));
+
+  return new Promise<T>((resolve, reject) => {
+    const handleAbort = () => {
+      cleanup();
+      reject(createCancelledError(message));
+    };
+    const cleanup = () => signal.removeEventListener("abort", handleAbort);
+
+    signal.addEventListener("abort", handleAbort, { once: true });
+    promise.then(
+      (value) => {
+        cleanup();
+        resolve(value);
+      },
+      (error: unknown) => {
+        cleanup();
+        reject(error);
+      },
+    );
+  });
+}
+
+function waitForVideoData(
+  video: HTMLVideoElement,
+  timeoutMs: number,
+  signal: AbortSignal,
+): Promise<void> {
   if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
     return Promise.resolve();
+  }
+
+  if (signal.aborted) {
+    return Promise.reject(createCancelledError("Camera startup was cancelled."));
   }
 
   return new Promise<void>((resolve, reject) => {
@@ -101,16 +185,22 @@ function waitForVideoData(video: HTMLVideoElement, timeoutMs: number): Promise<v
       cleanup();
       reject(new CameraAccessError("camera_not_ready", "Camera video failed to load."));
     };
+    const handleAbort = () => {
+      cleanup();
+      reject(createCancelledError("Camera startup was cancelled."));
+    };
     const cleanup = () => {
       globalThis.clearTimeout(timeoutId);
       video.removeEventListener("loadeddata", handleReady);
       video.removeEventListener("canplay", handleReady);
       video.removeEventListener("error", handleError);
+      signal.removeEventListener("abort", handleAbort);
     };
 
     video.addEventListener("loadeddata", handleReady);
     video.addEventListener("canplay", handleReady);
     video.addEventListener("error", handleError);
+    signal.addEventListener("abort", handleAbort, { once: true });
   });
 }
 
@@ -121,9 +211,9 @@ export class FrameSource {
   private readonly readyTimeoutMs: number;
   private stream: MediaStream | null = null;
   private video: HTMLVideoElement | null = null;
-  private openPromise: Promise<void> | null = null;
+  private openTask: OpenTask | null = null;
   private lifecycleGeneration = 0;
-  private captureInFlight = false;
+  private captureOperation: CaptureOperation | null = null;
 
   constructor({
     mediaDevices = globalThis.navigator?.mediaDevices ?? null,
@@ -143,7 +233,9 @@ export class FrameSource {
 
   async open(): Promise<void> {
     if (this.isOpen()) return;
-    if (this.openPromise) return this.openPromise;
+    if (this.openTask && !this.openTask.operation.controller.signal.aborted) {
+      return this.openTask.promise;
+    }
     if (!this.mediaDevices) {
       throw new CameraAccessError(
         "unsupported",
@@ -151,32 +243,47 @@ export class FrameSource {
       );
     }
 
-    const generation = this.lifecycleGeneration;
-    const pendingOpen = this.openCamera(generation);
-    this.openPromise = pendingOpen;
+    const operation: OpenOperation = {
+      generation: this.lifecycleGeneration,
+      controller: new AbortController(),
+      stream: null,
+      video: null,
+    };
+    const pendingOpen = this.openCamera(operation);
+    const task = { operation, promise: pendingOpen };
+    this.openTask = task;
 
     try {
       await pendingOpen;
+      this.assertOpenActive(operation);
     } finally {
-      if (this.openPromise === pendingOpen) this.openPromise = null;
+      if (this.openTask === task) this.openTask = null;
     }
   }
 
   stop(): void {
     this.lifecycleGeneration += 1;
-    this.captureInFlight = false;
+
+    const openTask = this.openTask;
+    this.openTask = null;
+    if (openTask) {
+      openTask.operation.controller.abort();
+      releaseOpenResources(openTask.operation);
+    }
+
+    const captureOperation = this.captureOperation;
+    this.captureOperation = null;
+    if (captureOperation) {
+      captureOperation.controller.abort();
+      releaseCaptureFrame(captureOperation);
+    }
 
     const video = this.video;
     const stream = this.stream;
     this.video = null;
     this.stream = null;
 
-    if (video) {
-      video.pause();
-      video.srcObject = null;
-      video.removeAttribute("src");
-      video.load();
-    }
+    if (video) releaseVideo(video);
     if (stream) stopStream(stream);
   }
 
@@ -184,49 +291,58 @@ export class FrameSource {
     context: FrameContext,
     consume: FrameConsumer,
   ): Promise<FrameCaptureOutcome> {
-    if (this.captureInFlight) return "dropped";
+    if (this.captureOperation) return "dropped";
 
     const video = this.video;
+    const stream = this.stream;
     const generation = this.lifecycleGeneration;
-    if (!video || !this.stream || video.readyState < 2) {
+    if (!video || !stream || video.readyState < 2) {
       throw new CameraAccessError("camera_not_ready", "Camera is not ready to capture.");
     }
 
-    this.captureInFlight = true;
-    let frame: EphemeralVideoFrame | null = null;
+    const operation: CaptureOperation = {
+      generation,
+      controller: new AbortController(),
+      stream,
+      video,
+      frame: null,
+    };
+    this.captureOperation = operation;
 
     try {
-      frame = await this.createFrame(video);
-      if (generation !== this.lifecycleGeneration) {
-        throw new CameraAccessError("cancelled", "Camera capture was cancelled.");
-      }
+      operation.frame = await this.createFrame(video);
+      this.assertCaptureActive(operation);
 
-      await consume(frame, context);
+      await consume(operation.frame, context, operation.controller.signal);
+      this.assertCaptureActive(operation);
       return "delivered";
     } catch (error: unknown) {
+      if (
+        operation.controller.signal.aborted ||
+        operation.generation !== this.lifecycleGeneration ||
+        this.captureOperation !== operation
+      ) {
+        throw createCancelledError("Camera capture was cancelled.");
+      }
       if (error instanceof CameraAccessError) throw error;
       throw new CameraAccessError("capture_failed", "Camera frame capture failed.", {
         cause: error,
       });
     } finally {
-      frame?.close();
-      if (generation === this.lifecycleGeneration) this.captureInFlight = false;
+      releaseCaptureFrame(operation);
+      if (this.captureOperation === operation) this.captureOperation = null;
     }
   }
 
-  private async openCamera(generation: number): Promise<void> {
-    let stream: MediaStream | null = null;
-    let video: HTMLVideoElement | null = null;
-
+  private async openCamera(operation: OpenOperation): Promise<void> {
     try {
-      stream = await this.mediaDevices!.getUserMedia({
+      const stream = await this.mediaDevices!.getUserMedia({
         audio: false,
         video: CAMERA_VIDEO_CONSTRAINTS,
       });
+      operation.stream = stream;
 
-      if (generation !== this.lifecycleGeneration) {
-        throw new CameraAccessError("cancelled", "Camera startup was cancelled.");
-      }
+      this.assertOpenActive(operation);
       if (stream.getVideoTracks().length === 0) {
         throw new CameraAccessError(
           "camera_unavailable",
@@ -234,26 +350,52 @@ export class FrameSource {
         );
       }
 
-      video = this.createVideoElement();
+      const video = this.createVideoElement();
+      operation.video = video;
       video.muted = true;
       video.playsInline = true;
       video.srcObject = stream;
-      await video.play();
-      await waitForVideoData(video, this.readyTimeoutMs);
+      await waitForAbortablePromise(
+        video.play(),
+        operation.controller.signal,
+        "Camera startup was cancelled.",
+      );
+      await waitForVideoData(video, this.readyTimeoutMs, operation.controller.signal);
 
-      if (generation !== this.lifecycleGeneration) {
-        throw new CameraAccessError("cancelled", "Camera startup was cancelled.");
-      }
+      this.assertOpenActive(operation);
 
+      operation.stream = null;
+      operation.video = null;
       this.stream = stream;
       this.video = video;
     } catch (error: unknown) {
-      if (video) {
-        video.pause();
-        video.srcObject = null;
-      }
-      if (stream) stopStream(stream);
+      const wasCancelled =
+        operation.controller.signal.aborted ||
+        operation.generation !== this.lifecycleGeneration;
+      releaseOpenResources(operation);
+      if (wasCancelled) throw createCancelledError("Camera startup was cancelled.");
       throw classifyCameraError(error);
+    }
+  }
+
+  private assertOpenActive(operation: OpenOperation): void {
+    if (
+      operation.controller.signal.aborted ||
+      operation.generation !== this.lifecycleGeneration
+    ) {
+      throw createCancelledError("Camera startup was cancelled.");
+    }
+  }
+
+  private assertCaptureActive(operation: CaptureOperation): void {
+    if (
+      operation.controller.signal.aborted ||
+      operation.generation !== this.lifecycleGeneration ||
+      this.captureOperation !== operation ||
+      this.stream !== operation.stream ||
+      this.video !== operation.video
+    ) {
+      throw createCancelledError("Camera capture was cancelled.");
     }
   }
 }

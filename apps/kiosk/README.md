@@ -70,7 +70,7 @@ S03의 임시 룩북 영상은 `VITE_LOOKBOOK_VIDEO_URL`로 연결한다. 로컬
 
 한 세션은 단일 `FrameSource`만 사용한다. 룩북 재생 중 D3 fake 확인용 250ms 간격으로 최신 camera frame을 읽고, 같은 순간의 `FrameContext`와 함께 `FakeRemoteVisionClient`에 전달한다. 실제 sampling FPS는 D5 성능 검증 후 확정한다. 이전 frame 처리 중에는 새 frame을 쌓지 않고 drop한다. fake client는 네트워크를 열거나 frame을 보관하지 않으며 session·video ID 경계만 확인한다. 임시 `ImageBitmap`은 전달 성공·실패와 관계없이 `FrameSource`가 즉시 `close()`한다.
 
-처음 화면 이동, 동의 취소·timeout, 세션 시작 실패, 보정 실패, 영상 로드 실패, 룩북 종료와 앱 unmount에서 camera track과 video 참조를 해제한다. 실제 WSS, binary encoding, AI 서버와 Eye·Face 모델 연결은 포함하지 않는다.
+처음 화면 이동, 동의 취소·timeout, 세션 시작 실패, 보정 실패, 영상 로드 실패, 룩북 종료와 앱 unmount에서 camera track과 video 참조를 해제한다. 초기화 중인 pending stream·video도 즉시 정리하고 취소된 open과 재시도 open을 분리한다. frame consumer에는 취소 신호를 전달하며 consumer 전후 lifecycle을 다시 확인해 화면 종료 뒤 `delivered`로 완료하지 않는다. 실제 WSS, binary encoding, AI 서버와 Eye·Face 모델 연결은 포함하지 않는다.
 
 ## 책임
 

@@ -940,8 +940,8 @@ function App() {
       const generation = flowController.captureGeneration();
 
       try {
-        await frameSource.capture(context, async (frame, frameContext) => {
-          await visionClient.sendFrame(frame, frameContext);
+        await frameSource.capture(context, async (frame, frameContext, signal) => {
+          await visionClient.sendFrame(frame, frameContext, { signal });
         });
       } catch (error: unknown) {
         if (
