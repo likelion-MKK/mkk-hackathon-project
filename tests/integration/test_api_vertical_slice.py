@@ -77,6 +77,18 @@ def test_raw_frame_payload_is_rejected(client: TestClient) -> None:
     assert response.json()["code"] == "invalid_request"
 
 
+def test_completed_session_rejects_later_reaction_batches(client: TestClient) -> None:
+    session_id = create_session(client)
+    body = reaction_batch(session_id)
+    assert client.post(f"/api/v1/sessions/{session_id}/reaction-batches", json=body).status_code == 202
+    assert client.post(f"/api/v1/sessions/{session_id}/complete").status_code == 202
+
+    response = client.post(f"/api/v1/sessions/{session_id}/reaction-batches", json=body)
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "session_completed"
+
+
 def test_identifier_surrounding_whitespace_is_rejected(client: TestClient) -> None:
     response = client.post(
         "/api/v1/sessions",

@@ -6,9 +6,13 @@
 
 ## 입력
 
-- `ProductAttentionEvent`, `ExpressionSample`과 각 신호의 품질
+- API adapter가 활성 세션에서 만든 privacy-minimized 상품별 관심 feature
 - 영상·manifest·모델·taxonomy·신호 정의 version
 - 세션 완료 또는 설정된 집계 trigger
+
+개별 `ProductAttentionEvent`, `ExpressionSample`은 API 집계 경계에서만 처리하고
+추천 엔진에 전달·영속화하지 않는다. MVP에서는 표정 score를 상품 feature나
+추천 점수에 사용하지 않는다.
 
 ## 출력
 

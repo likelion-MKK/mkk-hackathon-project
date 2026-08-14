@@ -2,7 +2,7 @@
 
 - 문서 상태: 팀장 기본안 v0.2
 - 작성일: 2026-08-11
-- 최근 수정: 2026-08-13 원격 Vision Inference 제안 반영
+- 최근 수정: 2026-08-14 MVP 파생 반응 C안 반영
 - 기준 문서: `README.md`, `docs/OVERALL_DESIGN.md`, `docs/DETAILED_DESIGN_PLAN.md`
 - 목적: 팀원이 구현을 시작하기 전에 공통 실행 환경과 통합 기준을 고정한다.
 
@@ -20,6 +20,7 @@
 | D1-06 | 매니저 제품 요청 알림 | S04에서 고객이 제품 요청 버튼을 누를 때만 Top 2와 함께 `customer_product_request` 기록 | 이슈 #6, Consumer 검토 필요 | 박형진·조윤혜 |
 | D1-07 | PostgreSQL과 migration | PostgreSQL 17.10 Docker Compose, SQLAlchemy 2 + Alembic, migration 단일 순서 관리 | 잠정 결정 | 박형진 |
 | D1-08 | 룩북 영상과 상품 | 개발용 fixture로 병렬 개발, 실제 영상·상품은 version과 checksum을 고정한 뒤 manifest·catalog에 반영 | 실제 자산 확정 필요 | 전원 |
+| D1-09 | MVP 파생 반응 보관 | 개별 파생 event는 활성 세션에서 즉시 집계하고 영속화하지 않으며, 추천 완료 시 집계·중복 제거 상태를 폐기 | 잠정 결정, 실제 client 전 TTL·취소 정책 확정 필요 | 박형진·조윤혜 |
 
 ### 상태의 의미
 
@@ -359,7 +360,8 @@ uv run uvicorn app.main:app --reload
 - `DATABASE_URL`은 `.env.example`에 형식만 제공하고 실제 password는 commit하지 않는다.
 - PostgreSQL port를 외부 인터넷에 공개하지 않는다.
 - 원본 frame, base64, image blob/path 또는 얼굴 embedding 컬럼을 만들지 않는다.
-- 동의한 파생 반응, 추천, 구매 전환 데이터의 보유 기간·삭제 기준은 개인정보 상세 설계에서 별도 확정한다.
+- D1-09 C안에서는 개별 파생 event를 PostgreSQL에 저장하지 않는다. 활성 세션은 상품별 집계와 재전송 중복 제거 키만 메모리에 유지하고, 추천 완료 시 폐기한다.
+- 최종 추천·구매 전환과 필요한 익명 세션 상태의 보유 기간·삭제 기준, 활성 세션 TTL·취소·재시작 정책은 실제 client 연결 전 별도 계약으로 확정한다.
 
 ---
 
@@ -430,7 +432,25 @@ manifest_version:
 
 ---
 
-## 10. 팀 회의에서 승인할 체크리스트
+## 10. D1-09 MVP 파생 반응 보관 C안
+
+### 적용 범위
+
+- `ReactionBatch`는 Kiosk·Vision 영역에서 Backend로 파생 신호를 전달하는 transport이며, event history 저장 형식이 아니다.
+- Backend는 활성 세션에서 `event_id`·`sequence`·`batch_id`로 재전송을 중복 제거하고, catalog 상품별 유효 관심 집계만 만든다.
+- 개별 event payload, `frame_id`, 좌표, 캡처 시각, 표정 score와 원본 신호는 DB·파일·로그·cache·queue·backup에 남기지 않는다.
+- 추천 실행이 성공하면 활성 집계와 중복 제거 키를 폐기하고, 최종 `RecommendationResult`, Manager 요청 및 `ConversionOutcome`만 정해진 보유 정책에 따라 다룬다.
+- 표정 score는 상품 귀속·taxonomy·평가 기준이 승인되기 전까지 MVP 집계·영속화·추천 점수에 사용하지 않는다.
+
+### 후속 Gate
+
+- 실제 Kiosk client 연결 전 세션 TTL, 취소 API·멱등성, timeout·재시작 시 화면 동선과 활성 상태의 폐기 시점을 Contract PR로 확정한다.
+- PostgreSQL 도입 시 `reaction_batches` 또는 개별 sample table을 만들지 않고, 필요한 경우 만료 시각이 있는 집계 상태와 최종 결과만 migration으로 관리한다.
+- 실제 고객의 개별 반응 이력을 분석·학습에 쓰려면 새로운 동의 version, 보유 기간, 삭제·접근 통제와 별도 Contract·migration 승인을 거친다.
+
+---
+
+## 11. 팀 회의에서 승인할 체크리스트
 
 아래 항목을 한 번의 D1 회의에서 확인하고 이 표의 상태를 갱신한다.
 
@@ -441,6 +461,7 @@ manifest_version:
 - [ ] WSS, server benchmark와 원본 frame 비저장 검증 Gate·담당자를 정했다.
 - [ ] 최초 Manager 알림을 S02 AI 선택 + 동의 완료로 확정했다.
 - [ ] PostgreSQL 17.10 Compose와 Alembic migration 규칙을 승인했다.
+- [ ] D1-09 C안의 활성 세션 TTL·취소·폐기 정책을 실제 client 연결 전 확정하기로 했다.
 - [ ] 임시 video ID와 placeholder product ID 최소 4개를 정했다.
 - [ ] Eye 보정 UI는 점선 이동 표적 + 별도 검증으로 구현하기로 했다.
 - [ ] 보정 통과 수치는 Eye benchmark 이후 D5에 확정하기로 했다.
@@ -455,7 +476,7 @@ manifest_version:
 미결 항목의 담당자·기한:
 ```
 
-## 11. 근거 자료
+## 12. 근거 자료
 
 - [Node.js Releases](https://nodejs.org/en/about/previous-releases): LTS 사용 원칙과 현재 지원 계열
 - [Vite Getting Started](https://vite.dev/guide/): React TypeScript template과 Node 요구사항

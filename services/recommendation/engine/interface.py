@@ -23,6 +23,38 @@ class RecommendationItem:
 
 
 @dataclass(frozen=True, slots=True)
+class ProductAttentionFeature:
+    """A privacy-minimized aggregate for one catalog product.
+
+    The feature intentionally contains no event, frame, coordinate, timestamp,
+    or expression payload. It keeps only the information needed by the
+    development recommendation boundary.
+    """
+
+    product_id: str
+    valid_attention_count: int
+    confidence_total: float
+    first_attention_sequence: int
+    first_candidate_index: int
+
+    def first_seen_key(self) -> tuple[int, int, str]:
+        """Return the deterministic order used by the development mock."""
+
+        return (self.first_attention_sequence, self.first_candidate_index, self.product_id)
+
+
+@dataclass(frozen=True, slots=True)
+class RecommendationFeatures:
+    """Sanitized, session-local input for a recommendation engine.
+
+    API adapters build this value while batches arrive and discard the original
+    derived-event payloads. It is not a public JSON contract.
+    """
+
+    product_attention: tuple[ProductAttentionFeature, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class RecommendationRun:
     """Engine output to be validated by the API against RecommendationResult."""
 
@@ -54,7 +86,7 @@ class RecommendationRun:
 
 
 class RecommendationEngine(Protocol):
-    """An engine consumes public derived-event and catalog payloads only."""
+    """An engine consumes sanitized aggregate features and catalog payloads."""
 
     mode: str
     algorithm_version: str
@@ -66,7 +98,7 @@ class RecommendationEngine(Protocol):
         session_id: str,
         video_id: str,
         manifest_version: str,
-        events: Sequence[ContractRecord],
+        features: RecommendationFeatures,
         products: Sequence[ContractRecord],
     ) -> RecommendationRun:
         """Return a result for an API adapter to validate against the contract."""

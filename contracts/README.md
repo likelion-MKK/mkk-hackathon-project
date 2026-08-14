@@ -42,6 +42,13 @@
 - `frame_id`는 동일한 캡처 프레임에서 생성된 Eye·Face 결과를 연결합니다.
 - batch envelope는 별도의 `batch_id`와 `batch_sequence`를 가집니다.
 
+### MVP C안의 파생 event 처리
+
+- `ReactionBatch`는 전달·검증·집계를 위한 transport이며, 개별 event를 영속 보관하는 event history가 아닙니다.
+- Backend는 활성 세션 안에서만 `event_id`, `sequence`, `batch_id`로 중복을 제거하고, catalog 상품별 유효 관심 집계를 만듭니다.
+- 추천 완료 시 활성 집계와 중복 제거 키를 폐기합니다. 개별 event payload, 좌표, frame ID, 캡처 시각과 표정 score는 DB·파일·로그·cache·queue·backup에 남기지 않습니다.
+- TTL·취소·재시작 경계는 실제 Kiosk client 연결 전 별도 session lifecycle Contract에서 확정합니다.
+
 ### 시간
 
 - `captured_at_mono_ms`와 `video_time_ms`는 추론 완료 시점이 아니라 프레임 캡처 시점을 기준으로 합니다.
