@@ -106,14 +106,36 @@ def test_attention_duration_splits_an_ambiguous_observation_between_products() -
     assert by_product["P002"].confidence_total == pytest.approx(0.4)
 
 
+def test_attention_deduplicates_multiple_aoi_candidates_for_the_same_product() -> None:
+    snapshot = features(
+        attention("attention-1", 1, 100, ["P001", "P001", "P002"], confidence=0.8)
+    )
+    by_product = {feature.product_id: feature for feature in snapshot.product_attention}
+
+    assert by_product["P001"].valid_attention_count == 1
+    assert by_product["P002"].valid_attention_count == 1
+    assert by_product["P001"].attention_duration_ms == pytest.approx(50)
+    assert by_product["P002"].attention_duration_ms == pytest.approx(50)
+
+
 def test_attention_revisit_count_uses_separate_video_time_runs() -> None:
     snapshot = features(
         attention("attention-1", 1, 100, ["P001"]),
         attention("attention-2", 2, 200, ["P001"]),
-        attention("attention-3", 3, 500, ["P001"]),
+        attention("attention-3", 3, 600, ["P001"]),
     )
 
     assert snapshot.product_attention[0].revisit_count == 1
+
+
+def test_attention_revisit_count_tolerates_a_250ms_capture_cadence() -> None:
+    snapshot = features(
+        attention("attention-1", 1, 100, ["P001"]),
+        attention("attention-2", 2, 350, ["P001"]),
+        attention("attention-3", 3, 600, ["P001"]),
+    )
+
+    assert snapshot.product_attention[0].revisit_count == 0
 
 
 def test_gaze_score_prefers_longer_observed_attention_over_short_high_confidence_attention() -> None:

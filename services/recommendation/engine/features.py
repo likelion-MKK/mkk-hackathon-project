@@ -13,6 +13,7 @@ from services.recommendation.engine.interface import (
 
 
 DEFAULT_ATTENTION_BUCKET_MS = 100
+DEFAULT_REVISIT_GAP_MS = 300
 
 
 @dataclass(slots=True)
@@ -44,14 +45,24 @@ class ProductFeatureAccumulator:
         known_product_ids: Collection[str],
         *,
         attention_bucket_ms: int = DEFAULT_ATTENTION_BUCKET_MS,
+        revisit_gap_ms: int = DEFAULT_REVISIT_GAP_MS,
     ) -> None:
         if isinstance(attention_bucket_ms, bool) or not isinstance(attention_bucket_ms, int):
             raise TypeError("attention_bucket_ms must be an integer")
         if attention_bucket_ms <= 0:
             raise ValueError("attention_bucket_ms must be positive")
+        if isinstance(revisit_gap_ms, bool) or not isinstance(revisit_gap_ms, int):
+            raise TypeError("revisit_gap_ms must be an integer")
+        if revisit_gap_ms < attention_bucket_ms:
+            raise ValueError("revisit_gap_ms must be at least attention_bucket_ms")
 
         self._known_product_ids = frozenset(known_product_ids)
         self._attention_bucket_ms = attention_bucket_ms
+        # A 250ms capture cadence can span three 100ms buckets after floor
+        # division. Keep that continuous observation from becoming a revisit.
+        self._max_contiguous_bucket_gap = (
+            revisit_gap_ms + attention_bucket_ms - 1
+        ) // attention_bucket_ms
         self._features: dict[str, _MutableProductAttentionFeature] = {}
 
     @staticmethod
@@ -171,7 +182,10 @@ class ProductFeatureAccumulator:
         for bucket_indexes in buckets_by_epoch.values():
             previous_bucket: int | None = None
             for bucket_index in sorted(bucket_indexes):
-                if previous_bucket is None or bucket_index != previous_bucket + 1:
+                if (
+                    previous_bucket is None
+                    or bucket_index - previous_bucket > self._max_contiguous_bucket_gap
+                ):
                     observation_runs += 1
                 previous_bucket = bucket_index
 

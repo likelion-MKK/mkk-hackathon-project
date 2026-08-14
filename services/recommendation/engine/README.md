@@ -6,7 +6,7 @@ privacy-minimized 상품 feature와 version 정보를 받아 `RecommendationResu
 
 ## 시선 점수 1차 버전
 
-`research_gaze.py`의 `ResearchGazeScoreEngine`은 실제 추천 품질을 주장하지 않는 연구·replay 전용 구현이다. 상품별 유효 시선 관찰 시간을 100ms 단위로 묶어 같은 짧은 구간의 높은 capture FPS가 점수를 부풀리지 않게 한다. 그 뒤 관찰 시간 65%, 시간 가중 시선 신뢰도 25%, 다시 본 횟수 10%를 사용해 순위를 정한다.
+`research_gaze.py`의 `ResearchGazeScoreEngine`은 실제 추천 품질을 주장하지 않는 연구·replay 전용 구현이다. 상품별 유효 시선 관찰 시간을 100ms 단위로 묶어 같은 짧은 구간의 높은 capture FPS가 점수를 부풀리지 않게 한다. 재방문은 기본 300ms 안의 bucket 간격을 한 번의 연속 관찰로 보며, 현재 D3 fake의 250ms capture cadence가 재방문 수를 부풀리지 않게 한다. 그 뒤 관찰 시간 65%, 시간 가중 시선 신뢰도 25%, 다시 본 횟수 10%를 사용해 순위를 정한다. 실제 sampling FPS가 D5에서 확정되면 이 내부 gap 값도 같은 benchmark에서 다시 조정한다.
 
 - 원본 frame, 좌표, frame ID, 캡처 시각, 개별 event 또는 표정 score는 엔진 입력에 포함하지 않는다.
 - 여러 상품이 동시에 후보인 한 관찰은 관찰 비중과 `confidence_total`을 후보 수만큼 나눠 반영한다. 같은 100ms 안에서 후보가 바뀌어 상품별 최대 비중의 합이 100%를 넘으면 상품별 비율을 다시 줄여 한 구간의 총 시간이 100ms를 넘지 않게 한다. AOI의 최종 우선순위 규칙이 확정되면 이 부분은 별도 버전으로 교체한다.
