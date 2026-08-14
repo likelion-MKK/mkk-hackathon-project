@@ -736,7 +736,7 @@ function App() {
   const beginSession = async () => {
     if (!selectedCategory || isStarting || sessionStartAbortController.current) return;
 
-    const generation = flowController.captureGeneration();
+    const generation = flowController.invalidateCurrentFlow();
     const abortController = new AbortController();
     sessionStartAbortController.current = abortController;
     setIsStarting(true);
