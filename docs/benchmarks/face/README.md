@@ -51,3 +51,10 @@ python -m unittest -v tests/test_face_candidate_benchmark.py
 - `accuracy_claim: none`
 
 모델 weight는 후보별 ignored `models/`, raw metrics는 ignored `artifacts/`에만 둔다. 이 benchmark는 synthetic 입력의 실행 가능성·출력 안정성·지연 관찰이며 최종 모델 선정 문서가 아니다.
+
+## 2026-08-15 결과
+
+- [후보 비교와 임시 label mapping](2026-08-15-candidate-comparison.md)
+- [MediaPipe Face Landmarker](2026-08-15-mediapipe-face-landmarker.md)
+- [OpenVINO emotions-recognition-retail-0003](2026-08-15-openvino-emotions-retail-0003.md)
+- [HSEmotion enet_b0_8_best_afew](2026-08-15-hsemotion-enet-b0-8-best-afew.md)
