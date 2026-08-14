@@ -1,0 +1,589 @@
+{
+  "schema_version": "1.0",
+  "status": "completed",
+  "result_scope": "single-participant development-PC live target accuracy",
+  "generated_at": "2026-08-15T01:57:40+09:00",
+  "repository": {
+    "head": "6d0550abc0af4f117b6324541770f0e2496c0984",
+    "branch": "feat/eye/d04-eyetrax-live-benchmark"
+  },
+  "candidate": {
+    "name": "EyeTrax",
+    "version": "0.4.0",
+    "source_revision": "84e13a16af168ac7c383f7d50ec901cd6c0ad61d",
+    "code_license": "MIT",
+    "face_model_url": "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+    "face_model_sha256": "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff",
+    "smoothing": "none"
+  },
+  "environment": {
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "screen": {
+      "coordinate_space": "logical_pixels",
+      "width": 1536,
+      "height": 864,
+      "physical_width": 1920,
+      "physical_height": 1080,
+      "physical_to_logical_scale_x": 1.25,
+      "physical_to_logical_scale_y": 1.25
+    },
+    "camera": {
+      "index": 0,
+      "friendly_name": "LGE Camera",
+      "requested_width": 1280,
+      "requested_height": 720,
+      "requested_fps": 30.0,
+      "actual_width": 1280,
+      "actual_height": 720,
+      "actual_fps": 30.0,
+      "backend": "DSHOW"
+    }
+  },
+  "configuration": {
+    "condition": "baseline",
+    "participant_count": 1,
+    "runs_requested": 1,
+    "calibration_points": [
+      [
+        0.5,
+        0.5
+      ],
+      [
+        0.1,
+        0.1
+      ],
+      [
+        0.9,
+        0.1
+      ],
+      [
+        0.1,
+        0.9
+      ],
+      [
+        0.9,
+        0.9
+      ],
+      [
+        0.5,
+        0.1
+      ],
+      [
+        0.1,
+        0.5
+      ],
+      [
+        0.9,
+        0.5
+      ],
+      [
+        0.5,
+        0.9
+      ]
+    ],
+    "validation_targets": [
+      [
+        "P001",
+        0.2,
+        0.3
+      ],
+      [
+        "P001",
+        0.38,
+        0.3
+      ],
+      [
+        "P001",
+        0.2,
+        0.7
+      ],
+      [
+        "P001",
+        0.42,
+        0.7
+      ],
+      [
+        "P002",
+        0.8,
+        0.3
+      ],
+      [
+        "P002",
+        0.62,
+        0.3
+      ],
+      [
+        "P002",
+        0.8,
+        0.7
+      ],
+      [
+        "P002",
+        0.58,
+        0.7
+      ]
+    ],
+    "manifest": "data/lookbooks/example/manifest.json",
+    "gates": {
+      "valid_ratio_min": 0.9,
+      "aoi_hit_ratio_min": 0.8,
+      "latency_p95_ms_max": 100.0,
+      "no_face_ratio_min": 0.95
+    }
+  },
+  "privacy": {
+    "self_consent": true,
+    "raw_frame_saved": false,
+    "per_frame_gaze_saved": false,
+    "preview_saved": false
+  },
+  "preflight": {
+    "frame_count": 91,
+    "valid_frames": 58,
+    "passed": true
+  },
+  "runs": [
+    {
+      "run_index": 1,
+      "calibration": {
+        "completed": true,
+        "valid_samples_per_point": [
+          22,
+          31,
+          32,
+          31,
+          32,
+          31,
+          32,
+          31,
+          31
+        ],
+        "total_valid_samples": 273,
+        "minimum_required_per_point": 15,
+        "training_fit": {
+          "error_px": {
+            "count": 273,
+            "mean": 68.9565,
+            "p50": 49.9492,
+            "p95": 181.2461
+          },
+          "signed_error_x_px": {
+            "count": 273,
+            "mean": -0.0,
+            "p50": -3.1315,
+            "p95": 118.3921
+          },
+          "signed_error_y_px": {
+            "count": 273,
+            "mean": 0.0,
+            "p50": -0.6042,
+            "p95": 49.843
+          },
+          "outside_viewport_count": 1
+        },
+        "attempt_count": 1,
+        "attempts": [
+          {
+            "completed": true,
+            "valid_samples_per_point": [
+              22,
+              31,
+              32,
+              31,
+              32,
+              31,
+              32,
+              31,
+              31
+            ],
+            "total_valid_samples": 273,
+            "minimum_required_per_point": 15,
+            "training_fit": {
+              "error_px": {
+                "count": 273,
+                "mean": 68.9565,
+                "p50": 49.9492,
+                "p95": 181.2461
+              },
+              "signed_error_x_px": {
+                "count": 273,
+                "mean": -0.0,
+                "p50": -3.1315,
+                "p95": 118.3921
+              },
+              "signed_error_y_px": {
+                "count": 273,
+                "mean": 0.0,
+                "p50": -0.6042,
+                "p95": 49.843
+              },
+              "outside_viewport_count": 1
+            }
+          }
+        ]
+      },
+      "total_frames": 250,
+      "valid_frames": 247,
+      "valid_ratio": 0.988,
+      "aoi_hits": 168,
+      "aoi_hit_ratio": 0.6802,
+      "target_median_aoi_hits": 6,
+      "target_median_aoi_hit_ratio": 0.75,
+      "target_metrics": [
+        {
+          "target_index": 1,
+          "product_id": "P002",
+          "target_normalized": {
+            "x": 0.62,
+            "y": 0.3
+          },
+          "total_frames": 31,
+          "valid_frames": 31,
+          "valid_ratio": 1.0,
+          "aoi_hits": 24,
+          "aoi_hit_ratio": 0.7742,
+          "failure_counts": {},
+          "median_predicted_normalized": {
+            "x": 0.609769,
+            "y": 0.570365
+          },
+          "median_aoi_hit": true,
+          "signed_error_x_px": {
+            "count": 31,
+            "mean": -2.8947,
+            "p50": -15.7155,
+            "p95": 205.0313
+          },
+          "signed_error_y_px": {
+            "count": 31,
+            "mean": 249.557,
+            "p50": 233.5956,
+            "p95": 450.3935
+          },
+          "prediction_spread_px": {
+            "count": 31,
+            "mean": 186.2105,
+            "p50": 191.675,
+            "p95": 313.5231
+          }
+        },
+        {
+          "target_index": 2,
+          "product_id": "P001",
+          "target_normalized": {
+            "x": 0.38,
+            "y": 0.3
+          },
+          "total_frames": 31,
+          "valid_frames": 31,
+          "valid_ratio": 1.0,
+          "aoi_hits": 29,
+          "aoi_hit_ratio": 0.9355,
+          "failure_counts": {},
+          "median_predicted_normalized": {
+            "x": 0.268161,
+            "y": 0.53395
+          },
+          "median_aoi_hit": true,
+          "signed_error_x_px": {
+            "count": 31,
+            "mean": -134.9719,
+            "p50": -171.7851,
+            "p95": 120.1077
+          },
+          "signed_error_y_px": {
+            "count": 31,
+            "mean": 204.1787,
+            "p50": 202.1329,
+            "p95": 278.0099
+          },
+          "prediction_spread_px": {
+            "count": 31,
+            "mean": 135.8886,
+            "p50": 120.3561,
+            "p95": 291.9407
+          }
+        },
+        {
+          "target_index": 3,
+          "product_id": "P002",
+          "target_normalized": {
+            "x": 0.8,
+            "y": 0.3
+          },
+          "total_frames": 32,
+          "valid_frames": 32,
+          "valid_ratio": 1.0,
+          "aoi_hits": 13,
+          "aoi_hit_ratio": 0.4062,
+          "failure_counts": {},
+          "median_predicted_normalized": {
+            "x": 0.512088,
+            "y": 0.45051
+          },
+          "median_aoi_hit": false,
+          "signed_error_x_px": {
+            "count": 32,
+            "mean": -451.87,
+            "p50": -442.2334,
+            "p95": -106.8792
+          },
+          "signed_error_y_px": {
+            "count": 32,
+            "mean": 125.2463,
+            "p50": 130.0403,
+            "p95": 186.8966
+          },
+          "prediction_spread_px": {
+            "count": 32,
+            "mean": 200.2727,
+            "p50": 167.408,
+            "p95": 402.1836
+          }
+        },
+        {
+          "target_index": 4,
+          "product_id": "P001",
+          "target_normalized": {
+            "x": 0.2,
+            "y": 0.3
+          },
+          "total_frames": 31,
+          "valid_frames": 31,
+          "valid_ratio": 1.0,
+          "aoi_hits": 29,
+          "aoi_hit_ratio": 0.9355,
+          "failure_counts": {},
+          "median_predicted_normalized": {
+            "x": 0.298606,
+            "y": 0.381331
+          },
+          "median_aoi_hit": true,
+          "signed_error_x_px": {
+            "count": 31,
+            "mean": 163.9892,
+            "p50": 151.4594,
+            "p95": 435.605
+          },
+          "signed_error_y_px": {
+            "count": 31,
+            "mean": 77.5518,
+            "p50": 70.2697,
+            "p95": 125.6891
+          },
+          "prediction_spread_px": {
+            "count": 31,
+            "mean": 120.113,
+            "p50": 91.7681,
+            "p95": 312.9049
+          }
+        },
+        {
+          "target_index": 5,
+          "product_id": "P002",
+          "target_normalized": {
+            "x": 0.8,
+            "y": 0.7
+          },
+          "total_frames": 31,
+          "valid_frames": 28,
+          "valid_ratio": 0.9032,
+          "aoi_hits": 18,
+          "aoi_hit_ratio": 0.6429,
+          "failure_counts": {
+            "outside_viewport": 3
+          },
+          "median_predicted_normalized": {
+            "x": 0.838788,
+            "y": 0.667921
+          },
+          "median_aoi_hit": true,
+          "signed_error_x_px": {
+            "count": 28,
+            "mean": 50.7466,
+            "p50": 59.5783,
+            "p95": 277.9446
+          },
+          "signed_error_y_px": {
+            "count": 28,
+            "mean": -30.3808,
+            "p50": -27.7165,
+            "p95": 37.6641
+          },
+          "prediction_spread_px": {
+            "count": 28,
+            "mean": 149.5066,
+            "p50": 152.627,
+            "p95": 279.7387
+          }
+        },
+        {
+          "target_index": 6,
+          "product_id": "P001",
+          "target_normalized": {
+            "x": 0.42,
+            "y": 0.7
+          },
+          "total_frames": 32,
+          "valid_frames": 32,
+          "valid_ratio": 1.0,
+          "aoi_hits": 17,
+          "aoi_hit_ratio": 0.5312,
+          "failure_counts": {},
+          "median_predicted_normalized": {
+            "x": 0.419777,
+            "y": 0.603277
+          },
+          "median_aoi_hit": true,
+          "signed_error_x_px": {
+            "count": 32,
+            "mean": 72.8986,
+            "p50": -0.3431,
+            "p95": 346.6147
+          },
+          "signed_error_y_px": {
+            "count": 32,
+            "mean": -64.4468,
+            "p50": -83.5684,
+            "p95": 65.041
+          },
+          "prediction_spread_px": {
+            "count": 32,
+            "mean": 165.9806,
+            "p50": 169.0211,
+            "p95": 349.7404
+          }
+        },
+        {
+          "target_index": 7,
+          "product_id": "P001",
+          "target_normalized": {
+            "x": 0.2,
+            "y": 0.7
+          },
+          "total_frames": 31,
+          "valid_frames": 31,
+          "valid_ratio": 1.0,
+          "aoi_hits": 10,
+          "aoi_hit_ratio": 0.3226,
+          "failure_counts": {},
+          "median_predicted_normalized": {
+            "x": 0.496215,
+            "y": 0.613348
+          },
+          "median_aoi_hit": false,
+          "signed_error_x_px": {
+            "count": 31,
+            "mean": 463.4392,
+            "p50": 454.9863,
+            "p95": 654.3467
+          },
+          "signed_error_y_px": {
+            "count": 31,
+            "mean": -76.6582,
+            "p50": -74.8675,
+            "p95": -23.4172
+          },
+          "prediction_spread_px": {
+            "count": 31,
+            "mean": 119.3397,
+            "p50": 114.2158,
+            "p95": 237.3167
+          }
+        },
+        {
+          "target_index": 8,
+          "product_id": "P002",
+          "target_normalized": {
+            "x": 0.58,
+            "y": 0.7
+          },
+          "total_frames": 31,
+          "valid_frames": 31,
+          "valid_ratio": 1.0,
+          "aoi_hits": 28,
+          "aoi_hit_ratio": 0.9032,
+          "failure_counts": {},
+          "median_predicted_normalized": {
+            "x": 0.756589,
+            "y": 0.680519
+          },
+          "median_aoi_hit": true,
+          "signed_error_x_px": {
+            "count": 31,
+            "mean": 285.2624,
+            "p50": 271.2403,
+            "p95": 552.6928
+          },
+          "signed_error_y_px": {
+            "count": 31,
+            "mean": -22.1637,
+            "p50": -16.8316,
+            "p95": 62.1837
+          },
+          "prediction_spread_px": {
+            "count": 31,
+            "mean": 117.0153,
+            "p50": 94.8532,
+            "p95": 289.5893
+          }
+        }
+      ],
+      "failure_counts": {
+        "outside_viewport": 3
+      },
+      "error_px": {
+        "count": 247,
+        "mean": 298.3432,
+        "p50": 272.4642,
+        "p95": 625.0355
+      },
+      "error_screen_diagonal_ratio": {
+        "count": 247,
+        "mean": 0.1693,
+        "p50": 0.1546,
+        "p95": 0.3547
+      },
+      "capture_to_result_ms": {
+        "count": 250,
+        "mean": 28.8468,
+        "p50": 28.0998,
+        "p95": 46.3377
+      },
+      "observed_fps": 17.6605,
+      "process_cpu_percent": {
+        "count": 8,
+        "mean": 148.3875,
+        "p50": 146.9,
+        "p95": 186.855
+      },
+      "peak_rss_bytes": 263774208,
+      "gate": {
+        "passed": false,
+        "checks": {
+          "calibration_completed": true,
+          "valid_ratio": true,
+          "aoi_hit_ratio": false,
+          "latency_p95_ms": true
+        }
+      }
+    }
+  ],
+  "no_face": {
+    "frame_count": 90,
+    "no_face_frames": 0,
+    "no_face_ratio": 0.0,
+    "camera_released": true
+  },
+  "overall_gate": {
+    "passed": false,
+    "checks": {
+      "three_runs_completed": false,
+      "every_run_passed": false,
+      "no_face_ratio": false,
+      "camera_released": true
+    }
+  },
+  "provisional_recommendation": "diagnostic_only"
+}
