@@ -335,6 +335,17 @@ class RecommendationAccepted(ContractModel):
     status: Literal["pending"]
 
 
+class ConversionOutcome(ContractModel):
+    schema_version: Literal["1.0"]
+    outcome_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
+    session_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
+    recommendation_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
+    product_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
+    outcome_type: Literal["tried_on", "purchased"]
+    source: Literal["manager_input"]
+    recorded_at: datetime
+
+
 class ManagerProductRequest(ContractModel):
     request_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
     recommendation_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)

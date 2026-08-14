@@ -9,6 +9,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from apps.api.app.schemas import (
+    ConversionOutcome,
     ErrorResponse,
     Health,
     IDENTIFIER_PATTERN,
@@ -102,6 +103,19 @@ def create_app(store: MemoryStore | None = None) -> FastAPI:
     )
     def get_recommendation(session_id: str) -> RecommendationResult:
         return app.state.store.get_recommendation(session_id)
+
+    @app.post(
+        "/api/v1/conversions",
+        response_model=ConversionOutcome,
+        status_code=status.HTTP_201_CREATED,
+        responses={
+            400: {"model": ErrorResponse},
+            404: {"model": ErrorResponse},
+            409: {"model": ErrorResponse},
+        },
+    )
+    def record_conversion(outcome: ConversionOutcome) -> ConversionOutcome:
+        return app.state.store.record_conversion(outcome)
 
     @app.post(
         "/api/v1/sessions/{session_id}/manager-product-requests",
