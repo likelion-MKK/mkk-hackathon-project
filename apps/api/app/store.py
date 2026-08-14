@@ -23,12 +23,12 @@ from apps.api.app.schemas import (
     ProductCatalog,
     ReactionBatch,
     ReactionBatchAccepted,
-    ReactionEvent,
     RecommendationAccepted,
     RecommendationResult,
     SessionCreate,
     SessionCreated,
 )
+from services.recommendation.engine.features import ProductFeatureAccumulator
 from services.recommendation.engine.interface import RecommendationEngine
 
 
@@ -50,9 +50,9 @@ class SessionRecord:
     consent_version: str
     created_at: datetime
     display_code: str
+    reaction_features: ProductFeatureAccumulator | None
     event_ids: set[str] = field(default_factory=set)
     event_sequences: set[int] = field(default_factory=set)
-    events: list[ReactionEvent] = field(default_factory=list)
     batch_ids: set[str] = field(default_factory=set)
     recommendation: RecommendationResult | None = None
     completed: bool = False
@@ -143,6 +143,7 @@ class MemoryStore:
                 consent_version=request.consent_version,
                 created_at=created_at,
                 display_code=f"MKK-{session_number:04d}",
+                reaction_features=ProductFeatureAccumulator(self.products.keys()),
                 recommendation=self._new_recommendation(session_id),
             )
             self.sessions[session_id] = record
@@ -177,6 +178,8 @@ class MemoryStore:
                 raise DomainError(409, "session_completed", "completed sessions cannot accept more batches")
             if batch.batch_id in session.batch_ids:
                 return ReactionBatchAccepted(batch_id=batch.batch_id, status="duplicate")
+            if session.reaction_features is None:
+                raise DomainError(500, "reaction_state_missing", "session reaction state is missing")
 
             new_events = [event for event in batch.events if event.event_id not in session.event_ids]
             conflicting_sequences = [
@@ -194,7 +197,7 @@ class MemoryStore:
             for event in new_events:
                 session.event_ids.add(event.event_id)
                 session.event_sequences.add(event.sequence)
-                session.events.append(event)
+                session.reaction_features.accept(event.model_dump(mode="json"))
 
             if not new_events:
                 return ReactionBatchAccepted(batch_id=batch.batch_id, status="duplicate")
@@ -211,17 +214,24 @@ class MemoryStore:
                 raise DomainError(409, "session_already_completed", "session has already been completed")
             if session.recommendation is None:
                 raise DomainError(500, "recommendation_missing", "session recommendation state is missing")
+            if session.reaction_features is None:
+                raise DomainError(500, "reaction_state_missing", "session reaction state is missing")
 
             engine_result = engine.run(
                 recommendation_id=session.recommendation.recommendation_id,
                 session_id=session.session_id,
                 video_id=self.manifest.video_id,
                 manifest_version=self.manifest.manifest_version,
-                events=[event.model_dump(mode="json") for event in session.events],
+                features=session.reaction_features.snapshot(),
                 products=[product.model_dump(mode="json") for product in self.products.values()],
             )
             session.recommendation = RecommendationResult.model_validate(engine_result.to_payload())
             session.completed = True
+            session.reaction_features.clear()
+            session.reaction_features = None
+            session.event_ids.clear()
+            session.event_sequences.clear()
+            session.batch_ids.clear()
             return RecommendationAccepted(session_id=session_id, status="pending")
 
     def get_recommendation(self, session_id: str) -> RecommendationResult:

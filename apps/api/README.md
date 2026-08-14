@@ -30,7 +30,9 @@
 파생 `ReactionBatch` 수신과 멱등 처리, 결정적인 Mock 추천, Manager 이벤트를
 연결하는 개발용 FastAPI scaffold다. 저장소는 PostgreSQL/Alembic으로 교체할 수
 있도록 API 경계 뒤에 있으며, 이 단계에서는 원본 미디어를 받지 않는 메모리
-store를 사용한다. Mock 결과는 실제 추천 품질을 의미하지 않는다.
+store를 사용한다. MVP C안에서는 개별 event payload를 세션 목록이나 DB에 쌓지
+않고 활성 세션의 상품별 feature로 즉시 집계하며, 추천 완료 시 집계·중복 제거
+상태를 폐기한다. Mock 결과는 실제 추천 품질을 의미하지 않는다.
 
 ## 실행
 

@@ -75,6 +75,26 @@ def test_complete_session_without_valid_attention_returns_insufficient_data() ->
         assert recommendation.json()["reason"] == "not_enough_valid_attention"
 
 
+def test_completed_session_discards_active_event_deduplication_and_features() -> None:
+    store = MemoryStore(REPOSITORY_ROOT)
+    with TestClient(create_app(store)) as client:
+        session_id = create_session(client)
+        assert client.post(f"/api/v1/sessions/{session_id}/reaction-batches", json=reaction_batch(session_id)).status_code == 202
+
+        session = store.sessions[session_id]
+        assert not hasattr(session, "events")
+        assert session.reaction_features is not None
+        snapshot = session.reaction_features.snapshot()
+        assert [(item.product_id, item.valid_attention_count) for item in snapshot.product_attention] == [("P001", 1), ("P002", 1)]
+
+        assert client.post(f"/api/v1/sessions/{session_id}/complete").status_code == 202
+
+        assert session.reaction_features is None
+        assert session.event_ids == set()
+        assert session.event_sequences == set()
+        assert session.batch_ids == set()
+
+
 def test_engine_failure_keeps_session_retryable() -> None:
     store = MemoryStore(REPOSITORY_ROOT)
     session = store.create_session(

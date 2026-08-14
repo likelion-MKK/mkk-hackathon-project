@@ -66,11 +66,11 @@ S01 대기 화면 → S02 메뉴 → S03 룩북 시청·반응 분석 → S04 �
 
 ## 개인정보 처리 방향
 
-Eye Tracking과 표정 분석은 별도 Vision 서버에서 실행하는 방향을 검토합니다. 고객의 웹캠 frame은 원격 전송 사실과 목적에 동의한 세션에서만 HTTPS/WSS로 일시 전송하며, 서버 메모리에서 분석한 뒤 파일·DB·로그·cache·backup에 저장하지 않습니다. 일반 Backend와 PostgreSQL에는 원본 frame 대신 파생 신호만 전달합니다.
+Eye Tracking과 표정 분석은 별도 Vision 서버에서 실행하는 방향을 검토합니다. 고객의 웹캠 frame은 원격 전송 사실과 목적에 동의한 세션에서만 HTTPS/WSS로 일시 전송하며, 서버 메모리에서 분석한 뒤 파일·DB·로그·cache·backup에 저장하지 않습니다. 일반 Backend는 원본 frame 대신 파생 신호를 받아 활성 세션 안에서만 집계합니다.
 
-원본 영상에서 추출한 비언어적 반응 데이터와 추천 결과, 구매 전환 결과는 고객 동의를 전제로 PostgreSQL에 저장합니다. 원격 추론의 세부 transport와 승인 조건은 [`ADR-0001`](docs/adr/0001-remote-vision-inference.md)에 제안 상태로 기록하며, 승인 전에는 실제 고객 frame을 원격 전송하지 않습니다.
+MVP C안에서는 개별 `GazeSample`, `ExpressionSample`, `ProductAttentionEvent`와 `ReactionBatch`를 PostgreSQL에 저장하지 않습니다. Backend는 세션 중 필요한 상품별 집계와 재전송 중복 제거 키만 유지하고, 추천 완료 시 그 상태를 버립니다. 익명 세션 상태, 최종 추천 결과와 구매 전환 결과의 보관 범위·기간은 별도 정책으로 확정합니다. 원격 추론의 세부 transport와 승인 조건은 [`ADR-0001`](docs/adr/0001-remote-vision-inference.md)에 제안 상태로 기록하며, 승인 전에는 실제 고객 frame을 원격 전송하지 않습니다.
 
-축적된 데이터는 실제 구매로 이어진 반응 패턴을 확인하고 추천 품질을 검증·개선하는 데 활용합니다. 개인 식별 정보는 최소화하며, 구체적인 저장 항목·보유 기간·동의 절차는 서비스 설계 단계에서 확정합니다.
+실제 고객의 개별 반응 이력은 MVP 추천 가중치 튜닝에 사용하지 않습니다. 추천 품질 검증과 재현은 승인된 비식별 synthetic/replay fixture로 수행하며, 개인 식별 정보와 결합하지 않습니다.
 
 ## 팀 역할
 

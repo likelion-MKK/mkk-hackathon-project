@@ -443,7 +443,9 @@ Backend 전송은 매 프레임마다 HTTP 요청하지 않고 설정 가능한 
 - Backend가 느릴 때 영상 재생을 중단하지 않는다.
 - raw frame은 event에 포함하지 않는다.
 
-Vision Stream은 원본 frame의 일시적 transport이고 `ReactionBatch`는 파생 event의 저장 transport다. 두 경계를 하나의 API나 schema로 합치지 않는다.
+Vision Stream은 원본 frame의 일시적 transport이고 `ReactionBatch`는 파생 event의 즉시 집계 transport다. 두 경계를 하나의 API나 schema로 합치지 않는다.
+
+MVP C안에서 Backend는 batch를 검증·중복 제거한 뒤 활성 세션의 상품별 feature로 즉시 접고 개별 event payload를 보관하지 않는다. 활성 상태에는 집계와 중복 제거 키만 남기며, 추천이 성공하면 함께 폐기한다. 세션 TTL·취소·재시작 시점의 폐기 규칙은 실제 Kiosk client 연결 전 Contract PR로 확정한다.
 
 ### 추천 입력 경계
 
@@ -466,7 +468,7 @@ Eye·Face 담당자는 최종 점수를 계산하지 않는다. 추천 영역이
 | --- | --- | --- |
 | `POST` | `/api/v1/sessions` | 키오스크 세션 생성 |
 | `GET` | `/api/v1/lookbooks/{lookbook_id}/manifest` | 영상·AOI manifest 조회 |
-| `POST` | `/api/v1/sessions/{session_id}/reaction-batches` | 파생 이벤트 batch 저장 |
+| `POST` | `/api/v1/sessions/{session_id}/reaction-batches` | 파생 이벤트 batch 수신·즉시 집계 |
 | `POST` | `/api/v1/sessions/{session_id}/complete` | 분석 종료와 추천 실행 요청 |
 | `GET` | `/api/v1/sessions/{session_id}/recommendations` | Top 2 결과 조회 |
 | `POST` | `/api/v1/sessions/{session_id}/manager-product-requests` | 고객의 매니저 제품 요청 기록 |
@@ -484,14 +486,14 @@ Eye·Face 담당자는 최종 점수를 계산하지 않는다. 추천 영역이
 | `sessions` | 세션 상태, Kiosk, 동의 version과 시작·종료 시각 |
 | `products` | 상품 정보, 이미지, 공식 URL과 QR asset |
 | `lookbooks` | 영상과 manifest version |
-| `reaction_batches` | 원본이 아닌 파생 이벤트 batch와 schema version |
+| `session_product_features` | TTL이 있는 활성 세션의 상품별 집계 상태. 개별 event payload는 포함하지 않음 |
 | `recommendation_runs` | 사용한 algorithm version과 결과 상태 |
 | `recommendation_items` | 추천 순위와 product ID |
 | `manager_events` | 고객의 제품 요청 알림과 polling cursor |
 | `conversion_outcomes` | 세션·상품별 착용·구매 결과 |
 | `model_registry` | Eye·Face 모델 revision, checksum, license와 상태 |
 
-원본 이미지, 영상, base64, 얼굴 embedding과 파일 경로를 저장하는 컬럼은 만들지 않는다. 정확한 컬럼과 보존 기간은 DB·개인정보 상세 설계에서 확정한다.
+원본 이미지, 영상, base64, 얼굴 embedding과 파일 경로를 저장하는 컬럼은 만들지 않는다. MVP C안에서는 `ReactionBatch`·개별 Eye/Face sample의 event payload, 좌표·시간·표정 score를 영속화하지 않는다. 정확한 최종 결과 보존 기간과 활성 집계 TTL은 DB·개인정보 상세 설계에서 확정한다.
 
 ## 12. Kiosk·Manager Frontend 상세 경계
 
@@ -504,7 +506,7 @@ Eye·Face 담당자는 최종 점수를 계산하지 않는다. 추천 영역이
 ### S02. Main Menu
 
 - 카테고리 탐색과 AI 추천 선택
-- 카메라·파생 데이터 저장·추천 개선 목적 안내
+- 카메라 사용, 개별 파생 event의 즉시 폐기와 최종 추천 결과 보관 범위 안내
 - AI 추천을 선택하고 동의가 완료되면 분석 세션을 생성
 - 동의하지 않으면 카메라 분석 없이 다른 흐름 제공
 
@@ -640,7 +642,7 @@ QR에는 원본 반응 데이터나 얼굴 관련 정보는 넣지 않는다.
 
 | 담당 | 하루 결과물 |
 | --- | --- |
-| 박형진 | FakeEye·FakeFace 기반 Vision Gateway WSS scaffold, 파생 event 저장, `MockRecommendationEngine` |
+| 박형진 | FakeEye·FakeFace 기반 Vision Gateway WSS scaffold, 파생 event 즉시 집계, `MockRecommendationEngine` |
 | 양유상 | manifest·AOI Mapper, 시간·polygon·겹침 unit test, Eye 후보 1차 benchmark |
 | 정은미 | Face 후보 1차 benchmark와 label 정규화 비교 |
 | 조윤혜 | binary frame producer의 in-flight `1`·drop 처리, mock 시선·AOI overlay, S04 mock Top 2·QR |
@@ -669,7 +671,7 @@ QR에는 원본 반응 데이터나 얼굴 관련 정보는 넣지 않는다.
 
 | 담당 | 하루 결과물 |
 | --- | --- |
-| 박형진 | batch ingest → DB → recommendation interface 전체 경로 |
+| 박형진 | batch ingest → 활성 집계 → recommendation interface 전체 경로 |
 | 양유상 | Eye timeout·worker restart·calibration 만료 처리 |
 | 정은미 | Face no-face·timeout·worker restart 처리 |
 | 조윤혜 | synthetic frame·Replay 기반 S01→S04 E2E, drop·disconnect·retry·cancel |
