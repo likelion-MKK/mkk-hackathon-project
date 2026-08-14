@@ -1,0 +1,405 @@
+{
+  "schema_version": "1.0",
+  "status": "completed",
+  "result_scope": "single-participant development-PC live target accuracy",
+  "generated_at": "2026-08-15T01:03:09+09:00",
+  "repository": {
+    "head": "6d0550abc0af4f117b6324541770f0e2496c0984",
+    "branch": "feat/eye/d04-eyetrax-live-benchmark"
+  },
+  "candidate": {
+    "name": "EyeTrax",
+    "version": "0.4.0",
+    "source_revision": "84e13a16af168ac7c383f7d50ec901cd6c0ad61d",
+    "code_license": "MIT",
+    "face_model_url": "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+    "face_model_sha256": "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff",
+    "smoothing": "none"
+  },
+  "environment": {
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "screen": {
+      "width": 1920,
+      "height": 1080
+    },
+    "camera": {
+      "index": 0,
+      "friendly_name": "LGE Camera",
+      "requested_width": 1280,
+      "requested_height": 720,
+      "requested_fps": 30.0,
+      "actual_width": 1280,
+      "actual_height": 720,
+      "actual_fps": 30.0,
+      "backend": "DSHOW"
+    }
+  },
+  "configuration": {
+    "condition": "baseline",
+    "participant_count": 1,
+    "runs_requested": 3,
+    "calibration_points": [
+      [
+        0.5,
+        0.5
+      ],
+      [
+        0.1,
+        0.1
+      ],
+      [
+        0.9,
+        0.1
+      ],
+      [
+        0.1,
+        0.9
+      ],
+      [
+        0.9,
+        0.9
+      ],
+      [
+        0.5,
+        0.1
+      ],
+      [
+        0.1,
+        0.5
+      ],
+      [
+        0.9,
+        0.5
+      ],
+      [
+        0.5,
+        0.9
+      ]
+    ],
+    "validation_targets": [
+      [
+        "P001",
+        0.2,
+        0.3
+      ],
+      [
+        "P001",
+        0.38,
+        0.3
+      ],
+      [
+        "P001",
+        0.2,
+        0.7
+      ],
+      [
+        "P001",
+        0.42,
+        0.7
+      ],
+      [
+        "P002",
+        0.8,
+        0.3
+      ],
+      [
+        "P002",
+        0.62,
+        0.3
+      ],
+      [
+        "P002",
+        0.8,
+        0.7
+      ],
+      [
+        "P002",
+        0.58,
+        0.7
+      ]
+    ],
+    "manifest": "data/lookbooks/example/manifest.json",
+    "gates": {
+      "valid_ratio_min": 0.9,
+      "aoi_hit_ratio_min": 0.8,
+      "latency_p95_ms_max": 100.0,
+      "no_face_ratio_min": 0.95
+    }
+  },
+  "privacy": {
+    "self_consent": true,
+    "raw_frame_saved": false,
+    "per_frame_gaze_saved": false,
+    "preview_saved": false
+  },
+  "preflight": {
+    "frame_count": 90,
+    "valid_frames": 82,
+    "passed": true
+  },
+  "runs": [
+    {
+      "run_index": 1,
+      "calibration": {
+        "completed": true,
+        "valid_samples_per_point": [
+          24,
+          32,
+          31,
+          32,
+          21,
+          31,
+          31,
+          31,
+          25
+        ],
+        "total_valid_samples": 258,
+        "minimum_required_per_point": 15,
+        "attempt_count": 1,
+        "attempts": [
+          {
+            "completed": true,
+            "valid_samples_per_point": [
+              24,
+              32,
+              31,
+              32,
+              21,
+              31,
+              31,
+              31,
+              25
+            ],
+            "total_valid_samples": 258,
+            "minimum_required_per_point": 15
+          }
+        ]
+      },
+      "total_frames": 248,
+      "valid_frames": 220,
+      "valid_ratio": 0.8871,
+      "aoi_hits": 129,
+      "aoi_hit_ratio": 0.5864,
+      "failure_counts": {
+        "blink": 17,
+        "outside_viewport": 11
+      },
+      "error_px": {
+        "count": 220,
+        "mean": 343.3545,
+        "p50": 287.8744,
+        "p95": 766.0878
+      },
+      "error_screen_diagonal_ratio": {
+        "count": 220,
+        "mean": 0.1559,
+        "p50": 0.1307,
+        "p95": 0.3478
+      },
+      "capture_to_result_ms": {
+        "count": 248,
+        "mean": 26.888,
+        "p50": 26.3455,
+        "p95": 43.5058
+      },
+      "observed_fps": 17.5511,
+      "process_cpu_percent": {
+        "count": 8,
+        "mean": 166.6375,
+        "p50": 161.85,
+        "p95": 189.54
+      },
+      "peak_rss_bytes": 265277440,
+      "gate": {
+        "passed": false,
+        "checks": {
+          "calibration_completed": true,
+          "valid_ratio": false,
+          "aoi_hit_ratio": false,
+          "latency_p95_ms": true
+        }
+      }
+    },
+    {
+      "run_index": 2,
+      "calibration": {
+        "completed": true,
+        "valid_samples_per_point": [
+          32,
+          31,
+          32,
+          31,
+          31,
+          31,
+          28,
+          31,
+          31
+        ],
+        "total_valid_samples": 278,
+        "minimum_required_per_point": 15,
+        "attempt_count": 1,
+        "attempts": [
+          {
+            "completed": true,
+            "valid_samples_per_point": [
+              32,
+              31,
+              32,
+              31,
+              31,
+              31,
+              28,
+              31,
+              31
+            ],
+            "total_valid_samples": 278,
+            "minimum_required_per_point": 15
+          }
+        ]
+      },
+      "total_frames": 248,
+      "valid_frames": 224,
+      "valid_ratio": 0.9032,
+      "aoi_hits": 166,
+      "aoi_hit_ratio": 0.7411,
+      "failure_counts": {
+        "blink": 21,
+        "outside_viewport": 3
+      },
+      "error_px": {
+        "count": 224,
+        "mean": 270.3179,
+        "p50": 229.6161,
+        "p95": 595.3908
+      },
+      "error_screen_diagonal_ratio": {
+        "count": 224,
+        "mean": 0.1227,
+        "p50": 0.1042,
+        "p95": 0.2703
+      },
+      "capture_to_result_ms": {
+        "count": 248,
+        "mean": 26.7896,
+        "p50": 26.3268,
+        "p95": 43.601
+      },
+      "observed_fps": 17.5816,
+      "process_cpu_percent": {
+        "count": 8,
+        "mean": 162.975,
+        "p50": 167.25,
+        "p95": 182.35
+      },
+      "peak_rss_bytes": 265134080,
+      "gate": {
+        "passed": false,
+        "checks": {
+          "calibration_completed": true,
+          "valid_ratio": true,
+          "aoi_hit_ratio": false,
+          "latency_p95_ms": true
+        }
+      }
+    },
+    {
+      "run_index": 3,
+      "calibration": {
+        "completed": true,
+        "valid_samples_per_point": [
+          32,
+          32,
+          31,
+          32,
+          31,
+          31,
+          31,
+          25,
+          24
+        ],
+        "total_valid_samples": 269,
+        "minimum_required_per_point": 15,
+        "attempt_count": 1,
+        "attempts": [
+          {
+            "completed": true,
+            "valid_samples_per_point": [
+              32,
+              32,
+              31,
+              32,
+              31,
+              31,
+              31,
+              25,
+              24
+            ],
+            "total_valid_samples": 269,
+            "minimum_required_per_point": 15
+          }
+        ]
+      },
+      "total_frames": 248,
+      "valid_frames": 74,
+      "valid_ratio": 0.2984,
+      "aoi_hits": 23,
+      "aoi_hit_ratio": 0.3108,
+      "failure_counts": {
+        "blink": 23,
+        "outside_viewport": 151
+      },
+      "error_px": {
+        "count": 74,
+        "mean": 675.5392,
+        "p50": 564.9071,
+        "p95": 1258.2596
+      },
+      "error_screen_diagonal_ratio": {
+        "count": 74,
+        "mean": 0.3067,
+        "p50": 0.2564,
+        "p95": 0.5712
+      },
+      "capture_to_result_ms": {
+        "count": 248,
+        "mean": 26.5438,
+        "p50": 25.933,
+        "p95": 42.2227
+      },
+      "observed_fps": 17.5067,
+      "process_cpu_percent": {
+        "count": 8,
+        "mean": 173.375,
+        "p50": 169.25,
+        "p95": 219.085
+      },
+      "peak_rss_bytes": 267563008,
+      "gate": {
+        "passed": false,
+        "checks": {
+          "calibration_completed": true,
+          "valid_ratio": false,
+          "aoi_hit_ratio": false,
+          "latency_p95_ms": true
+        }
+      }
+    }
+  ],
+  "no_face": {
+    "frame_count": 91,
+    "no_face_frames": 0,
+    "no_face_ratio": 0.0,
+    "camera_released": true
+  },
+  "overall_gate": {
+    "passed": false,
+    "checks": {
+      "three_runs_completed": true,
+      "every_run_passed": false,
+      "no_face_ratio": false,
+      "camera_released": true
+    }
+  },
+  "provisional_recommendation": "eyetrax_deferred_openvino_next"
+}

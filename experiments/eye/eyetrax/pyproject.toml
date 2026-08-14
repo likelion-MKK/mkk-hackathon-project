@@ -1,0 +1,23 @@
+[project]
+name = "mcm-eye-eyetrax-live-benchmark"
+version = "0.1.0"
+description = "Privacy-preserving live EyeTrax benchmark for the MCM kiosk"
+requires-python = "==3.12.10"
+dependencies = [
+    "eyetrax==0.4.0",
+    "numpy==1.26.4",
+    "psutil==7.1.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3,<9",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+addopts = "-q -p no:cacheprovider"
+pythonpath = ["."]
+testpaths = ["tests"]
