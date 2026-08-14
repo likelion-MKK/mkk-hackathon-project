@@ -33,6 +33,10 @@ test("동의 화면의 BACK은 카테고리 화면으로 돌아간다", () => {
   assert.equal(transitionKioskScreen("consent", "BACK"), "menu");
 });
 
+test("동의하지 않고 취소하면 세션을 시작하지 않고 초기 화면으로 돌아간다", () => {
+  assert.equal(transitionKioskScreen("consent", "CANCEL"), "screensaver");
+});
+
 test("허용하지 않은 상태 전환을 차단한다", () => {
   assert.throws(
     () => transitionKioskScreen("screensaver", "AGREE"),

@@ -153,3 +153,10 @@ test("mock API가 알 수 없는 lookbook으로 세션을 만들지 않는다", 
   );
   await assert.rejects(client.getLookbookManifest("missing-lookbook"), /Unknown mock lookbook/);
 });
+
+test("mock API의 세션 시작 지연값을 안전하게 검증한다", () => {
+  assert.throws(
+    () => new MockApiClient({ sessionStartDelayMs: -1 }),
+    /non-negative finite number/,
+  );
+});

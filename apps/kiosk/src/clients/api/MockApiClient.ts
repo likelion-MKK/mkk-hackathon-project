@@ -151,12 +151,31 @@ type MockSession = {
   analysisCompleted: boolean;
 };
 
+export type MockApiClientOptions = {
+  sessionStartDelayMs?: number;
+};
+
 export class MockApiClient implements ApiClient {
   private sessionSequence = 0;
   private readonly sessions = new Map<string, MockSession>();
   private readonly acceptedBatchIds = new Set<string>();
+  private readonly sessionStartDelayMs: number;
+
+  constructor({ sessionStartDelayMs = 0 }: MockApiClientOptions = {}) {
+    if (!Number.isFinite(sessionStartDelayMs) || sessionStartDelayMs < 0) {
+      throw new RangeError("sessionStartDelayMs must be a non-negative finite number.");
+    }
+
+    this.sessionStartDelayMs = sessionStartDelayMs;
+  }
 
   async createSession(request: SessionCreate): Promise<SessionCreated> {
+    if (this.sessionStartDelayMs > 0) {
+      await new Promise<void>((resolve) => {
+        globalThis.setTimeout(resolve, this.sessionStartDelayMs);
+      });
+    }
+
     this.requireLookbook(request.lookbook_id);
     this.sessionSequence += 1;
     const suffix = String(this.sessionSequence).padStart(3, "0");
