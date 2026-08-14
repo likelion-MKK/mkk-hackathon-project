@@ -27,19 +27,28 @@
 
 Adapter의 언어 독립 규약은 [`adapters/README.md`](adapters/README.md)를 따른다.
 
-## D1 Python scaffold
+## Python Adapter
 
 - 공통 타입과 `EyeAdapter` Protocol: `src/mcm_eye/contracts.py`
 - 결정적 개발 Adapter: `src/mcm_eye/adapters/fake.py`
-- 단위·Contract 호환 테스트: `tests/test_fake_adapter.py`
+- 해커톤 MVP Adapter: `src/mcm_eye/adapters/eyetrax.py`
+- 단위·Contract 호환 테스트: `tests/`
 
-현재 Eye 환경은 `pyproject.toml`과 `uv.lock`에서 Python `3.13.15`로 고정한다. 실제 Eye
-모델 후보가 호환되지 않으면 D1-03에 따라 근거를 ADR에 남기고 Eye 서비스 환경만 예외
-버전으로 고정한다.
+EyeTrax 선택에 따라 Eye 서비스만 Python `3.12.10`, EyeTrax `0.4.0`, MediaPipe `1.0.0`,
+NumPy `1.26.4`, OpenCV `4.11.0.86`으로 고정한다. 다른 Python 서비스의 runtime은 바꾸지
+않는다. 선택 근거와 제한은 [`ADR-0004`](../../docs/adr/0004-eyetrax-mvp-selection.md)에
+기록한다.
 
 `FakeEyeAdapter.calibrate()`는 lifecycle과 `calibration_id` 전달을 검증하는 개발용
-placeholder다. 실제 표적 좌표, 오차 측정, 재시도와 `gaze_unavailable` fallback은 D1-01의
-D5 결정과 후속 Calibration 구현에서 다룬다.
+placeholder다. `EyeTraxAdapter`는 현재 룩북 전용 Dense5 학습과 별도 8점 검증을 최대 두
+번 수행한다. 각 검증점은 전체 frame을 최소 15개 제공해야 하며, 부족하면 정확도 수치와
+무관하게 Gate 실패로 처리한다. 보정 요청 전 추론은 lifecycle 오류이며, 보정 중이거나
+최종 실패한 뒤에는 현재 `calibration_id`로 `valid=false`, `reason=gaze_unavailable`을
+반환한다.
+
+EyeTrax가 유효 좌표를 만들면 `confidence=1.0`을 사용한다. 이 값은 정확도 100%가 아니라
+해당 frame에서 사용할 수 있는 좌표라는 이진 표시다. `no_face`, `blink`, 비유효한 예측과
+viewport 밖 예측은 좌표 없이 `valid=false`로 유지한다.
 
 `FakeEyeAdapter.infer()`는 입력 `FrameContext`의 `sequence`, `frame_id`, 캡처 시각을 항상
 보존한다. 순서 역전 테스트는 `FakeGazeDelivery`가 인접한 두 샘플의 전달 순서만 바꾸며,
@@ -48,4 +57,16 @@ D5 결정과 후속 Calibration 구현에서 다룬다.
 ```powershell
 uv sync --locked
 uv run pytest
+uv run python scripts/prepare_eyetrax_model.py
+uv run python scripts/smoke_eyetrax.py
+uv run python scripts/live_eyetrax_demo.py --camera 0
 ```
+
+모델 준비 스크립트는 `.cache/face_landmarker.task`를 내려받은 뒤 고정 SHA256을 검증한다.
+runtime Adapter는 모델을 내려받지 않는다. 한글 경로에서는 검증된 모델을 ASCII 임시
+경로에 복사하고 estimator 종료 후 복사본만 지운다.
+
+실제 카메라 데모는 화면에 보정점과 실시간 gaze crosshair만 표시한다. 카메라 frame,
+이미지, landmark, 프레임별 gaze 좌표를 파일이나 로그에 남기지 않는다. Kiosk의 시간 기반
+AOI 판정은 기존 `apps/kiosk/src/app/reaction-batch.ts`가 소유하며 다음 연결 작업에서 실제
+`GazeSample`을 전달한다.

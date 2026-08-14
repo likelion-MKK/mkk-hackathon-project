@@ -6,10 +6,28 @@ from .fake import (
     FakeGazeDelivery,
     FakeScenario,
 )
+from .eyetrax import (
+    CalibrationCancelled,
+    CalibrationCapture,
+    CalibrationFrameSource,
+    CalibrationPhase,
+    EyeTraxAdapter,
+    EyeTraxConfig,
+    EyeTraxModelError,
+    EyeTraxRuntimeError,
+)
 
 __all__ = [
     "FakeDeliveryScenario",
     "FakeEyeAdapter",
     "FakeGazeDelivery",
     "FakeScenario",
+    "CalibrationCancelled",
+    "CalibrationCapture",
+    "CalibrationFrameSource",
+    "CalibrationPhase",
+    "EyeTraxAdapter",
+    "EyeTraxConfig",
+    "EyeTraxModelError",
+    "EyeTraxRuntimeError",
 ]
