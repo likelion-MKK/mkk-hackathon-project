@@ -69,7 +69,7 @@ README.md
 | 추천 엔진 | `services/recommendation/README.md` → `product-attention-event.schema.json` → `recommendation-result.schema.json` → 알고리즘 ADR |
 | 상품·QR | `product-catalog.schema.json`과 example → `data/products/` → `contracts/openapi.yaml` |
 | Contract 변경 | `contracts/README.md` → 대상 schema와 정상·invalid example → 생산자·소비자 README → `CONTRIBUTING.md` |
-| Eye 모델 후보 조사 | `experiments/eye/README.md` → `benchmarks/EYE_CANDIDATE_RESEARCH_PLAN.md` → Eye Adapter 계약 → `benchmarks/VISION_SERVER_SELECTION_PLAN.md` → 관련 ADR |
+| Eye 모델 후보 조사 | `experiments/eye/README.md` → `docs/benchmarks/EYE_CANDIDATE_RESEARCH_PLAN.md` → Eye Adapter 계약 → `docs/benchmarks/VISION_SERVER_SELECTION_PLAN.md` → 관련 ADR |
 | Face 모델 후보 조사 | `experiments/face/README.md` → `docs/benchmarks/README.md` → `docs/benchmarks/VISION_SERVER_SELECTION_PLAN.md` → Face Adapter 계약 → 관련 ADR |
 | 통합·E2E | `DETAILED_DESIGN_PLAN.md`의 Gate·Contract 항목 → `tests/integration/README.md` 또는 `tests/e2e/README.md` → 관련 example |
 | PR·릴리스 | `CONTRIBUTING.md` → `.github/PULL_REQUEST_TEMPLATE.md` → 변경 영역 README |
