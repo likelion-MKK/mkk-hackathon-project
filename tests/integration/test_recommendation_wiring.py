@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from apps.api.app.main import create_app
 from apps.api.app.schemas import SessionCreate
 from apps.api.app.store import MemoryStore
+from services.recommendation.engine.research_gaze import ResearchGazeScoreEngine
 from services.recommendation.mock.engine import MockRecommendationEngine
 
 
@@ -73,6 +74,28 @@ def test_complete_session_without_valid_attention_returns_insufficient_data() ->
         recommendation = client.get(f"/api/v1/sessions/{session_id}/recommendations")
         assert recommendation.json()["status"] == "insufficient_data"
         assert recommendation.json()["reason"] == "not_enough_valid_attention"
+
+
+def test_complete_session_can_use_the_research_gaze_score_engine() -> None:
+    with TestClient(
+        create_app(MemoryStore(REPOSITORY_ROOT), ResearchGazeScoreEngine())
+    ) as client:
+        session_id = create_session(client)
+        assert client.post(
+            f"/api/v1/sessions/{session_id}/reaction-batches",
+            json=reaction_batch(session_id),
+        ).status_code == 202
+
+        assert client.post(f"/api/v1/sessions/{session_id}/complete").status_code == 202
+        recommendation = client.get(f"/api/v1/sessions/{session_id}/recommendations")
+
+    assert recommendation.status_code == 200
+    assert recommendation.json()["engine_mode"] == "research_version"
+    assert recommendation.json()["algorithm_version"] == "gaze-score-v0"
+    assert recommendation.json()["items"] == [
+        {"rank": 1, "product_id": "P001"},
+        {"rank": 2, "product_id": "P002"},
+    ]
 
 
 def test_completed_session_discards_active_event_deduplication_and_features() -> None:

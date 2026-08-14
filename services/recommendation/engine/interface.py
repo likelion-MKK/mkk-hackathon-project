@@ -34,6 +34,9 @@ class ProductAttentionFeature:
     product_id: str
     valid_attention_count: int
     confidence_total: float
+    attention_duration_ms: float
+    confidence_weighted_attention_ms: float
+    revisit_count: int
     first_attention_sequence: int
     first_candidate_index: int
 
@@ -41,6 +44,17 @@ class ProductAttentionFeature:
         """Return the deterministic order used by the development mock."""
 
         return (self.first_attention_sequence, self.first_candidate_index, self.product_id)
+
+    def average_attention_confidence(self) -> float:
+        """Return the time-weighted confidence for scored gaze observations.
+
+        A product with no time-bucketed observation has no usable gaze score,
+        even if a caller retained a legacy count-only aggregate.
+        """
+
+        if self.attention_duration_ms <= 0:
+            return 0.0
+        return self.confidence_weighted_attention_ms / self.attention_duration_ms
 
 
 @dataclass(frozen=True, slots=True)
