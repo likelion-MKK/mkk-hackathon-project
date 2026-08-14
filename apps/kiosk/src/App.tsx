@@ -638,6 +638,12 @@ function App() {
   const [flowController] = useState(() => new AsyncFlowController());
   const latestGazeSample = useRef<GazeSample | null>(null);
   const latestExpressionSample = useRef<ExpressionSample | null>(null);
+  const sessionStartAbortController = useRef<AbortController | null>(null);
+
+  const abortSessionStart = useCallback(() => {
+    sessionStartAbortController.current?.abort();
+    sessionStartAbortController.current = null;
+  }, []);
 
   const send = useCallback((event: KioskEvent) => {
     setScreen((currentScreen) => transitionKioskScreen(currentScreen, event));
@@ -655,9 +661,10 @@ function App() {
       removeGazeListener();
       removeExpressionListener();
       flowController.invalidateCurrentFlow();
+      abortSessionStart();
       void flowController.runSerialized(() => visionClient.stopSession());
     };
-  }, [flowController]);
+  }, [abortSessionStart, flowController]);
 
   const selectCategory = (category: ProductCategory) => {
     setSelectedCategory(category);
@@ -667,6 +674,7 @@ function App() {
 
   const restart = useCallback(async () => {
     const generation = flowController.invalidateCurrentFlow();
+    abortSessionStart();
     latestGazeSample.current = null;
     latestExpressionSample.current = null;
     setSelectedCategory(null);
@@ -685,10 +693,11 @@ function App() {
         setFlowError("이전 Vision 세션을 종료하지 못했습니다.");
       }
     }
-  }, [flowController, send]);
+  }, [abortSessionStart, flowController, send]);
 
   const cancelConsent = useCallback(async () => {
     const generation = flowController.invalidateCurrentFlow();
+    abortSessionStart();
     latestGazeSample.current = null;
     latestExpressionSample.current = null;
     setSelectedCategory(null);
@@ -707,10 +716,11 @@ function App() {
         setFlowError("이전 Vision 세션을 종료하지 못했습니다.");
       }
     }
-  }, [flowController, send]);
+  }, [abortSessionStart, flowController, send]);
 
   const handleConsentTimeout = useCallback(() => {
     const generation = flowController.invalidateCurrentFlow();
+    abortSessionStart();
     latestGazeSample.current = null;
     latestExpressionSample.current = null;
     setIsStarting(false);
@@ -721,37 +731,52 @@ function App() {
         setFlowError("시간 초과 후 Vision 세션을 정리하지 못했습니다.");
       }
     });
-  }, [flowController]);
+  }, [abortSessionStart, flowController]);
 
   const beginSession = async () => {
-    if (!selectedCategory || isStarting) return;
+    if (!selectedCategory || isStarting || sessionStartAbortController.current) return;
 
     const generation = flowController.captureGeneration();
+    const abortController = new AbortController();
+    sessionStartAbortController.current = abortController;
     setIsStarting(true);
     setFlowError(null);
     setConsentIssue(null);
 
     try {
       const lookbookId = MOCK_LOOKBOOK_ID_BY_CATEGORY[selectedCategory];
-      const createdSession = await runSessionStartWithTimeout(() =>
-        apiClient.createSession({
-          kiosk_id: "mcm-kiosk-d1",
-          lookbook_id: lookbookId,
-          consent_version: CONSENT_VERSION,
-        }),
+      const { createdSession, lookbookManifest } = await runSessionStartWithTimeout(
+        async (signal) => {
+          const lookbookManifest = await apiClient.getLookbookManifest(lookbookId, {
+            signal,
+          });
+          signal.throwIfAborted();
+
+          const createdSession = await apiClient.createSession(
+            {
+              kiosk_id: "mcm-kiosk-d1",
+              lookbook_id: lookbookId,
+              consent_version: CONSENT_VERSION,
+            },
+            { signal },
+          );
+          signal.throwIfAborted();
+
+          await flowController.runSerialized(() =>
+            visionClient.startSession(
+              {
+                session_id: createdSession.session_id,
+                video_id: lookbookManifest.video_id,
+              },
+              { signal },
+            ),
+          );
+          signal.throwIfAborted();
+
+          return { createdSession, lookbookManifest };
+        },
+        { signal: abortController.signal },
       );
-      if (!flowController.isCurrent(generation)) return;
-
-      const lookbookManifest = await apiClient.getLookbookManifest(lookbookId);
-      if (!flowController.isCurrent(generation)) return;
-
-      await flowController.runSerialized(() =>
-        visionClient.startSession({
-          session_id: createdSession.session_id,
-          video_id: lookbookManifest.video_id,
-        }),
-      );
-
       if (!flowController.isCurrent(generation)) return;
 
       setSession(createdSession);
@@ -764,8 +789,17 @@ function App() {
             ? "session-timeout"
             : "session-error",
         );
+
+        void flowController.runSerialized(() => visionClient.stopSession()).catch(() => {
+          if (flowController.isCurrent(generation)) {
+            setFlowError("세션 시작 실패 후 Vision 세션을 정리하지 못했습니다.");
+          }
+        });
       }
     } finally {
+      if (sessionStartAbortController.current === abortController) {
+        sessionStartAbortController.current = null;
+      }
       if (flowController.isCurrent(generation)) setIsStarting(false);
     }
   };

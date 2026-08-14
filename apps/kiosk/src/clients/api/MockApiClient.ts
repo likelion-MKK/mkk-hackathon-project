@@ -10,7 +10,7 @@ import type {
   SessionCreate,
   SessionCreated,
 } from "../../app/kiosk-types.ts";
-import type { ApiClient } from "./ApiClient.ts";
+import type { ApiClient, ApiRequestOptions } from "./ApiClient.ts";
 
 export const MOCK_LOOKBOOK_ID_BY_CATEGORY: Record<ProductCategory, string> = {
   가방: "mcm-lookbook-bags-v1",
@@ -155,6 +155,26 @@ export type MockApiClientOptions = {
   sessionStartDelayMs?: number;
 };
 
+function waitForDelay(delayMs: number, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  if (delayMs === 0) return Promise.resolve();
+
+  return new Promise<void>((resolve, reject) => {
+    const timeoutId = globalThis.setTimeout(() => {
+      signal?.removeEventListener("abort", handleAbort);
+      resolve();
+    }, delayMs);
+
+    const handleAbort = () => {
+      globalThis.clearTimeout(timeoutId);
+      signal?.removeEventListener("abort", handleAbort);
+      reject(signal?.reason ?? new Error("Mock API request was cancelled."));
+    };
+
+    signal?.addEventListener("abort", handleAbort, { once: true });
+  });
+}
+
 export class MockApiClient implements ApiClient {
   private sessionSequence = 0;
   private readonly sessions = new Map<string, MockSession>();
@@ -169,12 +189,12 @@ export class MockApiClient implements ApiClient {
     this.sessionStartDelayMs = sessionStartDelayMs;
   }
 
-  async createSession(request: SessionCreate): Promise<SessionCreated> {
-    if (this.sessionStartDelayMs > 0) {
-      await new Promise<void>((resolve) => {
-        globalThis.setTimeout(resolve, this.sessionStartDelayMs);
-      });
-    }
+  async createSession(
+    request: SessionCreate,
+    { signal }: ApiRequestOptions = {},
+  ): Promise<SessionCreated> {
+    await waitForDelay(this.sessionStartDelayMs, signal);
+    signal?.throwIfAborted();
 
     this.requireLookbook(request.lookbook_id);
     this.sessionSequence += 1;
@@ -194,7 +214,11 @@ export class MockApiClient implements ApiClient {
     };
   }
 
-  async getLookbookManifest(lookbookId: string): Promise<LookbookManifest> {
+  async getLookbookManifest(
+    lookbookId: string,
+    { signal }: ApiRequestOptions = {},
+  ): Promise<LookbookManifest> {
+    signal?.throwIfAborted();
     return structuredClone(this.requireLookbook(lookbookId).manifest);
   }
 

@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import {
+  runSessionStartWithTimeout,
+  SessionStartTimeoutError,
+} from "../../app/consent-flow.ts";
 import type { ProductCategory, ReactionBatch } from "../../app/kiosk-types.ts";
 import {
   MOCK_LOOKBOOK_ID_BY_CATEGORY,
@@ -159,4 +163,25 @@ test("mock API의 세션 시작 지연값을 안전하게 검증한다", () => {
     () => new MockApiClient({ sessionStartDelayMs: -1 }),
     /non-negative finite number/,
   );
+});
+
+test("timeout된 Mock 세션은 늦게 생성되지 않고 재시도가 첫 세션을 만든다", async () => {
+  const client = new MockApiClient({ sessionStartDelayMs: 25 });
+  const request = {
+    kiosk_id: "kiosk-d2-timeout",
+    lookbook_id: MOCK_LOOKBOOK_ID_BY_CATEGORY.가방,
+    consent_version: "consent-v1",
+  };
+
+  await assert.rejects(
+    runSessionStartWithTimeout(
+      (signal) => client.createSession(request, { signal }),
+      { timeoutMs: 5 },
+    ),
+    SessionStartTimeoutError,
+  );
+  await new Promise((resolve) => globalThis.setTimeout(resolve, 30));
+
+  const retrySession = await client.createSession(request);
+  assert.equal(retrySession.session_id, "session-d1-mock-001");
 });

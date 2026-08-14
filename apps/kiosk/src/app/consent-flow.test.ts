@@ -14,23 +14,70 @@ test("동의 화면의 남은 시간을 초 단위로 계산한다", () => {
 });
 
 test("Mock 세션이 제한 시간 안에 시작되면 결과를 반환한다", async () => {
-  const result = await runSessionStartWithTimeout(async () => "session-ready", 50);
+  const result = await runSessionStartWithTimeout(
+    async () => "session-ready",
+    { timeoutMs: 50 },
+  );
 
   assert.equal(result, "session-ready");
 });
 
-test("Mock 세션 시작이 오래 걸리면 timeout으로 구분한다", async () => {
+test("Mock 세션 시작이 오래 걸리면 작업을 취소하고 timeout으로 구분한다", async () => {
+  let operationAborted = false;
+
   await assert.rejects(
-    runSessionStartWithTimeout(() => new Promise<never>(() => undefined), 5),
+    runSessionStartWithTimeout(
+      (signal) =>
+        new Promise<never>((_resolve, reject) => {
+          signal.addEventListener(
+            "abort",
+            () => {
+              operationAborted = true;
+              reject(signal.reason);
+            },
+            { once: true },
+          );
+        }),
+      { timeoutMs: 5 },
+    ),
     SessionStartTimeoutError,
   );
+  assert.equal(operationAborted, true);
 });
 
 test("Mock API 자체 오류를 timeout으로 바꾸지 않는다", async () => {
   await assert.rejects(
-    runSessionStartWithTimeout(async () => {
-      throw new Error("mock_api_unavailable");
-    }, 50),
+    runSessionStartWithTimeout(
+      async () => {
+        throw new Error("mock_api_unavailable");
+      },
+      { timeoutMs: 50 },
+    ),
     /mock_api_unavailable/,
   );
+});
+
+test("화면 이동으로 전달된 취소 신호가 진행 중인 세션 시작을 중단한다", async () => {
+  const controller = new AbortController();
+  let operationAborted = false;
+  const pendingSession = runSessionStartWithTimeout(
+    (signal) =>
+      new Promise<never>((_resolve, reject) => {
+        signal.addEventListener(
+          "abort",
+          () => {
+            operationAborted = true;
+            reject(signal.reason);
+          },
+          { once: true },
+        );
+      }),
+    { timeoutMs: 100, signal: controller.signal },
+  );
+
+  await Promise.resolve();
+  controller.abort(new Error("user_cancelled"));
+
+  await assert.rejects(pendingSession, /user_cancelled/);
+  assert.equal(operationAborted, true);
 });

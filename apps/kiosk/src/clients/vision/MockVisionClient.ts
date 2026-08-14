@@ -11,6 +11,7 @@ import type {
   GazeSampleListener,
   Unsubscribe,
   VisionClient,
+  VisionOperationOptions,
 } from "./VisionClient.ts";
 
 export type MockVisionScenario = "valid" | "no-face";
@@ -27,7 +28,11 @@ export class MockVisionClient implements VisionClient {
     this.scenario = scenario;
   }
 
-  async startSession(context: VisionSessionContext): Promise<void> {
+  async startSession(
+    context: VisionSessionContext,
+    { signal }: VisionOperationOptions = {},
+  ): Promise<void> {
+    signal?.throwIfAborted();
     this.context = { ...context };
     this.calibrationId = null;
     this.sequence = 0;

@@ -10,9 +10,19 @@ import type {
   SessionCreated,
 } from "../../app/kiosk-types.ts";
 
+export type ApiRequestOptions = {
+  signal?: AbortSignal;
+};
+
 export interface ApiClient {
-  createSession(request: SessionCreate): Promise<SessionCreated>;
-  getLookbookManifest(lookbookId: string): Promise<LookbookManifest>;
+  createSession(
+    request: SessionCreate,
+    options?: ApiRequestOptions,
+  ): Promise<SessionCreated>;
+  getLookbookManifest(
+    lookbookId: string,
+    options?: ApiRequestOptions,
+  ): Promise<LookbookManifest>;
   appendReactionBatch(
     sessionId: string,
     batch: ReactionBatch,

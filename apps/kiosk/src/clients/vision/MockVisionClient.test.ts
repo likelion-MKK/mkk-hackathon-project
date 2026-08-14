@@ -89,3 +89,21 @@ test("세션이나 보정 없이 추론을 시작하지 못한다", async () => 
   });
   await assert.rejects(client.startInference(), /calibration must finish/);
 });
+
+test("취소된 시작 요청은 Mock Vision 세션을 열지 않는다", async () => {
+  const client = new MockVisionClient();
+  const controller = new AbortController();
+  controller.abort(new Error("session_start_cancelled"));
+
+  await assert.rejects(
+    client.startSession(
+      {
+        session_id: "session-cancelled-001",
+        video_id: "mcm-lookbook-example-v1",
+      },
+      { signal: controller.signal },
+    ),
+    /session_start_cancelled/,
+  );
+  assert.equal((await client.health()).session_active, false);
+});
