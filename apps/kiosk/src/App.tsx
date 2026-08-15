@@ -18,8 +18,8 @@ import {
   transitionKioskScreen,
   type KioskEvent,
 } from "./app/kiosk-machine.ts";
-import { buildD1ReactionBatch } from "./app/reaction-batch.ts";
-import type { FrameContext } from "./app/video-context.ts";
+import { buildD1ReactionBatches } from "./app/reaction-batch.ts";
+import type { FrameContext, VideoLayout } from "./app/video-context.ts";
 import type {
   ExpressionSample,
   GazeSample,
@@ -45,6 +45,19 @@ const apiClient = new MockApiClient({ sessionStartDelayMs: 450 });
 const visionClient = new FakeRemoteVisionClient();
 const frameSource = new FrameSource();
 const temporaryLookbookVideoUrl = import.meta.env.VITE_LOOKBOOK_VIDEO_URL?.trim() ?? "";
+const MAX_CAPTURED_FRAME_LAYOUTS = 2_048;
+
+function rememberCapturedFrameLayout(
+  layoutsByFrameId: Map<string, VideoLayout>,
+  context: FrameContext,
+): void {
+  layoutsByFrameId.set(context.frame_id, context.layout);
+
+  if (layoutsByFrameId.size > MAX_CAPTURED_FRAME_LAYOUTS) {
+    const oldestFrameId = layoutsByFrameId.keys().next().value;
+    if (oldestFrameId) layoutsByFrameId.delete(oldestFrameId);
+  }
+}
 
 type ConsentIssue =
   | "idle-timeout"
@@ -671,7 +684,8 @@ function App() {
   const [isStarting, setIsStarting] = useState(false);
   const [cameraState, setCameraState] = useState<CameraDisplayState>("idle");
   const [flowController] = useState(() => new AsyncFlowController());
-  const latestGazeSample = useRef<GazeSample | null>(null);
+  const gazeSamples = useRef<GazeSample[]>([]);
+  const videoLayoutsByFrameId = useRef<Map<string, VideoLayout>>(new Map());
   const latestExpressionSample = useRef<ExpressionSample | null>(null);
   const sessionStartAbortController = useRef<AbortController | null>(null);
 
@@ -685,8 +699,9 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const layoutsByFrameId = videoLayoutsByFrameId.current;
     const removeGazeListener = visionClient.onGazeSample((sample) => {
-      latestGazeSample.current = sample;
+      gazeSamples.current.push(sample);
     });
     const removeExpressionListener = visionClient.onExpressionSample((sample) => {
       latestExpressionSample.current = sample;
@@ -698,6 +713,7 @@ function App() {
       flowController.invalidateCurrentFlow();
       abortSessionStart();
       frameSource.stop();
+      layoutsByFrameId.clear();
       void flowController.runSerialized(() => visionClient.stopSession());
     };
   }, [abortSessionStart, flowController]);
@@ -713,7 +729,8 @@ function App() {
     abortSessionStart();
     frameSource.stop();
     if (session) apiClient.discardSession(session.session_id);
-    latestGazeSample.current = null;
+    gazeSamples.current.length = 0;
+    videoLayoutsByFrameId.current.clear();
     latestExpressionSample.current = null;
     setSelectedCategory(null);
     setSession(null);
@@ -738,7 +755,8 @@ function App() {
     const generation = flowController.invalidateCurrentFlow();
     abortSessionStart();
     frameSource.stop();
-    latestGazeSample.current = null;
+    gazeSamples.current.length = 0;
+    videoLayoutsByFrameId.current.clear();
     latestExpressionSample.current = null;
     setSelectedCategory(null);
     setSession(null);
@@ -763,7 +781,8 @@ function App() {
     const generation = flowController.invalidateCurrentFlow();
     abortSessionStart();
     frameSource.stop();
-    latestGazeSample.current = null;
+    gazeSamples.current.length = 0;
+    videoLayoutsByFrameId.current.clear();
     latestExpressionSample.current = null;
     setIsStarting(false);
     setCameraState("idle");
@@ -779,6 +798,9 @@ function App() {
   const beginSession = async () => {
     if (!selectedCategory || isStarting || sessionStartAbortController.current) return;
 
+    gazeSamples.current.length = 0;
+    videoLayoutsByFrameId.current.clear();
+    latestExpressionSample.current = null;
     const generation = flowController.invalidateCurrentFlow();
     const abortController = new AbortController();
     sessionStartAbortController.current = abortController;
@@ -904,18 +926,18 @@ function App() {
       await flowController.runSerialized(() => visionClient.stopSession());
       if (!flowController.isCurrent(generation)) return;
 
-      const gazeSample = latestGazeSample.current;
       const expressionSample = latestExpressionSample.current;
-      const batch = buildD1ReactionBatch({
+      const batches = buildD1ReactionBatches({
         batchId: `batch-${session.session_id}-0001`,
         batchSequence: 0,
         sessionId: session.session_id,
         manifest,
-        gazeSample,
+        gazeSamples: gazeSamples.current,
         expressionSample,
+        videoLayoutsByFrameId: videoLayoutsByFrameId.current,
       });
 
-      if (batch) {
+      for (const batch of batches) {
         if (!flowController.isCurrent(generation)) return;
         await apiClient.appendReactionBatch(session.session_id, batch);
       }
@@ -929,7 +951,8 @@ function App() {
       }
     } finally {
       if (flowController.isCurrent(generation)) {
-        latestGazeSample.current = null;
+        gazeSamples.current.length = 0;
+        videoLayoutsByFrameId.current.clear();
         latestExpressionSample.current = null;
       }
     }
@@ -938,6 +961,7 @@ function App() {
   const captureCameraFrame = useCallback(
     async (context: FrameContext) => {
       const generation = flowController.captureGeneration();
+      rememberCapturedFrameLayout(videoLayoutsByFrameId.current, context);
 
       try {
         await frameSource.capture(context, async (frame, frameContext, signal) => {
