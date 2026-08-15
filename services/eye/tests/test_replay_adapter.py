@@ -171,3 +171,28 @@ def test_fixture_record_validation_preserves_invalid_semantics() -> None:
             confidence=0.0,
             reason="no_face",
         )
+
+
+@pytest.mark.parametrize("field", ["screen_x_norm", "screen_y_norm", "confidence"])
+def test_replay_fixture_rejects_boolean_values_for_json_number_fields(
+    tmp_path: Path, field: str
+) -> None:
+    record: dict[str, object] = {
+        "screen_x_norm": 0.2,
+        "screen_y_norm": 0.5,
+        "valid": True,
+        "confidence": 0.8,
+        "reason": None,
+    }
+    record[field] = True
+    fixture_path = tmp_path / f"boolean-{field}.json"
+    fixture_path.write_text(
+        json.dumps({"fixture_revision": "test-v1", "records": [record]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=rf"records\[0\] is invalid: {field} must be a JSON number",
+    ):
+        ReplayEyeAdapter.from_fixture(fixture_path)

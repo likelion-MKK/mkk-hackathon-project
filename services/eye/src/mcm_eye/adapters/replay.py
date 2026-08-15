@@ -6,6 +6,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from hashlib import sha256
 import json
+from math import isfinite
 from pathlib import Path
 from typing import Any, Generic, TypeVar
 
@@ -37,6 +38,19 @@ class ReplayExhaustedError(RuntimeError):
     """Raised when every replay gaze record has already been consumed."""
 
 
+def _json_number(value: object, field: str, *, nullable: bool = False) -> float | None:
+    if value is None:
+        if nullable:
+            return None
+        raise ValueError(f"{field} must be a JSON number")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{field} must be a JSON number")
+    number = float(value)
+    if not isfinite(number):
+        raise ValueError(f"{field} must be finite")
+    return number
+
+
 @dataclass(frozen=True, slots=True)
 class ReplayGazeRecord:
     """One immutable, derived gaze result without capture context or frames."""
@@ -48,6 +62,20 @@ class ReplayGazeRecord:
     reason: str | None
 
     def __post_init__(self) -> None:
+        if type(self.valid) is not bool:
+            raise ValueError("valid must be a boolean")
+        if self.reason is not None and not isinstance(self.reason, str):
+            raise ValueError("reason must be a string or null")
+
+        screen_x_norm = _json_number(
+            self.screen_x_norm, "screen_x_norm", nullable=True
+        )
+        screen_y_norm = _json_number(
+            self.screen_y_norm, "screen_y_norm", nullable=True
+        )
+        confidence = _json_number(self.confidence, "confidence")
+        assert confidence is not None
+
         try:
             validated = GazeSample(
                 schema_version="1.0",
@@ -63,16 +91,17 @@ class ReplayGazeRecord:
                 model_revision="replay-validation-revision",
                 calibration_id="replay-validation-calibration",
                 valid=self.valid,
-                confidence=self.confidence,
+                confidence=confidence,
                 reason=self.reason,
-                screen_x_norm=self.screen_x_norm,
-                screen_y_norm=self.screen_y_norm,
+                screen_x_norm=screen_x_norm,
+                screen_y_norm=screen_y_norm,
             )
         except (TypeError, ValueError) as error:
             raise ValueError(str(error)) from None
 
         object.__setattr__(self, "screen_x_norm", validated.screen_x_norm)
         object.__setattr__(self, "screen_y_norm", validated.screen_y_norm)
+        object.__setattr__(self, "confidence", validated.confidence)
 
 
 class ReplayEyeAdapter(Generic[FrameT]):

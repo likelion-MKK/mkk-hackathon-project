@@ -6,6 +6,7 @@ import type {
   VisionHealth,
   VisionSessionContext,
 } from "../../app/kiosk-types.ts";
+import type { FrameContext } from "../../app/video-context.ts";
 import type {
   ExpressionSampleListener,
   GazeSampleListener,
@@ -15,6 +16,10 @@ import type {
 } from "./VisionClient.ts";
 
 export type MockVisionScenario = "valid" | "no-face";
+
+type InferenceStartOptions = {
+  emitInitialSample?: boolean;
+};
 
 export class MockVisionClient implements VisionClient {
   private readonly gazeListeners = new Set<GazeSampleListener>();
@@ -58,12 +63,14 @@ export class MockVisionClient implements VisionClient {
     };
   }
 
-  async startInference(): Promise<void> {
+  async startInference({ emitInitialSample = true }: InferenceStartOptions = {}): Promise<void> {
     const context = this.requireSession();
 
     if (!this.calibrationId) {
       throw new Error("Mock vision calibration must finish before inference starts.");
     }
+
+    if (!emitInitialSample) return;
 
     this.sequence += 1;
     const gazeSample = this.createGazeSample(context, this.sequence);
@@ -71,6 +78,26 @@ export class MockVisionClient implements VisionClient {
 
     this.sequence += 1;
     const expressionSample = this.createExpressionSample(context, this.sequence);
+    this.expressionListeners.forEach((listener) => listener(expressionSample));
+  }
+
+  emitFrameInference(context: FrameContext): void {
+    const sessionContext = this.requireSession();
+    if (!this.calibrationId) {
+      throw new Error("Mock vision calibration must finish before inference starts.");
+    }
+    if (
+      context.session_id !== sessionContext.session_id ||
+      context.video_id !== sessionContext.video_id
+    ) {
+      throw new Error("FrameContext does not match the active Vision session.");
+    }
+
+    const gazeSequence = context.sequence * 2;
+    const expressionSequence = gazeSequence + 1;
+    const gazeSample = this.createGazeSampleFromFrame(context, gazeSequence);
+    const expressionSample = this.createExpressionSampleFromFrame(context, expressionSequence);
+    this.gazeListeners.forEach((listener) => listener(gazeSample));
     this.expressionListeners.forEach((listener) => listener(expressionSample));
   }
 
@@ -144,6 +171,41 @@ export class MockVisionClient implements VisionClient {
     };
   }
 
+  private createGazeSampleFromFrame(context: FrameContext, sequence: number): GazeSample {
+    const base = {
+      schema_version: "1.0" as const,
+      session_id: context.session_id,
+      event_id: `gaze-mock-${context.frame_id}`,
+      sequence,
+      frame_id: context.frame_id,
+      captured_at_mono_ms: context.captured_at_mono_ms,
+      video_id: context.video_id,
+      video_time_ms: context.video_time_ms,
+      playback_epoch: context.playback_epoch,
+      producer_id: "mock-vision-client-eye",
+      model_revision: "d3-frame-context-v1",
+      calibration_id: this.calibrationId ?? "calibration-missing",
+    };
+
+    if (this.scenario === "no-face") {
+      return {
+        ...base,
+        valid: false,
+        confidence: 0,
+        reason: "face_not_detected",
+      };
+    }
+
+    return {
+      ...base,
+      screen_x_norm: 0.3,
+      screen_y_norm: 0.46,
+      valid: true,
+      confidence: 0.88,
+      reason: null,
+    };
+  }
+
   private createExpressionSample(
     context: VisionSessionContext,
     sequence: number,
@@ -160,6 +222,50 @@ export class MockVisionClient implements VisionClient {
       playback_epoch: 0,
       producer_id: "mock-vision-client-face",
       model_revision: "d1-mock-v1",
+      taxonomy_version: "d1-mock-taxonomy-v1",
+    };
+
+    if (this.scenario === "no-face") {
+      return {
+        ...base,
+        face_detected: false,
+        face_count: 0,
+        scores: {},
+        quality: 0,
+        valid: false,
+        confidence: 0,
+        reason: "face_not_detected",
+      };
+    }
+
+    return {
+      ...base,
+      face_detected: true,
+      face_count: 1,
+      scores: { unknown: 0.58 },
+      quality: 0.79,
+      valid: true,
+      confidence: 0.82,
+      reason: null,
+    };
+  }
+
+  private createExpressionSampleFromFrame(
+    context: FrameContext,
+    sequence: number,
+  ): ExpressionSample {
+    const base = {
+      schema_version: "1.0" as const,
+      session_id: context.session_id,
+      event_id: `expression-mock-${context.frame_id}`,
+      sequence,
+      frame_id: context.frame_id,
+      captured_at_mono_ms: context.captured_at_mono_ms,
+      video_id: context.video_id,
+      video_time_ms: context.video_time_ms,
+      playback_epoch: context.playback_epoch,
+      producer_id: "mock-vision-client-face",
+      model_revision: "d3-frame-context-v1",
       taxonomy_version: "d1-mock-taxonomy-v1",
     };
 
