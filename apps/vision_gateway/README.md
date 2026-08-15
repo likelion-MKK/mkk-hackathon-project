@@ -1,7 +1,8 @@
 # D7 In-process Vision Gateway Harness
 
-이 디렉터리는 D7 Replay E2E를 위한 테스트 가능한 transport 경계다. 실제 WebSocket,
-Vision Stream v1, 운영 인증·TLS 구현이 아니며 production-ready로 사용하지 않는다.
+이 디렉터리는 D7 Replay E2E와 D8 개발 camera smoke를 위한 테스트 가능한 transport
+경계다. 실제 WebSocket, Vision Stream v1, 운영 인증·TLS 구현이 아니며
+production-ready로 사용하지 않는다.
 
 ## 데이터 흐름
 
@@ -42,8 +43,12 @@ uv run --project apps/api python -m apps.vision_gateway.demo --mode replay
 실제 카메라, 실제 고객 frame, MediaPipe 선택 모델, 브라우저 `getUserMedia`와 외부
 네트워크를 사용하지 않는다.
 
+D8의 opt-in 실제 개발 camera 경로와 quality·diagnostics 의미는
+[`D8_README.md`](D8_README.md)를 따른다. D7 명령과 기본 모드는 camera extra를
+요구하지 않는다.
+
 ## D8 경계
 
 Vision Stream v1 계약, binary WSS serialization, auth/origin/limit, TLS 배포,
-Kiosk-to-server capture-to-result 측정, 실제 Eye Worker process와 현장 live 검증은 D8
-이후 별도 작업이다.
+Kiosk-to-server capture-to-result 측정, 실제 Eye Worker process와 현장 live 검증은
+D9 이후 별도 작업이다.

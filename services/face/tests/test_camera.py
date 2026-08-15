@@ -42,6 +42,20 @@ def test_camera_reports_requested_and_actual_video_settings_and_releases() -> No
     assert capture.released is True
 
 
+def test_camera_source_opens_video_device_only_without_audio_boundary() -> None:
+    opened_devices: list[int] = []
+
+    def video_capture(device_index: int) -> Capture:
+        opened_devices.append(device_index)
+        return Capture()
+
+    source = OpenCVCameraSource(device_index=2, capture_factory=video_capture)
+    source.open()
+    source.close()
+    assert opened_devices == [2]
+    assert not hasattr(source, "audio")
+
+
 def test_camera_permission_denied_is_explicit() -> None:
     def denied(_: int):
         raise PermissionError("secret OS detail")

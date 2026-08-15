@@ -7,6 +7,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 import hashlib
 import hmac
+from math import isfinite
 from pathlib import Path
 import re
 from threading import RLock
@@ -102,9 +103,24 @@ def _quality_from_landmarks(
     face_landmarks: Sequence[Sequence[Any]],
     *,
     face_count: int,
+    min_in_frame_ratio: float = 0.90,
+    min_face_width_ratio: float = 0.10,
+    min_face_height_ratio: float = 0.10,
 ) -> float | None:
-    """Return supported landmark quality, or None when the model does not expose it."""
+    """Return technical signal usability, not emotion or reaction accuracy.
 
+    MediaPipe presence/visibility is preferred when it is completely available.
+    Otherwise a conservative geometry proxy checks finite coordinates, the share
+    of landmarks inside the image, and normalized face bounding-box extent.
+    """
+
+    for name, value in (
+        ("min_in_frame_ratio", min_in_frame_ratio),
+        ("min_face_width_ratio", min_face_width_ratio),
+        ("min_face_height_ratio", min_face_height_ratio),
+    ):
+        if not 0.0 < value <= 1.0:
+            raise ValueError(f"{name} must be between 0 and 1")
     if face_count == 0:
         return 0.0
     points = [point for landmarks in face_landmarks for point in landmarks]
@@ -114,11 +130,35 @@ def _quality_from_landmarks(
     for attribute in ("presence", "visibility"):
         raw_values = [getattr(point, attribute, None) for point in points]
         if all(value is not None for value in raw_values):
-            values = [float(value) for value in raw_values]
-            if all(0.0 <= value <= 1.0 for value in values):
-                supported_channels.append(values)
+            try:
+                values = [float(value) for value in raw_values]
+            except (TypeError, ValueError):
+                return 0.0
+            if not all(isfinite(value) and 0.0 <= value <= 1.0 for value in values):
+                return 0.0
+            supported_channels.append(values)
     if not supported_channels:
-        return None
+        coordinates: list[tuple[float, float, float]] = []
+        try:
+            for point in points:
+                coordinates.append((float(point.x), float(point.y), float(point.z)))
+        except (AttributeError, TypeError, ValueError):
+            return 0.0
+        if not all(isfinite(value) for coordinate in coordinates for value in coordinate):
+            return 0.0
+        in_frame = sum(
+            1 for x, y, _ in coordinates if 0.0 <= x <= 1.0 and 0.0 <= y <= 1.0
+        ) / len(coordinates)
+        x_values = [coordinate[0] for coordinate in coordinates]
+        y_values = [coordinate[1] for coordinate in coordinates]
+        width = max(x_values) - min(x_values)
+        height = max(y_values) - min(y_values)
+        return min(
+            1.0,
+            in_frame / min_in_frame_ratio,
+            width / min_face_width_ratio,
+            height / min_face_height_ratio,
+        )
     values = [value for channel in supported_channels for value in channel]
     return sum(values) / len(values)
 
@@ -126,8 +166,18 @@ def _quality_from_landmarks(
 class MediaPipeBackend:
     """Optional MediaPipe runtime. Model bytes live only for adapter lifetime."""
 
-    def __init__(self, model_path: Path) -> None:
+    def __init__(
+        self,
+        model_path: Path,
+        *,
+        min_in_frame_ratio: float = 0.90,
+        min_face_width_ratio: float = 0.10,
+        min_face_height_ratio: float = 0.10,
+    ) -> None:
         self._model_path = model_path
+        self._min_in_frame_ratio = min_in_frame_ratio
+        self._min_face_width_ratio = min_face_width_ratio
+        self._min_face_height_ratio = min_face_height_ratio
         self._landmarker: Any | None = None
         self._mp: Any | None = None
 
@@ -158,15 +208,28 @@ class MediaPipeBackend:
             raise RuntimeError("mediapipe backend is not initialized")
         # Camera frames are BGR numpy arrays. The conversion creates a bounded,
         # in-memory RGB buffer which is released before this method returns.
-        rgb = frame[:, :, ::-1].copy()
+        rgb_copy = getattr(frame, "to_rgb_copy", None)
+        rgb = rgb_copy() if callable(rgb_copy) else frame[:, :, ::-1].copy()
         image = self._mp.Image(image_format=self._mp.ImageFormat.SRGB, data=rgb)
         try:
             result = self._landmarker.detect(image)
             count = len(result.face_landmarks)
             groups: list[Mapping[str, float]] = []
             for group in result.face_blendshapes:
-                groups.append({category.category_name: float(category.score) for category in group})
-            quality = _quality_from_landmarks(result.face_landmarks, face_count=count)
+                values: dict[str, float] = {}
+                for category in group:
+                    label = category.category_name
+                    if label in values:
+                        raise ValueError("duplicate blendshape label")
+                    values[label] = float(category.score)
+                groups.append(values)
+            quality = _quality_from_landmarks(
+                result.face_landmarks,
+                face_count=count,
+                min_in_frame_ratio=self._min_in_frame_ratio,
+                min_face_width_ratio=self._min_face_width_ratio,
+                min_face_height_ratio=self._min_face_height_ratio,
+            )
             return FaceInference(count, tuple(groups), quality)
         finally:
             del image
@@ -186,7 +249,10 @@ class SelectedFaceAdapter:
         self,
         *,
         model_path: str | Path = "models/face_landmarker.task",
-        low_quality_threshold: float = 0.5,
+        low_quality_threshold: float = 0.8,
+        min_in_frame_ratio: float = 0.90,
+        min_face_width_ratio: float = 0.10,
+        min_face_height_ratio: float = 0.10,
         backend: FaceInferenceBackend | None = None,
         cache_max_entries: int = 256,
         cache_ttl_seconds: float = 30.0,
@@ -194,11 +260,23 @@ class SelectedFaceAdapter:
     ) -> None:
         if not 0.0 <= low_quality_threshold <= 1.0:
             raise ValueError("low_quality_threshold must be between 0 and 1")
+        for name, value in (
+            ("min_in_frame_ratio", min_in_frame_ratio),
+            ("min_face_width_ratio", min_face_width_ratio),
+            ("min_face_height_ratio", min_face_height_ratio),
+        ):
+            if not 0.0 < value <= 1.0:
+                raise ValueError(f"{name} must be between 0 and 1")
         if cache_max_entries <= 0:
             raise ValueError("cache_max_entries must be positive")
         if cache_ttl_seconds <= 0:
             raise ValueError("cache_ttl_seconds must be positive")
-        self._backend = backend or MediaPipeBackend(Path(model_path))
+        self._backend = backend or MediaPipeBackend(
+            Path(model_path),
+            min_in_frame_ratio=min_in_frame_ratio,
+            min_face_width_ratio=min_face_width_ratio,
+            min_face_height_ratio=min_face_height_ratio,
+        )
         self._threshold = low_quality_threshold
         self._cache_max_entries = cache_max_entries
         self._cache_ttl_seconds = cache_ttl_seconds
@@ -282,6 +360,12 @@ class SelectedFaceAdapter:
                 face_count=result.face_count,
                 quality=quality if quality is not None else 0.0,
             )
+        if len(result.blendshapes) != 1:
+            return invalid_sample(metadata, context, reason="malformed_output", face_count=1)
+        try:
+            scores = self._normalize(result.blendshapes[0])
+        except (TypeError, ValueError):
+            return invalid_sample(metadata, context, reason="malformed_output", face_count=1)
         if quality is None or quality < self._threshold:
             return invalid_sample(
                 metadata,
@@ -290,9 +374,6 @@ class SelectedFaceAdapter:
                 face_count=1,
                 quality=quality if quality is not None else 0.0,
             )
-        if len(result.blendshapes) != 1:
-            return invalid_sample(metadata, context, reason="malformed_output", face_count=1)
-        scores = self._normalize(result.blendshapes[0])
         return ExpressionSample(
             schema_version="1.0", session_id=context.session_id,
             event_id=event_id(metadata, context), sequence=context.sequence,

@@ -14,12 +14,19 @@ from apps.vision_gateway.gateway import (
     SyntheticFrame,
     VisionHandshake,
 )
+from apps.vision_gateway.d8_signals import (
+    D8_REACTION_TAXONOMY_VERSION,
+    D8ReactionSignals,
+    derive_d8_reaction_signals,
+)
 from apps.vision_gateway.runner import D7RunConfig, D7SessionRunner, HttpBackendPort
 
 __all__ = [
     "D7GazeSample",
     "D7RunConfig",
     "D7SessionRunner",
+    "D8_REACTION_TAXONOMY_VERSION",
+    "D8ReactionSignals",
     "DerivedObservation",
     "FrameEnvelope",
     "GatewayStateError",
@@ -29,4 +36,5 @@ __all__ = [
     "ReplayEyePort",
     "SyntheticFrame",
     "VisionHandshake",
+    "derive_d8_reaction_signals",
 ]

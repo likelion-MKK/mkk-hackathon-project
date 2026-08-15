@@ -29,16 +29,24 @@ class BackendPort(Protocol):
 class HttpBackendPort:
     """Adapter around FastAPI TestClient without coupling the Gateway to FastAPI."""
 
-    def __init__(self, client: Any) -> None:
+    def __init__(
+        self,
+        client: Any,
+        *,
+        kiosk_id: str = "kiosk-d7-replay",
+        consent_version: str = "consent-d7-synthetic",
+    ) -> None:
         self._client = client
+        self._kiosk_id = kiosk_id
+        self._consent_version = consent_version
 
     def create_session(self) -> str:
         response = self._client.post(
             "/api/v1/sessions",
             json={
-                "kiosk_id": "kiosk-d7-replay",
+                "kiosk_id": self._kiosk_id,
                 "lookbook_id": "mcm-lookbook-example-v1",
-                "consent_version": "consent-d7-synthetic",
+                "consent_version": self._consent_version,
             },
         )
         response.raise_for_status()
@@ -68,7 +76,7 @@ class HttpBackendPort:
 
 @dataclass(frozen=True, slots=True)
 class D7RunConfig:
-    input_mode: Literal["synthetic", "replay"] = "synthetic"
+    input_mode: Literal["synthetic", "replay", "camera_development"] = "synthetic"
     recommendation_mode: Literal["mock"] = "mock"
     video_id: str = "mcm-lookbook-example-v1"
     capture_step_ms: int = 250
@@ -85,6 +93,7 @@ class D7SessionRunner:
         face_worker_factory: Callable[[], FaceWorker],
         config: D7RunConfig = D7RunConfig(),
         eye_port_factory: Callable[[], ReplayEyePort] = ReplayEyePort,
+        gateway_factory: GatewayFactory | None = None,
     ) -> None:
         if config.recommendation_mode != "mock":
             raise ValueError("D7 supports mock recommendation only")
@@ -92,6 +101,7 @@ class D7SessionRunner:
         self.face_worker_factory = face_worker_factory
         self.config = config
         self.eye_port_factory = eye_port_factory
+        self.gateway_factory = gateway_factory
         self.session_id: str | None = None
         self.gateway: InProcessVisionGateway | None = None
         self._manifest: Mapping[str, object] | None = None
@@ -104,10 +114,13 @@ class D7SessionRunner:
             return self.session_id
         self.session_id = self.backend.create_session()
         self._manifest = self.backend.manifest()
-        self.gateway = InProcessVisionGateway(
-            face_worker_factory=self.face_worker_factory,
-            eye_port=self.eye_port_factory(),
-        )
+        if self.gateway_factory is None:
+            self.gateway = InProcessVisionGateway(
+                face_worker_factory=self.face_worker_factory,
+                eye_port=self.eye_port_factory(),
+            )
+        else:
+            self.gateway = self.gateway_factory(self.session_id, self.config.video_id)
         self.gateway.connect(
             VisionHandshake(self.session_id, self.config.video_id, self.config.input_mode)
         )
@@ -127,6 +140,17 @@ class D7SessionRunner:
             video_time_ms=index * self.config.capture_step_ms,
             playback_epoch=0,
         )
+        return self.process_envelope(context)
+
+    def process_envelope(
+        self, context: FrameEnvelope
+    ) -> tuple[DerivedObservation, Mapping[str, object]]:
+        """Process an already-captured context through the shared D7 event path."""
+
+        if self.session_id is None or self.gateway is None or self._manifest is None:
+            raise RuntimeError("D7 session has not started")
+        if self._cancelled or self._closed:
+            raise RuntimeError("D7 session is no longer active")
         observation = self.gateway.process(context)
         accepted = self._ingest_observation(observation)
         return observation, accepted
