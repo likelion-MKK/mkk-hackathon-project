@@ -6,6 +6,7 @@ from mcm_face.adapters.replay import (
     ReplayFaceAdapter,
     ReplayFaceRecord,
 )
+from mcm_face.adapters.selected import FaceInference, SelectedFaceAdapter
 
 __all__ = [
     "FakeFaceAdapter",
@@ -13,4 +14,6 @@ __all__ = [
     "ReplayExhaustedError",
     "ReplayFaceAdapter",
     "ReplayFaceRecord",
+    "FaceInference",
+    "SelectedFaceAdapter",
 ]
