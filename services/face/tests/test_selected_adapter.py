@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import time
 
 import pytest
@@ -26,6 +26,7 @@ class Backend:
         self.delay = delay
         self.initialized = False
         self.disposed = False
+        self.infer_count = 0
 
     def initialize(self) -> None:
         if isinstance(self.result, RuntimeError) and str(self.result) == "initialize":
@@ -33,6 +34,7 @@ class Backend:
         self.initialized = True
 
     def infer(self, frame: object) -> FaceInference:
+        self.infer_count += 1
         time.sleep(self.delay)
         if isinstance(self.result, Exception):
             raise self.result
@@ -60,6 +62,15 @@ def test_valid_face_returns_only_canonical_derived_scores() -> None:
     assert "mouth_smile_left" in sample.scores
     assert "_neutral" not in sample.scores
     assert sample.frame_id == Context.frame_id
+
+
+def test_missing_landmark_quality_fails_closed() -> None:
+    sample = run(FaceInference(1, (blendshapes(),), None))
+    assert sample.valid is False
+    assert sample.reason == "low_quality"
+    assert sample.quality == 0.0
+    assert sample.confidence == 0.0
+    assert sample.scores == {}
 
 
 @pytest.mark.parametrize(
@@ -127,3 +138,111 @@ def test_payload_cannot_expose_frame_bytes_or_recommendation() -> None:
     payload = sample.to_payload()
     rendered = repr(payload).lower()
     assert all(term not in rendered for term in ("raw_frame", "image_bytes", "base64", "recommendation"))
+
+
+class Clock:
+    def __init__(self) -> None:
+        self.now = 100.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def test_same_full_context_reuses_cached_canonical_sample_without_inference() -> None:
+    backend = Backend(FaceInference(1, (blendshapes(),), 0.9))
+    adapter = SelectedFaceAdapter(backend=backend)
+    adapter.initialize()
+    first = adapter.infer(object(), Context())
+    second = adapter.infer(object(), Context())
+    assert second is first
+    assert second.event_id == first.event_id
+    assert backend.infer_count == 1
+
+
+def test_every_context_field_participates_in_retry_cache_key() -> None:
+    fields = {
+        "session_id": "session-other",
+        "sequence": 2,
+        "frame_id": "frame-other",
+        "captured_at_mono_ms": 101.0,
+        "video_id": "video-other",
+        "video_time_ms": 91,
+        "playback_epoch": 1,
+    }
+    for field, value in fields.items():
+        backend = Backend(FaceInference(1, (blendshapes(),), 0.9))
+        adapter = SelectedFaceAdapter(backend=backend)
+        adapter.initialize()
+        adapter.infer(object(), Context())
+        adapter.infer(object(), replace(Context(), **{field: value}))
+        assert backend.infer_count == 2, field
+
+
+def test_cache_is_bounded_and_evicts_least_recently_used_sample() -> None:
+    backend = Backend(FaceInference(1, (blendshapes(),), 0.9))
+    adapter = SelectedFaceAdapter(backend=backend, cache_max_entries=2)
+    adapter.initialize()
+    first = Context()
+    second = replace(first, sequence=2, frame_id="frame-d6-0002")
+    third = replace(first, sequence=3, frame_id="frame-d6-0003")
+    adapter.infer(object(), first)
+    adapter.infer(object(), second)
+    adapter.infer(object(), first)  # first becomes most recently used
+    adapter.infer(object(), third)  # second is evicted
+    adapter.infer(object(), second)
+    assert backend.infer_count == 4
+
+
+def test_expired_cache_entry_is_removed_and_recomputed() -> None:
+    clock = Clock()
+    backend = Backend(FaceInference(1, (blendshapes(),), 0.9))
+    adapter = SelectedFaceAdapter(backend=backend, cache_ttl_seconds=5.0, clock=clock)
+    adapter.initialize()
+    adapter.infer(object(), Context())
+    clock.now = 104.9
+    adapter.infer(object(), Context())
+    clock.now = 105.0
+    adapter.infer(object(), Context())
+    assert backend.infer_count == 2
+
+
+def test_ready_initialize_preserves_cache_but_dispose_clears_it() -> None:
+    backend = Backend(FaceInference(1, (blendshapes(),), 0.9))
+    adapter = SelectedFaceAdapter(backend=backend)
+    adapter.initialize()
+    adapter.infer(object(), Context())
+    adapter.initialize()
+    adapter.infer(object(), Context())
+    assert backend.infer_count == 1
+    adapter.dispose()
+    adapter.initialize()
+    adapter.infer(object(), Context())
+    assert backend.infer_count == 2
+
+
+def test_actual_mediapipe_landmark_with_unset_quality_is_unverified() -> None:
+    mediapipe = pytest.importorskip("mediapipe")
+    del mediapipe
+    from mediapipe.tasks.python.components.containers.landmark import NormalizedLandmark
+    from mcm_face.adapters.selected import _quality_from_landmarks
+
+    landmark = NormalizedLandmark(x=0.1, y=0.2, z=0.3)
+    assert landmark.presence is None
+    assert landmark.visibility is None
+    assert _quality_from_landmarks(((landmark,),), face_count=1) is None
+
+
+def test_quality_requires_a_complete_supported_landmark_channel() -> None:
+    from types import SimpleNamespace
+    from mcm_face.adapters.selected import _quality_from_landmarks
+
+    partial = (
+        SimpleNamespace(presence=0.9, visibility=None),
+        SimpleNamespace(presence=None, visibility=None),
+    )
+    complete = (
+        SimpleNamespace(presence=0.8, visibility=None),
+        SimpleNamespace(presence=1.0, visibility=None),
+    )
+    assert _quality_from_landmarks((partial,), face_count=1) is None
+    assert _quality_from_landmarks((complete,), face_count=1) == pytest.approx(0.9)

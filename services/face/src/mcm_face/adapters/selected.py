@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections import OrderedDict
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 import hashlib
 import hmac
 from pathlib import Path
 import re
+from threading import RLock
+from time import monotonic
 from typing import Any, Protocol
 
 from mcm_face.models import AdapterMetadata, ExpressionSample, FaceFrameContext
@@ -26,7 +29,13 @@ class FaceInference:
 
     face_count: int
     blendshapes: tuple[Mapping[str, float], ...]
-    quality: float
+    quality: float | None
+
+
+@dataclass(frozen=True, slots=True)
+class _CachedSample:
+    expires_at: float
+    sample: ExpressionSample
 
 
 class FaceInferenceBackend(Protocol):
@@ -61,6 +70,31 @@ CANONICAL_LABELS = {
     for source_label in SOURCE_LABELS
     if source_label != "_neutral"
 }
+
+
+def _quality_from_landmarks(
+    face_landmarks: Sequence[Sequence[Any]],
+    *,
+    face_count: int,
+) -> float | None:
+    """Return supported landmark quality, or None when the model does not expose it."""
+
+    if face_count == 0:
+        return 0.0
+    points = [point for landmarks in face_landmarks for point in landmarks]
+    if not points:
+        return None
+    supported_channels: list[list[float]] = []
+    for attribute in ("presence", "visibility"):
+        raw_values = [getattr(point, attribute, None) for point in points]
+        if all(value is not None for value in raw_values):
+            values = [float(value) for value in raw_values]
+            if all(0.0 <= value <= 1.0 for value in values):
+                supported_channels.append(values)
+    if not supported_channels:
+        return None
+    values = [value for channel in supported_channels for value in channel]
+    return sum(values) / len(values)
 
 
 class MediaPipeBackend:
@@ -106,15 +140,8 @@ class MediaPipeBackend:
             groups: list[Mapping[str, float]] = []
             for group in result.face_blendshapes:
                 groups.append({category.category_name: float(category.score) for category in group})
-            quality_values = [
-                float(value)
-                for landmarks in result.face_landmarks
-                for point in landmarks
-                for value in (getattr(point, "presence", None), getattr(point, "visibility", None))
-                if value is not None and float(value) >= 0.0
-            ]
-            quality = sum(quality_values) / len(quality_values) if quality_values else (1.0 if count else 0.0)
-            return FaceInference(count, tuple(groups), max(0.0, min(1.0, quality)))
+            quality = _quality_from_landmarks(result.face_landmarks, face_count=count)
+            return FaceInference(count, tuple(groups), quality)
         finally:
             del image
             del rgb
@@ -135,11 +162,23 @@ class SelectedFaceAdapter:
         model_path: str | Path = "models/face_landmarker.task",
         low_quality_threshold: float = 0.5,
         backend: FaceInferenceBackend | None = None,
+        cache_max_entries: int = 256,
+        cache_ttl_seconds: float = 30.0,
+        clock: Callable[[], float] = monotonic,
     ) -> None:
         if not 0.0 <= low_quality_threshold <= 1.0:
             raise ValueError("low_quality_threshold must be between 0 and 1")
+        if cache_max_entries <= 0:
+            raise ValueError("cache_max_entries must be positive")
+        if cache_ttl_seconds <= 0:
+            raise ValueError("cache_ttl_seconds must be positive")
         self._backend = backend or MediaPipeBackend(Path(model_path))
         self._threshold = low_quality_threshold
+        self._cache_max_entries = cache_max_entries
+        self._cache_ttl_seconds = cache_ttl_seconds
+        self._clock = clock
+        self._cache: OrderedDict[tuple[object, ...], _CachedSample] = OrderedDict()
+        self._lock = RLock()
         self._ready = False
 
     def metadata(self) -> AdapterMetadata:
@@ -153,52 +192,103 @@ class SelectedFaceAdapter:
         )
 
     def initialize(self) -> None:
-        if not self._ready:
-            self._backend.initialize()
-            self._ready = True
+        with self._lock:
+            if not self._ready:
+                self._cache.clear()
+                self._backend.initialize()
+                self._ready = True
 
     def warmup(self) -> None:
-        if not self._ready:
-            raise RuntimeError("adapter must be initialized before warmup")
+        with self._lock:
+            if not self._ready:
+                raise RuntimeError("adapter must be initialized before warmup")
 
     def infer(self, frame: Any, context: FaceFrameContext) -> ExpressionSample:
-        metadata = self.metadata()
-        if not self._ready:
-            del frame
-            return invalid_sample(metadata, context, reason="model_unavailable")
-        result: FaceInference | None = None
-        try:
-            result = self._backend.infer(frame)
-            if result.face_count == 0:
-                return invalid_sample(metadata, context, reason="no_face")
-            if result.face_count >= 2:
-                return invalid_sample(
-                    metadata, context, reason="multi_face", face_count=result.face_count, quality=result.quality
-                )
-            if result.quality < self._threshold:
-                return invalid_sample(
-                    metadata, context, reason="low_quality", face_count=1, quality=result.quality
-                )
-            if len(result.blendshapes) != 1:
-                return invalid_sample(metadata, context, reason="malformed_output", face_count=1)
-            scores = self._normalize(result.blendshapes[0])
-            return ExpressionSample(
-                schema_version="1.0", session_id=context.session_id,
-                event_id=event_id(metadata, context), sequence=context.sequence,
-                frame_id=context.frame_id, captured_at_mono_ms=context.captured_at_mono_ms,
-                video_id=context.video_id, video_time_ms=context.video_time_ms,
-                playback_epoch=context.playback_epoch, producer_id=metadata.adapter_id,
-                model_revision=metadata.model_revision, taxonomy_version=metadata.taxonomy_version,
-                face_detected=True, face_count=1, scores=scores, quality=result.quality,
-                valid=True, confidence=result.quality, reason=None,
+        with self._lock:
+            metadata = self.metadata()
+            if not self._ready:
+                del frame
+                return invalid_sample(metadata, context, reason="model_unavailable")
+            key = self._context_key(context)
+            now = self._clock()
+            self._prune_expired(now)
+            cached = self._cache.get(key)
+            if cached is not None:
+                self._cache.move_to_end(key)
+                del frame
+                return cached.sample
+            result: FaceInference | None = None
+            try:
+                result = self._backend.infer(frame)
+                sample = self._to_sample(metadata, context, result)
+            except (KeyError, TypeError, ValueError):
+                sample = invalid_sample(metadata, context, reason="malformed_output")
+            except Exception:
+                sample = invalid_sample(metadata, context, reason="model_unavailable")
+            finally:
+                result = None
+                del frame
+            self._cache[key] = _CachedSample(now + self._cache_ttl_seconds, sample)
+            self._cache.move_to_end(key)
+            while len(self._cache) > self._cache_max_entries:
+                self._cache.popitem(last=False)
+            return sample
+
+    def _to_sample(
+        self,
+        metadata: AdapterMetadata,
+        context: FaceFrameContext,
+        result: FaceInference,
+    ) -> ExpressionSample:
+        quality = result.quality
+        if result.face_count == 0:
+            return invalid_sample(metadata, context, reason="no_face")
+        if result.face_count >= 2:
+            return invalid_sample(
+                metadata,
+                context,
+                reason="multi_face",
+                face_count=result.face_count,
+                quality=quality if quality is not None else 0.0,
             )
-        except (KeyError, TypeError, ValueError):
-            return invalid_sample(metadata, context, reason="malformed_output")
-        except Exception:
-            return invalid_sample(metadata, context, reason="model_unavailable")
-        finally:
-            result = None
-            del frame
+        if quality is None or quality < self._threshold:
+            return invalid_sample(
+                metadata,
+                context,
+                reason="low_quality",
+                face_count=1,
+                quality=quality if quality is not None else 0.0,
+            )
+        if len(result.blendshapes) != 1:
+            return invalid_sample(metadata, context, reason="malformed_output", face_count=1)
+        scores = self._normalize(result.blendshapes[0])
+        return ExpressionSample(
+            schema_version="1.0", session_id=context.session_id,
+            event_id=event_id(metadata, context), sequence=context.sequence,
+            frame_id=context.frame_id, captured_at_mono_ms=context.captured_at_mono_ms,
+            video_id=context.video_id, video_time_ms=context.video_time_ms,
+            playback_epoch=context.playback_epoch, producer_id=metadata.adapter_id,
+            model_revision=metadata.model_revision, taxonomy_version=metadata.taxonomy_version,
+            face_detected=True, face_count=1, scores=scores, quality=quality,
+            valid=True, confidence=quality, reason=None,
+        )
+
+    @staticmethod
+    def _context_key(context: FaceFrameContext) -> tuple[object, ...]:
+        return (
+            context.session_id,
+            context.sequence,
+            context.frame_id,
+            context.captured_at_mono_ms,
+            context.video_id,
+            context.video_time_ms,
+            context.playback_epoch,
+        )
+
+    def _prune_expired(self, now: float) -> None:
+        expired = [key for key, cached in self._cache.items() if cached.expires_at <= now]
+        for key in expired:
+            del self._cache[key]
 
     def _normalize(self, values: Mapping[str, float]) -> dict[str, float]:
         if len(values) != len(set(values)):
@@ -220,7 +310,9 @@ class SelectedFaceAdapter:
         return normalized
 
     def dispose(self) -> None:
-        try:
-            self._backend.dispose()
-        finally:
-            self._ready = False
+        with self._lock:
+            try:
+                self._backend.dispose()
+            finally:
+                self._cache.clear()
+                self._ready = False

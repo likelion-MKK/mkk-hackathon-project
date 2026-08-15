@@ -47,6 +47,10 @@ face가 정확히 1개일 때만 valid 후보로 처리한다. 0개는 `no_face`
 - frame, landmark, source raw blendshape, tensor, image bytes, base64, embedding과
   원본 경로는 결과·예외·로그·cache·queue·DB에 포함하지 않는다. 출력에는 canonical
   `ExpressionSample`만 사용한다.
+- landmark `presence` 또는 `visibility` 중 모든 landmark에 완전하게 제공되는
+  channel만 quality 계산에 사용한다. 두 channel을 모두 확인할 수 없으면 quality를
+  추정하거나 `1.0`으로 대체하지 않고 `quality=0.0`, `reason=low_quality`로
+  fail-closed 처리한다.
 
 ## invalid와 fallback
 
@@ -80,7 +84,9 @@ neutral·0점·무관심 또는 `insufficient_data`로 바꾸지 않는다. prim
 결정적으로 생성한다. 같은 context 재시도는 cache의 파생 `ExpressionSample`을
 반환해 payload와 event ID를 유지하고 모델을 다시 실행하지 않는다. cache에는
 frame·landmark·source raw score·tensor를 저장하지 않고 canonical 파생 sample만
-설정된 TTL 동안 유지한다. session 취소·종료, TTL 만료와 dispose 때 비운다.
+설정된 TTL 동안 유지한다. cache는 전체 `FaceFrameContext` tuple을 key로 하는
+bounded LRU이며 TTL 만료 시 접근 경로에서 제거한다. 최초 initialize와 dispose에서
+비우고 ready 상태의 반복 initialize에서는 유지한다.
 
 ## 후속 PR 경계
 
