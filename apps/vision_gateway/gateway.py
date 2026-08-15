@@ -479,7 +479,7 @@ def attention_event(gaze: D7GazeSample, manifest: Mapping[str, object]) -> dict[
         "confidence": gaze.confidence if valid else 0.0,
         "reason": None if valid else (gaze.reason or "no_product_hit"),
     }
-    if gaze.valid:
+    if valid:
         event["video_x_norm"] = gaze.screen_x_norm
         event["video_y_norm"] = gaze.screen_y_norm
     return event

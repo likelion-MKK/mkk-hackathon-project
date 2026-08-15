@@ -131,6 +131,34 @@ def test_replay_fixture_runs_through_face_worker_and_api() -> None:
     assert [item["product_id"] for item in recommendation["items"]] == ["P001", "P002"]
 
 
+def test_no_product_hit_omits_coordinates_and_is_accepted_by_api() -> None:
+    client, _ = make_client()
+    with client:
+        runner = D7SessionRunner(
+            backend=HttpBackendPort(client),
+            face_worker_factory=fake_worker_factory(),
+            eye_port_factory=lambda: ReplayEyePort(coordinates=((0.99, 0.99),)),
+        )
+        session_id = runner.start()
+        _, accepted = runner.process_frame(0)
+        attention = runner.batches[-1]["events"][1]
+
+        assert accepted["status"] == "accepted"
+        assert attention["valid"] is False
+        assert attention["reason"] == "no_product_hit"
+        assert attention["candidates"] == []
+        assert "video_x_norm" not in attention
+        assert "video_y_norm" not in attention
+
+        retry = client.post(
+            f"/api/v1/sessions/{session_id}/reaction-batches",
+            json=runner.batches[-1],
+        )
+        assert retry.status_code == 202
+        assert retry.json()["status"] == "duplicate"
+        runner.cancel()
+
+
 @pytest.mark.parametrize(
     ("scenario", "reason", "face_count"),
     [
