@@ -5,6 +5,7 @@ import type {
   ProductAttentionEvent,
   ReactionBatch,
 } from "./kiosk-types.ts";
+import type { VideoLayout } from "./video-context.ts";
 
 export type VideoPointMapping =
   | {
@@ -28,13 +29,17 @@ type BuildD1ReactionBatchOptions = {
   batchSequence: number;
   sessionId: string;
   manifest: LookbookManifest;
-  gazeSample: GazeSample | null;
+  gazeSample?: GazeSample | null;
+  gazeSamples?: readonly GazeSample[];
   expressionSample: ExpressionSample | null;
+  videoLayout?: VideoLayout;
+  videoLayoutsByFrameId?: ReadonlyMap<string, VideoLayout>;
 };
 
 const AOI_PRODUCER_ID = "kiosk-aoi-mapper-v1";
-const AOI_MAPPER_REVISION = "d1-mock-aoi-v1";
+const AOI_MAPPER_REVISION = "aoi-mapper-v1";
 const MAX_ATTENTION_CANDIDATES = 32;
+const MAX_EVENTS_PER_BATCH = 256;
 const POINT_EPSILON = 1e-9;
 
 function pointIsOnSegment(
@@ -121,6 +126,74 @@ export function mapD1MockGazeToVideoPoint(gazeSample: GazeSample): VideoPointMap
   };
 }
 
+function pointIsInsideRect(
+  pointX: number,
+  pointY: number,
+  rect: VideoLayout["content_rect"],
+): boolean {
+  return (
+    pointX >= rect.x_px - POINT_EPSILON &&
+    pointX <= rect.x_px + rect.width_px + POINT_EPSILON &&
+    pointY >= rect.y_px - POINT_EPSILON &&
+    pointY <= rect.y_px + rect.height_px + POINT_EPSILON
+  );
+}
+
+/**
+ * Convert viewport-normalized gaze to video-content-normalized gaze.
+ *
+ * The layout is captured with the same frame as the gaze sample. A point in
+ * letterbox padding is valid gaze data but is not a product observation.
+ */
+export function mapGazeToVideoPoint(
+  gazeSample: GazeSample,
+  layout: VideoLayout,
+): VideoPointMapping {
+  if (!gazeSample.valid) {
+    return {
+      valid: false,
+      outside_video: false,
+      reason: gazeSample.reason,
+    };
+  }
+
+  requireNormalizedCoordinate(gazeSample.screen_x_norm, "screen_x_norm");
+  requireNormalizedCoordinate(gazeSample.screen_y_norm, "screen_y_norm");
+
+  const screenX = gazeSample.screen_x_norm * layout.viewport_width_px;
+  const screenY = gazeSample.screen_y_norm * layout.viewport_height_px;
+  const contentRect = layout.content_rect;
+
+  if (!pointIsInsideRect(screenX, screenY, contentRect)) {
+    return {
+      valid: true,
+      outside_video: true,
+    };
+  }
+
+  const videoX = (screenX - contentRect.x_px) / contentRect.width_px;
+  const videoY = (screenY - contentRect.y_px) / contentRect.height_px;
+
+  if (
+    videoX < -POINT_EPSILON ||
+    videoX > 1 + POINT_EPSILON ||
+    videoY < -POINT_EPSILON ||
+    videoY > 1 + POINT_EPSILON
+  ) {
+    return {
+      valid: true,
+      outside_video: true,
+    };
+  }
+
+  return {
+    valid: true,
+    outside_video: false,
+    video_x_norm: Math.min(1, Math.max(0, videoX)),
+    video_y_norm: Math.min(1, Math.max(0, videoY)),
+  };
+}
+
 export function createProductAttentionEvent(
   gazeSample: GazeSample,
   manifest: LookbookManifest,
@@ -203,49 +276,116 @@ export function createProductAttentionEvent(
   };
 }
 
-export function buildD1ReactionBatch({
-  batchId,
-  batchSequence,
-  sessionId,
-  manifest,
+function resolveGazeSamples({
   gazeSample,
-  expressionSample,
-}: BuildD1ReactionBatchOptions): ReactionBatch | null {
+  gazeSamples,
+}: Pick<BuildD1ReactionBatchOptions, "gazeSample" | "gazeSamples">): readonly GazeSample[] {
+  if (gazeSamples) {
+    if (gazeSample) {
+      throw new Error("Provide gazeSample or gazeSamples, not both.");
+    }
+    return gazeSamples;
+  }
+
+  return gazeSample ? [gazeSample] : [];
+}
+
+function mapSampleToVideoPoint(
+  gazeSample: GazeSample,
+  options: Pick<BuildD1ReactionBatchOptions, "videoLayout" | "videoLayoutsByFrameId">,
+): VideoPointMapping {
+  const layout = options.videoLayoutsByFrameId?.get(gazeSample.frame_id) ?? options.videoLayout;
+  return layout ? mapGazeToVideoPoint(gazeSample, layout) : mapD1MockGazeToVideoPoint(gazeSample);
+}
+
+function buildReactionEvents(options: BuildD1ReactionBatchOptions): Array<
+  ExpressionSample | ProductAttentionEvent
+> {
+  const { manifest, expressionSample } = options;
+  const samples = resolveGazeSamples(options);
   const events: Array<ExpressionSample | ProductAttentionEvent> = [];
 
   if (expressionSample) {
     events.push(expressionSample);
   }
 
-  if (gazeSample) {
-    const nextSequence =
-      Math.max(gazeSample.sequence, expressionSample?.sequence ?? -1) + 1;
+  const firstAttentionSequence = Math.max(
+    expressionSample?.sequence ?? -1,
+    ...samples.map((sample) => sample.sequence),
+  ) + 1;
+
+  samples.forEach((sample, index) => {
     events.push(
       createProductAttentionEvent(
-        gazeSample,
+        sample,
         manifest,
-        nextSequence,
-        mapD1MockGazeToVideoPoint(gazeSample),
+        firstAttentionSequence + index,
+        mapSampleToVideoPoint(sample, options),
       ),
     );
-  }
-
-  if (events.length === 0) return null;
+  });
 
   for (const event of events) {
-    if (event.session_id !== sessionId || event.video_id !== manifest.video_id) {
+    if (event.session_id !== options.sessionId || event.video_id !== manifest.video_id) {
       throw new Error("Reaction event must match the batch session_id and video_id.");
     }
   }
 
-  const [firstEvent, ...remainingEvents] = events;
+  return events;
+}
 
-  return {
-    schema_version: "1.0",
-    batch_id: batchId,
-    batch_sequence: batchSequence,
-    session_id: sessionId,
-    video_id: manifest.video_id,
-    events: [firstEvent, ...remainingEvents],
-  };
+export function buildD1ReactionBatches(options: BuildD1ReactionBatchOptions): ReactionBatch[] {
+  const events = buildReactionEvents(options);
+  if (events.length === 0) return [];
+
+  const batches: ReactionBatch[] = [];
+  for (let offset = 0; offset < events.length; offset += MAX_EVENTS_PER_BATCH) {
+    const chunk = events.slice(offset, offset + MAX_EVENTS_PER_BATCH);
+    const chunkIndex = batches.length;
+    const batchId =
+      chunkIndex === 0 ? options.batchId : `${options.batchId}-${chunkIndex + 1}`;
+
+    batches.push({
+      schema_version: "1.0",
+      batch_id: batchId,
+      batch_sequence: options.batchSequence + chunkIndex,
+      session_id: options.sessionId,
+      video_id: options.manifest.video_id,
+      events: [chunk[0], ...chunk.slice(1)],
+    });
+  }
+
+  return batches;
+}
+
+export function buildD1ReactionBatch({
+  batchId,
+  batchSequence,
+  sessionId,
+  manifest,
+  gazeSample,
+  gazeSamples,
+  expressionSample,
+  videoLayout,
+  videoLayoutsByFrameId,
+}: BuildD1ReactionBatchOptions): ReactionBatch | null {
+  const batches = buildD1ReactionBatches({
+    batchId,
+    batchSequence,
+    sessionId,
+    manifest,
+    gazeSample,
+    gazeSamples,
+    expressionSample,
+    videoLayout,
+    videoLayoutsByFrameId,
+  });
+
+  if (batches.length > 1) {
+    throw new RangeError(
+      "More than 256 reaction events require buildD1ReactionBatches to preserve all samples.",
+    );
+  }
+
+  return batches[0] ?? null;
 }

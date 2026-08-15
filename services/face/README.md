@@ -20,6 +20,69 @@ Contract 전체 검증은 저장소 루트에서 실행한다.
 python scripts/validate_contracts.py
 ```
 
+기본 실행 모드는 `fake`다. 실제 모델은 명시적으로 `MCM_FACE_MODE=selected`와
+`MCM_FACE_MODEL_PATH`를 설정한 경우에만 선택한다. `replay`는
+`MCM_FACE_REPLAY_FIXTURE`가 필요하다. 이 실행 선택은 실제 결과와 mock 추천 결과를
+섞지 않으며 Face Worker는 추천 결과를 생성하지 않는다.
+
+## D6 Selected Adapter와 Worker
+
+`SelectedFaceAdapter`는 ADR-0003의 MediaPipe Face Landmarker 설정을 사용한다.
+모델은 `mediapipe==1.0.0`, asset revision `face_landmarker/float16/1`, SHA256
+`64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff`로 검증한 뒤
+메모리에서 연다. `output_face_blendshapes=true`, `num_faces=2`이며 얼굴이 정확히
+하나일 때만 valid다.
+
+동일한 전체 `FaceFrameContext` 재호출은 TTL이 있는 bounded LRU에서 canonical
+파생 필드를 재사용해 모델을 다시 실행하지 않고 동일한 `ExpressionSample` payload를
+재구성한다. cache에는 frame, landmark, 원본 blendshape 또는 context 식별값을 넣지 않으며,
+원문 context tuple 대신 전체 context로 만든 결정적 `event_id` digest를 key로 사용한다.
+cache value에도 원문 session/frame/video ID가 없는 context-free canonical 파생 필드만 둔다.
+cache는 최초 initialize, TTL 만료와 dispose 경계에서 정리한다. MediaPipe landmark의
+`presence`/`visibility` 품질 channel이 완전하게
+제공되지 않으면 quality를 임의 추정하지 않고 `low_quality`로 fail-closed 처리한다.
+
+카메라 기능은 기본 테스트 의존성에서 분리되어 있다.
+
+```powershell
+Set-Location services/face
+uv sync --locked --extra camera
+```
+
+모델 weight는 Git에 넣지 않는다. 기존 후보 실험의 고정 URL·checksum 절차로 받은
+`face_landmarker.task`의 경로를 smoke 명령에 직접 전달한다.
+
+## 실제 카메라 smoke test
+
+다음 명령은 개발자가 실제 video 장치와 모델을 준비한 로컬 환경에서만 실행한다.
+자동 테스트와 CI에서는 실행하지 않는다. OpenCV video capture만 열며 audio 장치를
+요청하는 코드가 없다.
+
+```powershell
+Set-Location services/face
+uv run --extra camera camera-smoke-test --model-path ../../experiments/face/mediapipe-face-landmarker/models/face_landmarker.task --device 0 --width 640 --height 480 --fps 5 --frames 30
+```
+
+출력 JSON에는 장치 목록, permission 상태, 요청/실제 width·height·fps, 최신 face
+count, no-face/multi-face 비율, 평균·최대 처리 지연, timeout/error 횟수만 포함된다.
+frame·landmark·원본 blendshape·image bytes·base64는 출력·로그·파일·DB에 쓰지 않는다.
+세션 종료와 오류 경로 모두 camera release, worker executor 종료, 모델 dispose를
+실행한다.
+
+카메라 권한·장치·구도를 눈으로 확인해야 할 때는 로컬 개발 전용 preview를 명시적으로
+실행한다. 이 명령은 Face 추론이나 추천 결과를 표시하지 않으며, video frame을 화면에
+보여주는 동안의 메모리 밖에 저장하거나 전송하지 않는다. `Q` 또는 `Esc`로 종료한다.
+
+```powershell
+uv run --extra camera camera-preview --device 0 --width 640 --height 480
+```
+
+preview는 자동 테스트와 CI에서 실행하지 않는다. 운영 Kiosk의 카메라 화면·권한 UX는
+`apps/kiosk`와 D8 live gate의 별도 책임이다.
+
+운영 브라우저의 권한 UX, WSS Gateway, 실제 Kiosk-to-server 지연, 현장 품질 threshold,
+장시간·동시 세션과 worker process 강제 재시작은 D8 live gate에서 검증한다.
+
 ## Fake Adapter 사용
 
 `FakeFaceAdapter`는 실제 카메라·모델·weight·네트워크 없이 결정적인 `ExpressionSample`을 만든다. 지원 scenario는 `valid_face`, `no_face`, `multi_face`, `unknown_label`, `low_quality`, `timeout`이다.

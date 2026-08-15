@@ -5,6 +5,15 @@ description = "Face adapter boundary for the MCM AI Lookbook Kiosk"
 requires-python = "==3.13.15"
 dependencies = []
 
+[project.optional-dependencies]
+camera = [
+    "mediapipe==1.0.0",
+]
+
+[project.scripts]
+camera-smoke-test = "mcm_face.cli:camera_smoke_main"
+camera-preview = "mcm_face.cli:camera_preview_main"
+
 [dependency-groups]
 dev = [
     "jsonschema==4.26.0",

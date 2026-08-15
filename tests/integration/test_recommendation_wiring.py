@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from apps.api.app.main import create_app
 from apps.api.app.schemas import SessionCreate
 from apps.api.app.store import MemoryStore
+from services.recommendation.engine.research_gaze import ResearchGazeScoreEngine
 from services.recommendation.mock.engine import MockRecommendationEngine
 
 
@@ -49,6 +50,37 @@ def reaction_batch(session_id: str) -> dict:
     return body
 
 
+def replay_attention_batch(
+    session_id: str,
+    batch_sequence: int,
+    event_sequence: int,
+    video_time_ms: int,
+    product_id: str,
+) -> dict:
+    body = json.loads(REACTION_FIXTURE.read_text(encoding="utf-8"))
+    body["batch_id"] = f"gaze-replay-batch-{batch_sequence:04d}"
+    body["batch_sequence"] = batch_sequence
+    body["session_id"] = session_id
+    event = copy.deepcopy(body["events"][1])
+    event.update(
+        event_id=f"gaze-replay-attention-{event_sequence:04d}",
+        sequence=event_sequence,
+        frame_id=f"gaze-replay-frame-{event_sequence:04d}",
+        source_gaze_event_id=f"gaze-replay-sample-{event_sequence:04d}",
+        video_time_ms=video_time_ms,
+        candidates=[
+            {
+                "exposure_id": f"scene-01-{product_id}",
+                "product_id": product_id,
+                "priority": 0,
+            }
+        ],
+    )
+    event["session_id"] = session_id
+    body["events"] = [event]
+    return body
+
+
 def test_complete_session_returns_mock_top_two_without_manager_event() -> None:
     with TestClient(create_app(MemoryStore(REPOSITORY_ROOT))) as client:
         session_id = create_session(client)
@@ -73,6 +105,88 @@ def test_complete_session_without_valid_attention_returns_insufficient_data() ->
         recommendation = client.get(f"/api/v1/sessions/{session_id}/recommendations")
         assert recommendation.json()["status"] == "insufficient_data"
         assert recommendation.json()["reason"] == "not_enough_valid_attention"
+
+
+def test_complete_session_can_use_the_research_gaze_score_engine() -> None:
+    with TestClient(
+        create_app(MemoryStore(REPOSITORY_ROOT), ResearchGazeScoreEngine())
+    ) as client:
+        session_id = create_session(client)
+        assert client.post(
+            f"/api/v1/sessions/{session_id}/reaction-batches",
+            json=reaction_batch(session_id),
+        ).status_code == 202
+
+        assert client.post(f"/api/v1/sessions/{session_id}/complete").status_code == 202
+        recommendation = client.get(f"/api/v1/sessions/{session_id}/recommendations")
+
+    assert recommendation.status_code == 200
+    assert recommendation.json()["engine_mode"] == "research_version"
+    assert recommendation.json()["algorithm_version"] == (
+        "gaze-score-v0-b100-g300-w0p65-c0p25-r0p1"
+    )
+    assert recommendation.json()["items"] == [
+        {"rank": 1, "product_id": "P001"},
+        {"rank": 2, "product_id": "P002"},
+    ]
+
+
+def test_research_engine_uses_dwell_and_revisit_across_replay_batches() -> None:
+    with TestClient(
+        create_app(MemoryStore(REPOSITORY_ROOT), ResearchGazeScoreEngine())
+    ) as client:
+        session_id = create_session(client)
+        replay = [
+            (1, 1, 100, "P001"),
+            (2, 2, 200, "P001"),
+            (3, 3, 500, "P001"),
+            (4, 4, 100, "P002"),
+            (5, 5, 200, "P002"),
+        ]
+        for batch_sequence, event_sequence, video_time_ms, product_id in replay:
+            response = client.post(
+                f"/api/v1/sessions/{session_id}/reaction-batches",
+                json=replay_attention_batch(
+                    session_id,
+                    batch_sequence,
+                    event_sequence,
+                    video_time_ms,
+                    product_id,
+                ),
+            )
+            assert response.status_code == 202
+
+        assert client.post(f"/api/v1/sessions/{session_id}/complete").status_code == 202
+        recommendation = client.get(f"/api/v1/sessions/{session_id}/recommendations")
+
+    assert recommendation.json()["items"] == [
+        {"rank": 1, "product_id": "P001"},
+        {"rank": 2, "product_id": "P002"},
+    ]
+    assert recommendation.json()["engine_mode"] == "research_version"
+
+
+def test_recommendation_engine_feature_flag_selects_replay_safe_gaze_engine(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RECOMMENDATION_ENGINE", "research_version")
+
+    app = create_app(MemoryStore(REPOSITORY_ROOT))
+
+    assert app.state.recommendation_engine.mode == "research_version"
+    assert (
+        app.state.recommendation_engine.algorithm_version
+        == "gaze-score-v0-b100-g300-w0p65-c0p25-r0p1"
+    )
+
+
+def test_unknown_recommendation_engine_feature_flag_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RECOMMENDATION_ENGINE", "unknown")
+
+    with pytest.raises(ValueError, match="RECOMMENDATION_ENGINE"):
+        create_app(MemoryStore(REPOSITORY_ROOT))
 
 
 def test_completed_session_discards_active_event_deduplication_and_features() -> None:
