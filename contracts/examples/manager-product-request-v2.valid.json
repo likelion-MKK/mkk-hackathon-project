@@ -1,0 +1,7 @@
+{
+  "schema_version": "2.0",
+  "request_id": "manager-request-v2-001",
+  "recommendation_id": "recommendation-demo-v2-001",
+  "selected_product_id": "mcm-toni-medium-disco-visetos",
+  "intent": "view_recommended_product"
+}

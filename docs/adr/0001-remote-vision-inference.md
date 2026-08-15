@@ -5,6 +5,7 @@
 - 결정 소유자: 박형진
 - 공동 리뷰: 양유상(Eye), 정은미(Face), 조윤혜(Kiosk)
 - 관련 결정: `D1-05 Eye·Face 모델 실행 위치`
+- 후속 추천 결정: [`ADR-0006 중앙 판단 추천 AI와 파생 evidence 수명`](0006-central-recommendation-ai.md)
 - 대체 조건: 이 ADR이 Accepted가 되면 기존 Kiosk-local 1차 기본안을 대체한다.
 
 ## 1. 문제
@@ -30,8 +31,8 @@ Eye Tracking과 표정 분석 모델을 Kiosk 기기에서 함께 실행하면 �
 | Vision Inference Gateway | 세션 인증, frame envelope 검증, 메모리 decode, Eye·Face fan-out, timeout·drop·결과 결합 |
 | Eye Worker | 보정 상태와 선택 Eye Adapter를 이용해 `GazeSample` 생성 |
 | Face Worker | 선택 Face Adapter를 이용해 `ExpressionSample` 생성 |
-| FastAPI Backend | 세션, 동의 version, 파생 `ReactionBatch`, 추천, 상품·QR와 Manager event 관리 |
-| PostgreSQL | 파생 반응, 추천, 전환과 운영 metadata만 저장. 원본 프레임·embedding은 저장하지 않음 |
+| FastAPI Backend | 세션, 동의 version, 파생 신호의 세션 메모리 집계, 추천, 상품·QR와 명시적 Manager event 관리 |
+| PostgreSQL | 상품 catalog, 최소 최종 추천과 운영 metadata만 저장. 원본 프레임·embedding·frame 단위 파생 timeline은 저장하지 않음 |
 
 Vision Gateway는 일반 FastAPI Backend와 논리적으로 분리한다. 같은 서버에 배포할 수는 있지만 원본 프레임이 REST middleware, DB 처리, request body log 또는 일반 오류 추적 경로를 지나지 않게 별도 process/container와 route를 사용한다. 외부에는 `443`만 노출하고 Worker와 PostgreSQL 포트는 공개하지 않는다.
 
@@ -111,6 +112,8 @@ WebRTC는 네트워크 적응과 media streaming에는 강하지만 frame별 Kio
 
 ## 4. Contract 영향
 
+이 ADR은 Vision 생산자·transport 경계를 다룬다. 파생 sample을 중앙 추천 evidence로 결합하는 방식, 추천 weight·출력과 보유 수명은 [`ADR-0006`](0006-central-recommendation-ai.md)이 우선한다. 특히 frame 단위 파생값은 추천 세션 메모리에서만 사용한 뒤 폐기하며 PostgreSQL에 영속화하지 않는다.
+
 기존 JSON Contract v1의 `GazeSample`, `ExpressionSample`, `ProductAttentionEvent`, `ReactionBatch`와 `RecommendationResult` 의미는 바꾸지 않는다. Contract v1과 일반 REST API에는 계속 원본 frame, image bytes, base64, embedding과 원본 경로를 넣지 않는다.
 
 원격 추론을 승인하면 구현 전에 별도 공유 Contract PR로 다음을 정의한다.
@@ -186,7 +189,7 @@ Contract 변경 순서를 지키며 다음 PR을 직렬로 진행한다.
 - frame 해상도, encoding, sampling FPS와 deadline
 - Gateway와 두 Worker 사이의 process/container/IPC 방식
 - 동시 접속 수와 autoscaling 여부
-- 파생 데이터 보유 기간과 정확한 동의 문구
+- 최소 최종 추천 metadata의 보유 기간과 정확한 동의 문구
 
 ## 10. 참고
 

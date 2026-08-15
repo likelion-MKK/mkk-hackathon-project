@@ -1,0 +1,272 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcm-lookbook.example/contracts/v2/recommendation-decision-v2.schema.json",
+  "title": "RecommendationDecisionV2",
+  "description": "self-hosted 중앙 추천 AI의 단일 상품 선택과 근거가 검증되는 결과입니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "recommendation_id",
+    "decision_request_id",
+    "status",
+    "selected_product_id",
+    "reason",
+    "reason_codes",
+    "evidence",
+    "style",
+    "exploration_tendency_code",
+    "data_quality",
+    "version"
+  ],
+  "properties": {
+    "schema_version": { "const": "2.0" },
+    "recommendation_id": { "$ref": "#/$defs/id" },
+    "decision_request_id": { "$ref": "#/$defs/id" },
+    "status": { "enum": ["completed", "insufficient_data", "failed"] },
+    "selected_product_id": {
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/id" }]
+    },
+    "reason": { "$ref": "#/$defs/reason" },
+    "reason_codes": {
+      "type": "array",
+      "maxItems": 6,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/reasonCode" }
+    },
+    "evidence": {
+      "type": "array",
+      "maxItems": 12,
+      "items": { "$ref": "#/$defs/evidenceItem" }
+    },
+    "style": {
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/style" }]
+    },
+    "exploration_tendency_code": {
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/explorationTendencyCode" }],
+      "description": "이 세션에서 관찰된 탐색 범위만 나타내며 성격·감정·심리 유형이 아닙니다."
+    },
+    "data_quality": {
+      "$ref": "recommendation-evidence-v2.schema.json#/$defs/dataQuality"
+    },
+    "version": { "$ref": "#/$defs/versionRecord" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "completed" } }, "required": ["status"] },
+      "then": {
+        "properties": {
+          "selected_product_id": { "$ref": "#/$defs/id" },
+          "reason": {
+            "type": "object",
+            "properties": { "code": { "const": "grounded_product_match" } },
+            "required": ["code", "explanation"]
+          },
+          "reason_codes": { "minItems": 1 },
+          "evidence": { "minItems": 1 },
+          "style": { "$ref": "#/$defs/style" },
+          "exploration_tendency_code": { "$ref": "#/$defs/explorationTendencyCode" }
+        }
+      },
+      "else": {
+        "properties": {
+          "selected_product_id": { "type": "null" },
+          "reason_codes": { "maxItems": 0 },
+          "evidence": { "maxItems": 0 },
+          "style": { "type": "null" },
+          "exploration_tendency_code": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "insufficient_data" } }, "required": ["status"] },
+      "then": {
+        "properties": {
+          "reason": {
+            "type": "object",
+            "properties": {
+              "code": { "enum": ["insufficient_valid_signal", "no_eligible_product"] }
+            },
+            "required": ["code", "explanation"]
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "failed" } }, "required": ["status"] },
+      "then": {
+        "properties": {
+          "reason": {
+            "type": "object",
+            "properties": {
+              "code": { "enum": ["model_unavailable", "invalid_model_output", "catalog_mismatch"] }
+            },
+            "required": ["code", "explanation"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "version": {
+            "properties": { "input_variant": { "const": "B" } },
+            "required": ["input_variant"]
+          }
+        },
+        "required": ["version"]
+      },
+      "then": {
+        "properties": {
+          "evidence": {
+            "items": {
+              "properties": {
+                "evidence_refs": {
+                  "items": {
+                    "properties": { "kind": { "const": "frame" } },
+                    "required": ["kind"]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "evidence": {
+            "items": {
+              "properties": {
+                "evidence_refs": {
+                  "items": {
+                    "properties": { "kind": { "const": "window" } },
+                    "required": ["kind"]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "versionValue": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "reason": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "explanation"],
+      "properties": {
+        "code": {
+          "enum": [
+            "grounded_product_match",
+            "insufficient_valid_signal",
+            "no_eligible_product",
+            "model_unavailable",
+            "invalid_model_output",
+            "catalog_mismatch"
+          ]
+        },
+        "explanation": { "type": "string", "minLength": 1, "maxLength": 400 }
+      }
+    },
+    "evidenceItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "product_id", "evidence_refs", "statement"],
+      "properties": {
+        "code": {
+          "enum": [
+            "observed_attention",
+            "return_candidate",
+            "gaze_movement",
+            "face_action_change",
+            "product_tag_match",
+            "data_quality"
+          ]
+        },
+        "product_id": { "$ref": "#/$defs/id" },
+        "evidence_refs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/evidenceRef" },
+          "description": "A/C는 공개된 evidence window, B는 공개된 timeline frame만 typed reference로 참조합니다."
+        },
+        "statement": { "type": "string", "minLength": 1, "maxLength": 240 }
+      }
+    },
+    "evidenceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "ref_id"],
+      "properties": {
+        "kind": { "enum": ["window", "frame"] },
+        "ref_id": { "$ref": "#/$defs/id" }
+      }
+    },
+    "reasonCode": {
+      "enum": [
+        "observed_attention_lead",
+        "return_candidate_support",
+        "movement_pattern_support",
+        "observable_action_support",
+        "catalog_tag_alignment",
+        "sufficient_data_quality"
+      ]
+    },
+    "explorationTendencyCode": {
+      "enum": [
+        "focused_single_product",
+        "comparative_exploration",
+        "broad_exploration"
+      ]
+    },
+    "style": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["matched_tags", "summary"],
+      "properties": {
+        "matched_tags": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "product-recommendation-profile-v2.schema.json#/$defs/controlledTag"
+          }
+        },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 240 }
+      }
+    },
+    "versionRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model_id",
+        "model_revision",
+        "prompt_version",
+        "feature_version",
+        "catalog_version",
+        "input_variant",
+        "deployment_mode"
+      ],
+      "properties": {
+        "model_id": { "$ref": "#/$defs/versionValue" },
+        "model_revision": { "$ref": "#/$defs/versionValue" },
+        "prompt_version": { "$ref": "#/$defs/versionValue" },
+        "feature_version": { "$ref": "#/$defs/versionValue" },
+        "catalog_version": { "$ref": "#/$defs/versionValue" },
+        "input_variant": { "enum": ["A", "B", "C"] },
+        "deployment_mode": { "const": "self_hosted" }
+      }
+    }
+  }
+}

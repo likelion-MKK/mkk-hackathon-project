@@ -1,0 +1,55 @@
+{
+  "schema_version": "2.0",
+  "batch_id": "observation-batch-v2-0001",
+  "batch_sequence": 0,
+  "session_id": "session-demo-v2-001",
+  "video_id": "lookbook-demo-v2",
+  "observations": [
+    {
+      "schema_version": "2.0",
+      "frame_id": "frame-v2-00421",
+      "sequence": 421,
+      "captured_at_mono_ms": 143220.4,
+      "session_offset_ms": 0,
+      "video_time_ms": 4200,
+      "playback_epoch": 0,
+      "gaze": {
+        "screen_x_norm": 0.3,
+        "screen_y_norm": 0.46,
+        "confidence": 1.0,
+        "producer_id": "eyetrax-eye-adapter",
+        "model_revision": "eyetrax-demo-raw-v1",
+        "calibration_id": "calibration-demo-001"
+      },
+      "gaze_reason": null,
+      "attention": {
+        "outside_video": false,
+        "video_x_norm": 0.3,
+        "video_y_norm": 0.43,
+        "confidence": 1.0,
+        "producer_id": "kiosk-aoi-mapper-v1",
+        "model_revision": "aoi-mapper-v1",
+        "manifest_version": "demo-lookbook-v1",
+        "candidates": [
+          { "exposure_id": "demo-exposure-001", "product_id": "mcm-toni-medium-disco-visetos", "priority": 0 }
+        ]
+      },
+      "attention_reason": null,
+      "expression": null,
+      "expression_reason": "low_quality",
+      "derived": {
+        "gaze": {
+          "movement": null,
+          "movement_reason": "no_previous_observation",
+          "continuous_observation_ms": 0,
+          "return_candidate": null,
+          "return_candidate_reason": "no_previous_observation"
+        },
+        "gaze_reason": null,
+        "expression": null,
+        "expression_reason": "expression_unavailable"
+      },
+      "derived_reason": null
+    }
+  ]
+}

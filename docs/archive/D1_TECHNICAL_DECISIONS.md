@@ -1,5 +1,7 @@
 # D1 기술·운영 의사결정서
 
+> **Superseded (2026-08-16):** 이 문서는 당시 결정의 역사적 스냅샷이다. 현재 구현 기준은 [`OVERALL_DESIGN.md`](../OVERALL_DESIGN.md), [`IMPLEMENTATION_PLAN.md`](../IMPLEMENTATION_PLAN.md), [`ADR-0006`](../adr/0006-central-recommendation-ai.md)이다. 새 작업의 권위 문서로 사용하지 않는다.
+
 - 문서 상태: 팀장 기본안 v0.2
 - 작성일: 2026-08-11
 - 최근 수정: 2026-08-14 MVP 파생 반응 C안 반영
@@ -239,7 +241,7 @@ D2 전에 Kiosk·카메라와 network 측정 조건을 기록하고, D5 모델 �
 
 ### 변경 배경과 상태
 
-Eye Tracking과 표정 분석을 같은 Kiosk에서 안정적으로 실행하기 어렵다는 판단에 따라 **별도 Vision Inference 서버**로 옮기는 방향을 1차안으로 둔다. 이 변경은 원본 frame의 네트워크 전송을 새로 허용해야 하므로 바로 `확정`으로 처리하지 않는다. 상세 경계와 승인 조건은 [`ADR-0001 원격 Eye·Face 추론 서버 전환`](adr/0001-remote-vision-inference.md)을 기준으로 하며, ADR이 Accepted되기 전에는 실제 고객 frame을 원격 전송하지 않는다.
+Eye Tracking과 표정 분석을 같은 Kiosk에서 안정적으로 실행하기 어렵다는 판단에 따라 **별도 Vision Inference 서버**로 옮기는 방향을 1차안으로 둔다. 이 변경은 원본 frame의 네트워크 전송을 새로 허용해야 하므로 바로 `확정`으로 처리하지 않는다. 상세 경계와 승인 조건은 [`ADR-0001 원격 Eye·Face 추론 서버 전환`](../adr/0001-remote-vision-inference.md)을 기준으로 하며, ADR이 Accepted되기 전에는 실제 고객 frame을 원격 전송하지 않는다.
 
 ### 지금 고정하는 설계 경계
 
@@ -488,6 +490,6 @@ manifest_version:
 - [Microsoft Edge Kiosk Mode](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-configure-kiosk-mode): fullscreen Kiosk 운영 방식
 - [MediaDevices.getUserMedia](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia): 카메라 권한과 secure context 요구사항
 - [MDN WebSocket API](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API): binary 양방향 연결과 표준 WebSocket의 backpressure 제약
-- [ADR-0001 원격 Eye·Face 추론 서버 전환](adr/0001-remote-vision-inference.md): 실행 위치 변경의 transport·개인정보·장애·배포 Gate
+- [ADR-0001 원격 Eye·Face 추론 서버 전환](../adr/0001-remote-vision-inference.md): 실행 위치 변경의 transport·개인정보·장애·배포 Gate
 - [Pursuit Calibration](https://www.perceptualui.org/publications/pfeuffer13_uist.pdf): 이동 표적 기반 시선 보정 연구
 - [Smooth-i](https://eprints.lancs.ac.uk/id/eprint/126771/): smooth pursuit를 이용한 시선 보정 연구

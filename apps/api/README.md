@@ -2,54 +2,78 @@
 
 ## 소유자
 
-박형진(PM·BE). REST·polling·DB migration과 공용 계약 변경을 직렬로 관리한다.
+박형진(PM·BE). REST·polling·PostgreSQL migration과 공용 계약 변경을 직렬로 관리한다.
 
-## 입력
+## 현재 기준
 
-- 세션 생성·완료 요청, 동의 version
-- `event_id`와 `sequence`를 포함한 파생 신호 `ReactionBatch`
-- 추천 후 매니저가 기록한 `ConversionOutcome`
+운영 방향은 Contract v2의 self-hosted 중앙 추천 AI와 단일 상품 Top 1이다. 기존
+`/api/v1`의 Mock/`gaze-score-v0` Top 2는 회귀 호환과 replay 연구용 baseline으로만
+남아 있으며 운영 추천 품질을 뜻하지 않는다.
 
-## 출력
+v2 흐름은 다음과 같다.
 
-- 세션·상품·룩북 manifest·추천 상태 API 응답
-- 추천 인터페이스가 만든 `RecommendationResult`
-- 고객의 S04 제품 요청 `ManagerEvent`와 polling 이벤트 조회
+1. v1 session 생성 시 `lookbook_id=mcm-central-ai-replay-v2`를 사용하고
+   `/api/v2/lookbooks/{lookbook_id}/manifest`를 조회한다.
+2. Kiosk가 같은 `frame_id`의 파생 시선·AOI·관찰 가능한 얼굴 동작과 연속성 feature를
+   `POST /api/v2/sessions/{session_id}/observations`에 bounded batch로 보낸다.
+3. `POST /api/v2/sessions/{session_id}/complete`는 동일 요청에 같은 job ID를 반환한다.
+   Kiosk는 `GET /api/v2/sessions/{session_id}/recommendation`을 polling한다. 처리 중에는
+   202 `pending`, 종료 후에는 200 `completed|insufficient_data|failed`다.
+4. 중앙 모델은 canonical catalog의 정확히 10개 후보를 모두 받는다. 결과는 정확히 한
+   상품 ID, allowlist reason/style code와 실제 evidence window ID만 통과한다.
+5. 고객이 명시적으로 요청했을 때만
+   `POST /api/v2/sessions/{session_id}/manager-product-requests`가 발생한다. Manager는
+   `/api/v2/manager/events`와 `/api/v2/products/{product_id}`를 사용한다.
 
-## 금지사항
+원본 frame·영상·image bytes·base64·얼굴 embedding·원본 경로는 모든 REST 모델,
+DB, cache, queue와 로그에서 금지한다. v2 frame timeline은 프로세스 메모리에만 최대
+512개를 두며 complete/cancel/fail/TTL 시 즉시 폐기한다. PostgreSQL에는 정확히 10개
+상품 catalog와 job metadata, 검증된 최종 decision만 저장한다.
 
-- 원본 이미지·영상·base64·얼굴 embedding 또는 그 파일 경로를 받거나 저장하지 않는다.
-- 원격 Eye·Face frame ingress는 별도 Vision Gateway 책임이다. 일반 REST middleware·DB·request log로 우회 수신하지 않는다.
-- 매 프레임마다 HTTP 요청을 요구하지 않는다. 소량 batch와 종료·장면 전환 flush를 지원한다.
-- 특정 Eye/Face 모델의 입력 형식이나 라이브러리를 API 계약에 노출하지 않는다.
-- 재전송된 `event_id`를 중복 저장하지 않는다.
+## PostgreSQL
 
-## 현재 vertical slice
+`migrations/0001_central_recommendation_v2.sql`은 `recommendation_catalog_v2`와
+`recommendation_job_v2`만 만든다. observation/timeline 테이블은 의도적으로 없다.
 
-현재 구현은 Contract v1을 기준으로 세션 생성, 예제 manifest·상품 조회,
-파생 `ReactionBatch` 수신과 멱등 처리, 결정적인 Mock 추천, Manager 이벤트를
-연결하는 개발용 FastAPI scaffold다. 저장소는 PostgreSQL/Alembic으로 교체할 수
-있도록 API 경계 뒤에 있으며, 이 단계에서는 원본 미디어를 받지 않는 메모리
-store를 사용한다. MVP C안에서는 개별 event payload를 세션 목록이나 DB에 쌓지
-않고 활성 세션의 상품별 feature로 즉시 집계하며, 추천 완료 시 집계·중복 제거
-상태를 폐기한다. Mock 결과는 실제 추천 품질을 의미하지 않는다.
+```powershell
+Set-Location apps/api
+psql $env:DATABASE_URL -f migrations/0001_central_recommendation_v2.sql
+```
 
-영상 없이 gaze replay와 추천 집계를 검증할 때는 `RECOMMENDATION_ENGINE=research_version`을
-설정한다. 이 모드는 `ProductAttentionEvent`의 상품별 관찰시간, 시간 가중 신뢰도와
-재응시 횟수를 사용해 `gaze-score-v0` Top 2를 계산한다. 기본값은 병렬 UI 개발을 위한
-`mock`이며, 결과에는 `engine_mode`와 `algorithm_version`이 구분되어 표시된다.
+`DATABASE_URL`이 설정되면 시작 시
+`data/products/mcm-demo-recommendation-profile-v2.json`을 strict 검증한 뒤 정확히 10개를
+`ON CONFLICT` upsert하고 readiness count를 확인한다. 설정하지 않은 로컬 개발에서는 같은
+canonical JSON을 읽는 memory catalog adapter를 쓰며, session timeline은 어느 모드에서도
+메모리 전용이다. 실제 PostgreSQL 연결 통합 검증은 별도 PostgreSQL 환경에서 수행해야 한다.
 
-## 실행
+## 환경 변수
+
+- `DATABASE_URL`: PostgreSQL 연결 문자열. 설정 시 migration이 먼저 적용되어 있어야 한다.
+- `CENTRAL_AI_ENDPOINT`: self-hosted JSON inference endpoint. 미설정이면 mock 성공이 아니라
+  `model_unavailable`로 종료한다.
+- `CENTRAL_AI_BEARER_TOKEN`: 서비스 간 인증 token. production endpoint에는 필수다.
+- `CENTRAL_AI_MODEL_ID`, `CENTRAL_AI_MODEL_REVISION`, `CENTRAL_AI_PROMPT_VERSION`: 결과 version 기록.
+- `CENTRAL_AI_INPUT_VARIANT`: 승인된 evidence 입력 `A|B|C`. endpoint 설정 시 명시해야 한다.
+- `CENTRAL_AI_BENCHMARK_APPROVAL`: non-loopback 운영 endpoint에서 선택한 variant의 benchmark 승인 ID.
+- `CENTRAL_AI_TIMEOUT_SECONDS`: inference timeout, 기본 10초.
+- `KIOSK_CORS_ORIGINS`: 쉼표로 구분한 명시적 origin. wildcard는 거부한다.
+- `V2_COLLECTING_TTL_SECONDS`, `V2_PENDING_TTL_SECONDS`, `V2_DECISION_TTL_SECONDS`:
+  메모리 수명, 기본 300/60/900초.
+- `RECOMMENDATION_ENGINE`: v1 전용 `mock|research_version` compatibility 설정.
+
+endpoint를 설정하면 model ID/revision, `central-recommender-ko-v1` prompt version과 input
+variant를 모두 명시해야 한다. production 중앙 endpoint는 HTTPS와 bearer service auth가 모두 필요하다. 인증 없는 HTTP는
+명시적 loopback(`127.0.0.1`, `localhost`, `::1`) 개발 endpoint만 허용한다. API 코드는 중앙
+AI request/response body를 logging하지 않는다. reverse proxy, APM과 access-log 설정에서도
+request body capture를 꺼야 한다.
+
+## 실행과 검증
 
 ```powershell
 Set-Location apps/api
 uv sync --locked
 uv run uvicorn app.main:app --reload
-```
-
-테스트는 저장소 루트에서 다음처럼 실행한다.
-
-```powershell
-Set-Location apps/api
 uv run --locked pytest
 ```
+
+계약을 함께 바꿨다면 저장소 루트에서 `python scripts/validate_contracts.py`도 실행한다.

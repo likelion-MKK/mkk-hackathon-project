@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "node --test test/*.test.mjs",
+    "test": "tsc -p tsconfig.test.json --noEmit && node --test test/*.test.mjs src/api.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {

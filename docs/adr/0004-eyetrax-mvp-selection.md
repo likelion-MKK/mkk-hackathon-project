@@ -5,6 +5,7 @@
 - 결정 소유자: 양유상
 - 관련 결정: `D1-01 시선 보정과 AOI`, `D1-03 Python·Node와 설치 방식`
 - 관련 ADR: [`ADR-0001 원격 Eye·Face 추론 서버 전환`](0001-remote-vision-inference.md)
+- 후속 추천 결정: [`ADR-0006 중앙 판단 추천 AI와 파생 evidence 수명`](0006-central-recommendation-ai.md)
 - 근거: [EyeTrax LG 노트북 dense5 baseline 판정](../../experiments/eye/eyetrax/results/2026-08-15-lg-laptop-live-report-dense5.md)
 
 ## 1. 결정 범위
@@ -205,7 +206,8 @@ alpha를 보정점 교차 검증으로 선택한 뒤 같은 Gate를 다시 적�
   않는다.
 - ADR-0001은 계속 별도 결정이다. 이 ADR은 실제 고객 frame의 원격 전송이나 Vision 서버
   배포를 승인하지 않는다.
-- AOI hit는 모델 선택 근거일 뿐 dwell·재시선·Top 2 계산을 Eye Adapter에 추가하지 않는다.
+- AOI hit는 모델 선택 근거일 뿐 dwell·재시선·최종 상품 순위 계산을 Eye Adapter에 추가하지
+  않는다. 추천 feature·Top 1 판단과 파생 evidence 수명은 [`ADR-0006`](0006-central-recommendation-ai.md)이 관할한다.
 - 실시간 안정화는 공개 `GazeSample` 형식을 바꾸지 않는다. raw와 stabilized revision을
   분리해 같은 capture context에서도 event ID가 충돌하지 않게 한다.
 - MediaPipe 공식 개인정보 안내는 입력 자체는 기기에서 처리하지만 성능·사용 지표 전송

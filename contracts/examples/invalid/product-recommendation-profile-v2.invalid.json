@@ -1,0 +1,21 @@
+{
+  "schema_version": "2.0",
+  "catalog_version": "invalid-demo-profile",
+  "products": [
+    {
+      "product_id": "MCM-DEMO-BAG-001",
+      "display_name": "잘못된 데모 상품",
+      "category": "bag",
+      "controlled_tags": ["compact", "structured", "daily"],
+      "recommendation_summary": "placeholder를 승인 자산이라고 잘못 표시한 예입니다.",
+      "style": {
+        "silhouette": "boxy",
+        "visual_tone": "classic",
+        "use_cases": ["daily"]
+      },
+      "approved_asset": true,
+      "source_status": "demo_placeholder",
+      "source_note": "invalid example"
+    }
+  ]
+}
