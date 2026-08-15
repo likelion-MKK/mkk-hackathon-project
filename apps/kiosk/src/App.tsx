@@ -34,6 +34,7 @@ import type {
   GazeSample,
   KioskScreen,
   LookbookManifest,
+  Product,
   ProductCategory,
   RecommendationResult,
   SessionCreated,
@@ -54,6 +55,8 @@ const apiClient = new MockApiClient({ sessionStartDelayMs: 450 });
 const visionClient = new FakeRemoteVisionClient();
 const frameSource = new FrameSource();
 const temporaryLookbookVideoUrl = import.meta.env.VITE_LOOKBOOK_VIDEO_URL?.trim() ?? "";
+const enableAoiDebugOverlay =
+  import.meta.env.DEV || import.meta.env.VITE_KIOSK_DEBUG_AOI === "true";
 const MAX_CAPTURED_FRAME_LAYOUTS = 2_048;
 
 function rememberCapturedFrameLayout(
@@ -178,6 +181,19 @@ function getLookbookPoster(category: ProductCategory | null): string {
   if (category === "의류") return apparelImage;
   if (category === "액세서리") return accessoryImage;
   return screensaverImageOne;
+}
+
+const mockProductImages: Record<string, string> = {
+  BAG001: bagImage,
+  BAG002: bagImage,
+  RTW001: apparelImage,
+  RTW002: apparelImage,
+  ACC001: accessoryImage,
+  ACC002: accessoryImage,
+};
+
+function getMockProductImage(product: Product): string {
+  return mockProductImages[product.product_id] ?? product.image_url;
 }
 
 function ArrowIcon() {
@@ -707,22 +723,142 @@ function TimedPlaceholder({
   );
 }
 
-function ReportPlaceholder({
+function createMockQrMatrix(seed: string): boolean[][] {
+  const size = 21;
+  const matrix = Array.from({ length: size }, () => Array<boolean>(size).fill(false));
+  const reserved = Array.from({ length: size }, () => Array<boolean>(size).fill(false));
+
+  const placeFinder = (startX: number, startY: number) => {
+    for (let y = -1; y <= 7; y += 1) {
+      for (let x = -1; x <= 7; x += 1) {
+        const targetX = startX + x;
+        const targetY = startY + y;
+        if (targetX < 0 || targetY < 0 || targetX >= size || targetY >= size) continue;
+
+        reserved[targetY][targetX] = true;
+        matrix[targetY][targetX] =
+          x >= 0 && x <= 6 && y >= 0 && y <= 6 &&
+          (x === 0 || x === 6 || y === 0 || y === 6 ||
+            (x >= 2 && x <= 4 && y >= 2 && y <= 4));
+      }
+    }
+  };
+
+  placeFinder(0, 0);
+  placeFinder(size - 7, 0);
+  placeFinder(0, size - 7);
+
+  let hash = Array.from(seed).reduce(
+    (value, character) => (value * 31 + character.charCodeAt(0)) >>> 0,
+    2166136261,
+  );
+
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      if (reserved[y][x]) continue;
+      hash = (hash * 1664525 + 1013904223) >>> 0;
+      matrix[y][x] = (hash & 1) === 1;
+    }
+  }
+
+  return matrix;
+}
+
+function MockQrPreview({ product }: { product: Product }) {
+  const matrix = createMockQrMatrix(product.product_id);
+
+  return (
+    <div className="result-qr" aria-label={`${product.display_name} Mock QR preview`}>
+      <div className="result-qr__matrix" aria-hidden="true">
+        {matrix.flatMap((row, rowIndex) =>
+          row.map((isFilled, columnIndex) => (
+            <span
+              className={isFilled ? "is-filled" : undefined}
+              key={`${rowIndex}-${columnIndex}`}
+            />
+          )),
+        )}
+      </div>
+      <span className="result-qr__label">MOCK QR / PRODUCT PAGE</span>
+    </div>
+  );
+}
+
+function ReportResult({
   recommendation,
+  products,
+  category,
   onHome,
 }: {
   recommendation: RecommendationResult;
+  products: Product[];
+  category: ProductCategory | null;
   onHome: () => void;
 }) {
-  const productIds = recommendation.items.map((item) => item.product_id).join(" · ");
+  const productById = new Map(products.map((product) => [product.product_id, product]));
 
   return (
-    <main className="store-screen placeholder-screen">
-      <Wordmark />
-      <p>Mock 추천 결과: {productIds || "추천 결과 없음"}</p>
-      <button className="back-link" type="button" onClick={onHome}>
-        ← 처음으로 돌아가기
-      </button>
+    <main className="store-screen result-screen screen-enter" aria-labelledby="result-title">
+      <header className="result-header">
+        <button className="wordmark-button" type="button" onClick={onHome}>
+          <Wordmark light />
+          <span className="sr-only">처음 화면으로 이동</span>
+        </button>
+        <span className="result-header__meta">MCM AI LOOKBOOK / RESULT</span>
+        <span className="result-header__meta">{category ?? "COLLECTION"}</span>
+      </header>
+
+      <section className="result-intro">
+        <div>
+          <p className="result-kicker">YOUR EDIT</p>
+          <h1 id="result-title">
+            시선이 머문
+            <br />
+            <em>두 가지</em>
+          </h1>
+        </div>
+        <div className="result-intro__aside">
+          <p>룩북을 감상하는 동안 오래 머문 장면을 바탕으로 고른 MCM 셀렉션입니다.</p>
+          <span className="result-mode">
+            {recommendation.engine_mode === "mock" ? "MOCK RESULT" : "AI RESULT"}
+          </span>
+        </div>
+      </section>
+
+      <section className="result-products" aria-label="추천 상품">
+        {recommendation.items.map((item) => {
+          const product = productById.get(item.product_id);
+          if (!product) return null;
+
+          return (
+            <article className="result-card" key={product.product_id}>
+              <div className="result-card__visual">
+                <img src={getMockProductImage(product)} alt={`${product.display_name} 상품 이미지`} />
+                <span className="result-card__rank">0{item.rank}</span>
+              </div>
+              <div className="result-card__details">
+                <div>
+                  <span className="result-card__category">{product.category}</span>
+                  <h2>{product.display_name}</h2>
+                  <p>당신의 룩북 여정에서 가장 오래 시선이 머문 아이템</p>
+                </div>
+                <MockQrPreview product={product} />
+              </div>
+            </article>
+          );
+        })}
+      </section>
+
+      <footer className="result-footer">
+        <div>
+          <span className="result-footer__line" aria-hidden="true" />
+          <p>매장에서 더 자세히 보고 싶은 상품은 직원에게 말씀해주세요.</p>
+        </div>
+        <button className="result-restart" type="button" onClick={onHome}>
+          처음으로
+          <ArrowIcon />
+        </button>
+      </footer>
     </main>
   );
 }
@@ -745,10 +881,13 @@ function App() {
   const [session, setSession] = useState<SessionCreated | null>(null);
   const [manifest, setManifest] = useState<LookbookManifest | null>(null);
   const [recommendation, setRecommendation] = useState<RecommendationResult | null>(null);
+  const [recommendationProducts, setRecommendationProducts] = useState<Product[]>([]);
   const [flowError, setFlowError] = useState<string | null>(null);
   const [consentIssue, setConsentIssue] = useState<ConsentIssue | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [cameraState, setCameraState] = useState<CameraDisplayState>("idle");
+  const [latestGazeSample, setLatestGazeSample] = useState<GazeSample | null>(null);
+  const [latestGazeLayout, setLatestGazeLayout] = useState<VideoLayout | null>(null);
   const [flowController] = useState(() => new AsyncFlowController());
   const gazeSamples = useRef<GazeSample[]>([]);
   const videoLayoutsByFrameId = useRef<Map<string, VideoLayout>>(new Map());
@@ -768,6 +907,8 @@ function App() {
     const layoutsByFrameId = videoLayoutsByFrameId.current;
     const removeGazeListener = visionClient.onGazeSample((sample) => {
       gazeSamples.current.push(sample);
+      setLatestGazeSample(sample);
+      setLatestGazeLayout(layoutsByFrameId.get(sample.frame_id) ?? null);
     });
     const removeExpressionListener = visionClient.onExpressionSample((sample) => {
       latestExpressionSample.current = sample;
@@ -802,10 +943,13 @@ function App() {
     setSession(null);
     setManifest(null);
     setRecommendation(null);
+    setRecommendationProducts([]);
     setFlowError(null);
     setConsentIssue(null);
     setIsStarting(false);
     setCameraState("idle");
+    setLatestGazeSample(null);
+    setLatestGazeLayout(null);
     send("RESTART");
 
     try {
@@ -828,10 +972,13 @@ function App() {
     setSession(null);
     setManifest(null);
     setRecommendation(null);
+    setRecommendationProducts([]);
     setFlowError(null);
     setConsentIssue(null);
     setIsStarting(false);
     setCameraState("idle");
+    setLatestGazeSample(null);
+    setLatestGazeLayout(null);
     send("CANCEL");
 
     try {
@@ -852,6 +999,8 @@ function App() {
     latestExpressionSample.current = null;
     setIsStarting(false);
     setCameraState("idle");
+    setLatestGazeSample(null);
+    setLatestGazeLayout(null);
     setConsentIssue("idle-timeout");
 
     void flowController.runSerialized(() => visionClient.stopSession()).catch(() => {
@@ -867,6 +1016,8 @@ function App() {
     gazeSamples.current.length = 0;
     videoLayoutsByFrameId.current.clear();
     latestExpressionSample.current = null;
+    setLatestGazeSample(null);
+    setLatestGazeLayout(null);
     const generation = flowController.invalidateCurrentFlow();
     const abortController = new AbortController();
     sessionStartAbortController.current = abortController;
@@ -1020,6 +1171,8 @@ function App() {
         gazeSamples.current.length = 0;
         videoLayoutsByFrameId.current.clear();
         latestExpressionSample.current = null;
+        setLatestGazeSample(null);
+        setLatestGazeLayout(null);
       }
     }
   }, [flowController, manifest, send, session]);
@@ -1093,7 +1246,13 @@ function App() {
         throw new Error(result.reason ?? "recommendation_not_ready");
       }
 
+      const products = await Promise.all(
+        result.items.map((item) => apiClient.getProduct(item.product_id)),
+      );
+      if (!flowController.isCurrent(generation)) return;
+
       if (flowController.isCurrent(generation)) {
+        setRecommendationProducts(products);
         setRecommendation(result);
         send("RECOMMENDATION_READY");
       }
@@ -1162,6 +1321,10 @@ function App() {
         cameraState={cameraState}
         categoryLabel={selectedCategory ?? "전체 컬렉션"}
         chrome={<StoreChrome onHome={restart} step="03" overlay />}
+        debugEnabled={enableAoiDebugOverlay}
+        debugGazeLayout={latestGazeLayout}
+        debugGazeSample={latestGazeSample}
+        manifest={manifest}
         posterUrl={getLookbookPoster(selectedCategory)}
         sessionId={session.session_id}
         videoId={manifest.video_id}
@@ -1186,7 +1349,14 @@ function App() {
   }
 
   if (screen === "report" && recommendation) {
-    return <ReportPlaceholder recommendation={recommendation} onHome={restart} />;
+    return (
+      <ReportResult
+        category={selectedCategory}
+        onHome={restart}
+        products={recommendationProducts}
+        recommendation={recommendation}
+      />
+    );
   }
 
   return (

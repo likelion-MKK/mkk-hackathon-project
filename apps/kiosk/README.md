@@ -33,9 +33,11 @@ npm run test
 npm run build
 ```
 
-Mock 화면 흐름은 `screensaver → menu → consent → calibration → lookbook → finalizing → report` 순서다. `lookbook`과 `finalizing`은 D1 임시 화면이며 실제 영상·추천 UI는 후속 단계에서 연결한다.
+Mock 화면 흐름은 `screensaver → menu → consent → calibration → lookbook → finalizing → report` 순서다. D04에서는 룩북 영상 위에 개발용 AOI·시선 overlay를 표시하고, `report`에서 catalog 기반 Mock Top 2와 상품별 Mock QR preview를 보여준다. 실제 Vision 결과와 고정 QR asset은 후속 연결 단계에서 교체한다.
 
 D1 Mock 룩북에는 별도의 영상 layout 정보가 없으므로 Mock 시선의 화면 정규화 좌표를 영상 정규화 좌표로 동일하게 취급한다. 이후 manifest의 노출 시간과 polygon AOI를 적용해 `ProductAttentionEvent`로 변환하고, 표정 신호와 함께 `ReactionBatch`에 담는다. 실제 영상 연결 시에는 캡처 시점의 layout을 사용한 좌표 변환으로 교체한다.
+
+D04 개발 환경에서는 현재 `video_time_ms`에 활성화된 manifest exposure polygon과 최신 Mock gaze를 실제 영상 content 영역 위에 겹쳐 표시한다. 시선은 해당 frame의 캡처 layout으로 video 좌표에 매핑하며, `valid=false`와 `outside_video`는 별도 상태로 표시하고 좌표나 상품 후보로 바꾸지 않는다. AOI overlay는 `import.meta.env.DEV`에서 기본 활성화되고 `VITE_KIOSK_DEBUG_AOI=true`로 명시적으로 켤 수 있으며 release 빌드에서는 기본 비활성화된다.
 
 카테고리 선택값은 세션의 Mock `lookbook_id`에 반영된다. 가방, 의류, 액세서리는 각각 해당 카테고리의 manifest와 Top 2를 반환하고, 전체 컬렉션은 여러 카테고리 상품을 섞은 manifest와 Top 2를 반환한다. 추천 순위는 실제 알고리즘 결과가 아니라 D1 흐름 검증을 위한 카테고리별 고정 Mock 값이다.
 

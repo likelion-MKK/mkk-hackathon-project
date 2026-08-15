@@ -1,10 +1,17 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
+import {
+  createProductAttentionEvent,
+  mapGazeToVideoPoint,
+} from "../app/reaction-batch.ts";
+import type { GazeSample, LookbookManifest } from "../app/kiosk-types.ts";
 import {
   calculateContainedVideoLayout,
   createFrameContext,
@@ -26,6 +33,10 @@ type LookbookPlayerProps = {
   cameraState: CameraDisplayState;
   categoryLabel: string;
   chrome: ReactNode;
+  debugEnabled: boolean;
+  debugGazeLayout: FrameContext["layout"] | null;
+  debugGazeSample: GazeSample | null;
+  manifest: LookbookManifest;
   posterUrl: string;
   sessionId: string;
   videoId: string;
@@ -55,10 +66,27 @@ function toPixelRect(rect: DOMRect): PixelRect {
   };
 }
 
+function toPolygonClipPath(points: [number, number][]): string {
+  return `polygon(${points.map(([x, y]) => `${x * 100}% ${y * 100}%`).join(", ")})`;
+}
+
+function getPolygonCenter(points: [number, number][]): [number, number] {
+  const total = points.reduce(
+    ([xTotal, yTotal], [x, y]) => [xTotal + x, yTotal + y],
+    [0, 0],
+  );
+
+  return [total[0] / points.length, total[1] / points.length];
+}
+
 export function LookbookPlayer({
   cameraState,
   categoryLabel,
   chrome,
+  debugEnabled,
+  debugGazeLayout,
+  debugGazeSample,
+  manifest,
   posterUrl,
   sessionId,
   videoId,
@@ -70,6 +98,7 @@ export function LookbookPlayer({
   onPlaybackUnavailable,
 }: LookbookPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const stageRef = useRef<HTMLElement>(null);
   const playbackEpochRef = useRef(0);
   const frameSequenceRef = useRef(0);
   const didCompleteRef = useRef(false);
@@ -81,6 +110,7 @@ export function LookbookPlayer({
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackEpoch, setPlaybackEpoch] = useState(0);
   const [contextPreview, setContextPreview] = useState<FrameContext | null>(null);
+  const [stageRect, setStageRect] = useState<PixelRect | null>(null);
 
   const incrementPlaybackEpoch = () => {
     playbackEpochRef.current += 1;
@@ -119,6 +149,13 @@ export function LookbookPlayer({
     setContextPreview(context);
   }, [readFrameContext]);
 
+  const updateStageRect = useCallback(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    setStageRect(toPixelRect(stage.getBoundingClientRect()));
+  }, []);
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -132,6 +169,21 @@ export function LookbookPlayer({
       window.removeEventListener("resize", updateContextPreview);
     };
   }, [updateContextPreview]);
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    const resizeObserver = new ResizeObserver(updateStageRect);
+    resizeObserver.observe(stage);
+    updateStageRect();
+    window.addEventListener("resize", updateStageRect);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateStageRect);
+    };
+  }, [updateStageRect]);
 
   useEffect(() => {
     if (videoUrl) return;
@@ -231,6 +283,55 @@ export function LookbookPlayer({
   };
 
   const contentRect = contextPreview?.layout.content_rect;
+  const activeExposures = useMemo(
+    () =>
+      manifest.exposures.filter(
+        (exposure) =>
+          exposure.start_ms <= currentTimeMs && currentTimeMs < exposure.end_ms,
+      ),
+    [currentTimeMs, manifest.exposures],
+  );
+  const debugVideoPoint = useMemo(
+    () =>
+      debugGazeSample && debugGazeLayout
+        ? mapGazeToVideoPoint(debugGazeSample, debugGazeLayout)
+        : null,
+    [debugGazeLayout, debugGazeSample],
+  );
+  const debugAttention = useMemo(() => {
+    if (!debugGazeSample || !debugVideoPoint) return null;
+
+    try {
+      return createProductAttentionEvent(
+        debugGazeSample,
+        manifest,
+        debugGazeSample.sequence,
+        debugVideoPoint,
+      );
+    } catch {
+      return null;
+    }
+  }, [debugGazeSample, debugVideoPoint, manifest]);
+  const contentStyle =
+    contentRect && stageRect
+      ? ({
+          left: contentRect.x_px - stageRect.x_px,
+          top: contentRect.y_px - stageRect.y_px,
+          width: contentRect.width_px,
+          height: contentRect.height_px,
+        } satisfies CSSProperties)
+      : null;
+  const debugStatus = !debugGazeSample
+    ? "WAITING FOR GAZE"
+    : !debugGazeSample.valid
+      ? `INVALID / ${debugGazeSample.reason}`
+      : !debugVideoPoint
+        ? "WAITING FOR CAPTURE LAYOUT"
+        : debugVideoPoint.outside_video
+          ? "OUTSIDE VIDEO"
+          : debugAttention && debugAttention.candidates.length > 0
+            ? `AOI HIT / ${debugAttention.candidates.map((candidate) => candidate.product_id).join(", ")}`
+            : "VALID / NO AOI HIT";
   const mediaMessage =
     mediaState === "missing"
       ? "임시 룩북 영상 파일을 연결해주세요."
@@ -244,7 +345,7 @@ export function LookbookPlayer({
     <main className="store-screen lookbook-screen screen-enter" aria-labelledby="lookbook-title">
       {chrome}
 
-      <section className="lookbook-stage">
+      <section className="lookbook-stage" ref={stageRef}>
         <video
           className="lookbook-video"
           ref={videoRef}
@@ -262,6 +363,69 @@ export function LookbookPlayer({
         />
 
         <div className="lookbook-stage__shade" aria-hidden="true" />
+
+        {debugEnabled && (
+          <>
+            {contentStyle && (
+              <div className="lookbook-debug-canvas" style={contentStyle} aria-hidden="true">
+                {activeExposures.map((exposure) => {
+                  const [centerX, centerY] = getPolygonCenter(exposure.shape.points);
+
+                  return (
+                    <div className="lookbook-aoi-region" key={exposure.exposure_id}>
+                      <span
+                        className="lookbook-aoi-region__fill"
+                        style={{ clipPath: toPolygonClipPath(exposure.shape.points) }}
+                      />
+                      <span
+                        className="lookbook-aoi-region__label"
+                        style={{ left: `${centerX * 100}%`, top: `${centerY * 100}%` }}
+                      >
+                        {exposure.product_id}
+                      </span>
+                    </div>
+                  );
+                })}
+
+                {debugVideoPoint?.valid && !debugVideoPoint.outside_video && (
+                  <span
+                    className="lookbook-gaze-point"
+                    style={{
+                      left: `${debugVideoPoint.video_x_norm * 100}%`,
+                      top: `${debugVideoPoint.video_y_norm * 100}%`,
+                    }}
+                  />
+                )}
+              </div>
+            )}
+
+            <aside className="lookbook-debug-panel" aria-label="AOI debug overlay" role="status">
+              <div className="lookbook-debug-panel__topline">
+                <span>AOI MAP</span>
+                <span>DEV ONLY</span>
+              </div>
+              <strong>{debugStatus}</strong>
+              <dl>
+                <div>
+                  <dt>TIME</dt>
+                  <dd>{Math.round(currentTimeMs)} MS</dd>
+                </div>
+                <div>
+                  <dt>GAZE</dt>
+                  <dd>
+                    {debugVideoPoint?.valid && !debugVideoPoint.outside_video
+                      ? `${debugVideoPoint.video_x_norm.toFixed(2)}, ${debugVideoPoint.video_y_norm.toFixed(2)}`
+                      : "NO VIDEO POINT"}
+                  </dd>
+                </div>
+                <div>
+                  <dt>EXPOSURES</dt>
+                  <dd>{activeExposures.length} ACTIVE</dd>
+                </div>
+              </dl>
+            </aside>
+          </>
+        )}
 
         <div className="lookbook-stage__heading">
           <p className="section-label">AI LOOKBOOK · {categoryLabel}</p>
