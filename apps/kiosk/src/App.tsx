@@ -272,13 +272,11 @@ function Screensaver({ onStart }: { onStart: () => void }) {
       </div>
 
       <section className="screensaver__copy">
-        <p className="screensaver__signature" lang="en" aria-hidden="true">
-          a taste waiting to be discovered
-        </p>
-        <h1 id="screensaver-title">
-          고객님의 취향을
+        <p className="screensaver__eyebrow">고객님의 취향을 발견해드립니다</p>
+        <h1 id="screensaver-title" lang="en">
+          A taste waiting
           <br />
-          발견해드립니다
+          to be discovered
         </h1>
         <span className="screensaver__cta" lang="en">
           touch to start
