@@ -81,13 +81,13 @@ neutral·0점·무관심 또는 `insufficient_data`로 바꾸지 않는다. prim
 - `dispose`: 반복 호출에 안전하며 모델·buffer·파생 retry cache를 해제한다.
 
 `event_id`는 adapter·model·taxonomy metadata와 전체 `FaceFrameContext`를 사용해
-결정적으로 생성한다. 같은 context 재시도는 cache의 파생 `ExpressionSample`을
-반환해 payload와 event ID를 유지하고 모델을 다시 실행하지 않는다. cache에는
-frame·landmark·source raw score·tensor를 저장하지 않고 canonical 파생 sample만
-설정된 TTL 동안 유지한다. cache는 전체 `FaceFrameContext`와 고정 metadata에서 만든
-결정적 `event_id` digest를 key로 하는 bounded LRU이며, 원문 session ID나 context tuple을
-key에 저장하지 않는다. TTL 만료 시 접근 경로에서 제거하고 최초 initialize와 dispose에서
-비우며 ready 상태의 반복 initialize에서는 유지한다.
+결정적으로 생성한다. 같은 context 재시도는 cache의 context-free canonical 파생 필드로
+`ExpressionSample`을 재구성해 payload와 event ID를 유지하고 모델을 다시 실행하지 않는다.
+cache에는 frame·landmark·source raw score·tensor 또는 원문 session/frame/video ID를 저장하지
+않는다. cache key는 전체 `FaceFrameContext`와 고정 metadata에서 만든 결정적 `event_id`
+digest이며, value는 face count·canonical score·quality·validity 같은 파생 필드만 포함한다.
+TTL 만료 시 접근 경로에서 제거하고 최초 initialize와 dispose에서 비우며 ready 상태의 반복
+initialize에서는 유지한다.
 
 ## 후속 PR 경계
 

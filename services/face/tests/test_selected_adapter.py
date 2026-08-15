@@ -154,7 +154,8 @@ def test_same_full_context_reuses_cached_canonical_sample_without_inference() ->
     adapter.initialize()
     first = adapter.infer(object(), Context())
     second = adapter.infer(object(), Context())
-    assert second is first
+    assert second is not first
+    assert second.to_payload() == first.to_payload()
     assert second.event_id == first.event_id
     assert backend.infer_count == 1
 
@@ -179,7 +180,7 @@ def test_every_context_field_participates_in_retry_cache_key() -> None:
         assert changed.event_id != first.event_id, field
 
 
-def test_retry_cache_key_does_not_retain_raw_session_id() -> None:
+def test_retry_cache_does_not_retain_raw_context_in_key_or_value() -> None:
     backend = Backend(FaceInference(1, (blendshapes(),), 0.9))
     adapter = SelectedFaceAdapter(backend=backend)
     adapter.initialize()
@@ -188,8 +189,13 @@ def test_retry_cache_key_does_not_retain_raw_session_id() -> None:
 
     cache_keys = tuple(adapter._cache.keys())
     assert cache_keys == (sample.event_id,)
-    assert context.session_id not in repr(cache_keys)
     assert all(key.startswith("expression-") for key in cache_keys)
+    rendered_cache = repr(adapter._cache)
+    assert context.session_id not in rendered_cache
+    assert context.frame_id not in rendered_cache
+    assert context.video_id not in rendered_cache
+    assert "ExpressionSample" not in rendered_cache
+    assert not hasattr(next(iter(adapter._cache.values())), "sample")
 
 
 def test_cache_is_bounded_and_evicts_least_recently_used_sample() -> None:

@@ -34,9 +34,10 @@ python scripts/validate_contracts.py
 하나일 때만 valid다.
 
 동일한 전체 `FaceFrameContext` 재호출은 TTL이 있는 bounded LRU에서 canonical
-`ExpressionSample`을 재사용해 모델을 다시 실행하지 않는다. cache에는 frame,
-landmark와 원본 blendshape를 넣지 않으며, 원문 context tuple 대신 전체 context로 만든
-결정적 `event_id` digest를 cache key로 사용해 원문 session ID를 key에 보관하지 않는다.
+파생 필드를 재사용해 모델을 다시 실행하지 않고 동일한 `ExpressionSample` payload를
+재구성한다. cache에는 frame, landmark, 원본 blendshape 또는 context 식별값을 넣지 않으며,
+원문 context tuple 대신 전체 context로 만든 결정적 `event_id` digest를 key로 사용한다.
+cache value에도 원문 session/frame/video ID가 없는 context-free canonical 파생 필드만 둔다.
 cache는 최초 initialize, TTL 만료와 dispose 경계에서 정리한다. MediaPipe landmark의
 `presence`/`visibility` 품질 channel이 완전하게
 제공되지 않으면 quality를 임의 추정하지 않고 `low_quality`로 fail-closed 처리한다.

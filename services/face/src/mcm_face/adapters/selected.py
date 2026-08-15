@@ -33,9 +33,35 @@ class FaceInference:
 
 
 @dataclass(frozen=True, slots=True)
-class _CachedSample:
+class _CachedDerivedSample:
+    """Context-free fields needed to rebuild one canonical sample."""
+
     expires_at: float
-    sample: ExpressionSample
+    face_detected: bool
+    face_count: int
+    scores: tuple[tuple[str, float], ...]
+    quality: float
+    valid: bool
+    confidence: float
+    reason: str | None
+
+    @classmethod
+    def from_sample(
+        cls,
+        sample: ExpressionSample,
+        *,
+        expires_at: float,
+    ) -> _CachedDerivedSample:
+        return cls(
+            expires_at=expires_at,
+            face_detected=sample.face_detected,
+            face_count=sample.face_count,
+            scores=tuple(sample.scores.items()),
+            quality=sample.quality,
+            valid=sample.valid,
+            confidence=sample.confidence,
+            reason=sample.reason,
+        )
 
 
 class FaceInferenceBackend(Protocol):
@@ -179,7 +205,7 @@ class SelectedFaceAdapter:
         self._clock = clock
         # Use the deterministic event ID as the retry key so raw context values
         # (especially session_id) are never retained in cache keys.
-        self._cache: OrderedDict[str, _CachedSample] = OrderedDict()
+        self._cache: OrderedDict[str, _CachedDerivedSample] = OrderedDict()
         self._lock = RLock()
         self._ready = False
 
@@ -218,7 +244,7 @@ class SelectedFaceAdapter:
             if cached is not None:
                 self._cache.move_to_end(key)
                 del frame
-                return cached.sample
+                return self._sample_from_cache(metadata, context, key, cached)
             result: FaceInference | None = None
             try:
                 result = self._backend.infer(frame)
@@ -230,7 +256,10 @@ class SelectedFaceAdapter:
             finally:
                 result = None
                 del frame
-            self._cache[key] = _CachedSample(now + self._cache_ttl_seconds, sample)
+            self._cache[key] = _CachedDerivedSample.from_sample(
+                sample,
+                expires_at=now + self._cache_ttl_seconds,
+            )
             self._cache.move_to_end(key)
             while len(self._cache) > self._cache_max_entries:
                 self._cache.popitem(last=False)
@@ -273,6 +302,35 @@ class SelectedFaceAdapter:
             model_revision=metadata.model_revision, taxonomy_version=metadata.taxonomy_version,
             face_detected=True, face_count=1, scores=scores, quality=quality,
             valid=True, confidence=quality, reason=None,
+        )
+
+    @staticmethod
+    def _sample_from_cache(
+        metadata: AdapterMetadata,
+        context: FaceFrameContext,
+        cached_event_id: str,
+        cached: _CachedDerivedSample,
+    ) -> ExpressionSample:
+        return ExpressionSample(
+            schema_version="1.0",
+            session_id=context.session_id,
+            event_id=cached_event_id,
+            sequence=context.sequence,
+            frame_id=context.frame_id,
+            captured_at_mono_ms=context.captured_at_mono_ms,
+            video_id=context.video_id,
+            video_time_ms=context.video_time_ms,
+            playback_epoch=context.playback_epoch,
+            producer_id=metadata.adapter_id,
+            model_revision=metadata.model_revision,
+            taxonomy_version=metadata.taxonomy_version,
+            face_detected=cached.face_detected,
+            face_count=cached.face_count,
+            scores=dict(cached.scores),
+            quality=cached.quality,
+            valid=cached.valid,
+            confidence=cached.confidence,
+            reason=cached.reason,
         )
 
     def _prune_expired(self, now: float) -> None:
