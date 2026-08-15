@@ -177,7 +177,9 @@ class SelectedFaceAdapter:
         self._cache_max_entries = cache_max_entries
         self._cache_ttl_seconds = cache_ttl_seconds
         self._clock = clock
-        self._cache: OrderedDict[tuple[object, ...], _CachedSample] = OrderedDict()
+        # Use the deterministic event ID as the retry key so raw context values
+        # (especially session_id) are never retained in cache keys.
+        self._cache: OrderedDict[str, _CachedSample] = OrderedDict()
         self._lock = RLock()
         self._ready = False
 
@@ -209,7 +211,7 @@ class SelectedFaceAdapter:
             if not self._ready:
                 del frame
                 return invalid_sample(metadata, context, reason="model_unavailable")
-            key = self._context_key(context)
+            key = event_id(metadata, context)
             now = self._clock()
             self._prune_expired(now)
             cached = self._cache.get(key)
@@ -271,18 +273,6 @@ class SelectedFaceAdapter:
             model_revision=metadata.model_revision, taxonomy_version=metadata.taxonomy_version,
             face_detected=True, face_count=1, scores=scores, quality=quality,
             valid=True, confidence=quality, reason=None,
-        )
-
-    @staticmethod
-    def _context_key(context: FaceFrameContext) -> tuple[object, ...]:
-        return (
-            context.session_id,
-            context.sequence,
-            context.frame_id,
-            context.captured_at_mono_ms,
-            context.video_id,
-            context.video_time_ms,
-            context.playback_epoch,
         )
 
     def _prune_expired(self, now: float) -> None:

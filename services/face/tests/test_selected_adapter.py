@@ -173,9 +173,23 @@ def test_every_context_field_participates_in_retry_cache_key() -> None:
         backend = Backend(FaceInference(1, (blendshapes(),), 0.9))
         adapter = SelectedFaceAdapter(backend=backend)
         adapter.initialize()
-        adapter.infer(object(), Context())
-        adapter.infer(object(), replace(Context(), **{field: value}))
+        first = adapter.infer(object(), Context())
+        changed = adapter.infer(object(), replace(Context(), **{field: value}))
         assert backend.infer_count == 2, field
+        assert changed.event_id != first.event_id, field
+
+
+def test_retry_cache_key_does_not_retain_raw_session_id() -> None:
+    backend = Backend(FaceInference(1, (blendshapes(),), 0.9))
+    adapter = SelectedFaceAdapter(backend=backend)
+    adapter.initialize()
+    context = Context(session_id="private-session-id-must-not-be-a-cache-key")
+    sample = adapter.infer(object(), context)
+
+    cache_keys = tuple(adapter._cache.keys())
+    assert cache_keys == (sample.event_id,)
+    assert context.session_id not in repr(cache_keys)
+    assert all(key.startswith("expression-") for key in cache_keys)
 
 
 def test_cache_is_bounded_and_evicts_least_recently_used_sample() -> None:
