@@ -3,8 +3,14 @@ import bagImage from "./assets/categories/category-bags.png";
 import apparelImage from "./assets/categories/category-apparel.png";
 import accessoryImage from "./assets/categories/category-accessories.png";
 import screensaverImageOne from "./assets/categories/screensaver-01.jpg";
-import screensaverImageTwo from "./assets/categories/screensaver-02.jpg";
-import screensaverImageThree from "./assets/categories/screensaver-03.jpg";
+import screensaverCommunityImage from "./assets/screensaver/mcm-community.png";
+import screensaverCraftImage from "./assets/screensaver/mcm-craft.png";
+import screensaverGreenEditorialImage from "./assets/screensaver/mcm-green-editorial.jpg";
+import screensaverGreenLoungeImage from "./assets/screensaver/mcm-green-lounge.jpg";
+import screensaverHeritageCartImage from "./assets/screensaver/mcm-heritage-cart.jpg";
+import screensaverLifestyleImage from "./assets/screensaver/mcm-lifestyle.png";
+import screensaverLifestyleWideImage from "./assets/screensaver/mcm-lifestyle-wide.jpg";
+import screensaverMilanStreetImage from "./assets/screensaver/mcm-milan-street.jpg";
 import { AsyncFlowController } from "./app/async-flow-controller.ts";
 import {
   CONSENT_IDLE_TIMEOUT_MS,
@@ -98,10 +104,62 @@ const productCategories: CategoryOption[] = [
   },
 ];
 
-const screensaverImages = [
-  screensaverImageOne,
-  screensaverImageTwo,
-  screensaverImageThree,
+const screensaverStories = [
+  {
+    title: "MCM Heritage Since 1976",
+    body: "Founded during Munich's golden age, MCM became a symbol of bold expression and the jet set life. Beloved by cultural icons and creative pioneers, the house continues to inspire through a progressive balance of innovation and craft.",
+  },
+  {
+    title: "Beyond 50 Years of Excellence",
+    body: "To mark its anniversary in 2026, MCM begins a yearlong celebration of craft and heritage. Moments shaped by the spirit of the times will connect its community, culminating in Munich where the story began, alongside a new logo created for the 50th anniversary.",
+  },
+  {
+    title: "Crafted With Purpose",
+    body: "From the beginning, MCM has followed the Bauhaus belief that form follows function. Rooted in German engineering, each piece balances purposeful detail, refined style and exceptional materials, creating hands free designs made for life in motion.",
+  },
+];
+
+const screensaverSlides = [
+  {
+    className: "screensaver__slide--green-editorial",
+    image: screensaverGreenEditorialImage,
+    storyIndex: 0,
+  },
+  {
+    className: "screensaver__slide--heritage-cart",
+    image: screensaverHeritageCartImage,
+    storyIndex: 0,
+  },
+  {
+    className: "screensaver__slide--craft",
+    image: screensaverCraftImage,
+    storyIndex: 0,
+  },
+  {
+    className: "screensaver__slide--community",
+    image: screensaverCommunityImage,
+    storyIndex: 1,
+  },
+  {
+    className: "screensaver__slide--milan-street",
+    image: screensaverMilanStreetImage,
+    storyIndex: 1,
+  },
+  {
+    className: "screensaver__slide--lifestyle-wide",
+    image: screensaverLifestyleWideImage,
+    storyIndex: 1,
+  },
+  {
+    className: "screensaver__slide--green-lounge",
+    image: screensaverGreenLoungeImage,
+    storyIndex: 2,
+  },
+  {
+    className: "screensaver__slide--lifestyle",
+    image: screensaverLifestyleImage,
+    storyIndex: 2,
+  },
 ];
 
 function getLookbookPoster(category: ProductCategory | null): string {
@@ -164,10 +222,11 @@ function StoreChrome({
 
 function Screensaver({ onStart }: { onStart: () => void }) {
   const [activeSlide, setActiveSlide] = useState(0);
+  const activeStory = screensaverStories[screensaverSlides[activeSlide].storyIndex];
 
   useEffect(() => {
     const slideTimer = window.setInterval(() => {
-      setActiveSlide((currentSlide) => (currentSlide + 1) % screensaverImages.length);
+      setActiveSlide((currentSlide) => (currentSlide + 1) % screensaverSlides.length);
     }, 5000);
 
     return () => window.clearInterval(slideTimer);
@@ -179,42 +238,44 @@ function Screensaver({ onStart }: { onStart: () => void }) {
         className="screensaver__hit-area"
         type="button"
         onClick={onStart}
-        aria-label="화면을 터치해 취향 발견 시작하기"
+        aria-label="touch to start"
       />
 
       <div className="screensaver__media" aria-hidden="true">
-        {screensaverImages.map((image, index) => (
-          <img
-            className={index === activeSlide ? "is-active" : undefined}
-            key={image}
-            src={image}
-            alt=""
-          />
+        {screensaverSlides.map((slide, index) => (
+          <div
+            className={`screensaver__slide ${slide.className}${
+              index === activeSlide ? " is-active" : ""
+            }`}
+            key={slide.image}
+          >
+            <img src={slide.image} alt="" />
+          </div>
         ))}
       </div>
 
-      <StoreChrome onHome={onStart} overlay />
+      <div className="screensaver__brand">
+        <Wordmark light />
+      </div>
 
       <section className="screensaver__copy">
-        <p className="section-label">MCM AI LOOKBOOK</p>
-        <h1 id="screensaver-title">
-          당신도 몰랐던 취향을
-          <br />
-          발견해보세요
-        </h1>
-        <p className="screensaver__description">
-          짧은 룩북을 감상하면 당신의 시선이 이끄는 스타일을 찾아드려요.
+        <p className="screensaver__signature" lang="en" aria-hidden="true">
+          a taste waiting to be discovered
         </p>
-        <span className="hero-cta">
-          화면을 터치해 시작하기 <ArrowIcon />
+        <h1 id="screensaver-title">
+          고객님의 취향을
+          <br />
+          발견해드립니다
+        </h1>
+        <span className="screensaver__cta" lang="en">
+          touch to start
         </span>
       </section>
 
-      <div className="screensaver__index" aria-hidden="true">
-        <span>{String(activeSlide + 1).padStart(2, "0")}</span>
-        <i />
-        <span>PERSONAL STYLE DISCOVERY</span>
-      </div>
+      <aside className="screensaver__editorial" key={activeStory.title}>
+        <h2>{activeStory.title}</h2>
+        <p>{activeStory.body}</p>
+      </aside>
     </main>
   );
 }
