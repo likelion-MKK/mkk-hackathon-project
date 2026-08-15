@@ -20,6 +20,7 @@ from .eyetrax import (
     ValidationAoiEvaluator,
 )
 from .gaze_stabilizer import GazeStabilizer, StabilizerDecision
+from .replay import ReplayExhaustedError, ReplayEyeAdapter, ReplayGazeRecord
 
 __all__ = [
     "FakeDeliveryScenario",
@@ -39,4 +40,7 @@ __all__ = [
     "GazeStabilizer",
     "StabilizerDecision",
     "ValidationAoiEvaluator",
+    "ReplayExhaustedError",
+    "ReplayEyeAdapter",
+    "ReplayGazeRecord",
 ]

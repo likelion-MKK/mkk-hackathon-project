@@ -13,6 +13,9 @@ from .adapters import (
     FakeEyeAdapter,
     FakeGazeDelivery,
     FakeScenario,
+    ReplayExhaustedError,
+    ReplayEyeAdapter,
+    ReplayGazeRecord,
 )
 from .contracts import (
     AdapterMetadata,
@@ -44,4 +47,7 @@ __all__ = [
     "FakeScenario",
     "GazeFrameContext",
     "GazeSample",
+    "ReplayExhaustedError",
+    "ReplayEyeAdapter",
+    "ReplayGazeRecord",
 ]
