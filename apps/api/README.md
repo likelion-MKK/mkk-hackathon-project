@@ -34,6 +34,11 @@ store를 사용한다. MVP C안에서는 개별 event payload를 세션 목록�
 않고 활성 세션의 상품별 feature로 즉시 집계하며, 추천 완료 시 집계·중복 제거
 상태를 폐기한다. Mock 결과는 실제 추천 품질을 의미하지 않는다.
 
+영상 없이 gaze replay와 추천 집계를 검증할 때는 `RECOMMENDATION_ENGINE=research_version`을
+설정한다. 이 모드는 `ProductAttentionEvent`의 상품별 관찰시간, 시간 가중 신뢰도와
+재응시 횟수를 사용해 `gaze-score-v0` Top 2를 계산한다. 기본값은 병렬 UI 개발을 위한
+`mock`이며, 결과에는 `engine_mode`와 `algorithm_version`이 구분되어 표시된다.
+
 ## 실행
 
 ```powershell

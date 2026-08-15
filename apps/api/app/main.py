@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Annotated
 
 from fastapi import FastAPI, Path, Query, Request, status
@@ -27,6 +28,7 @@ from apps.api.app.schemas import (
 )
 from apps.api.app.store import DomainError, MemoryStore
 from services.recommendation.engine.interface import RecommendationEngine
+from services.recommendation.engine.research_gaze import ResearchGazeScoreEngine
 from services.recommendation.mock.engine import MockRecommendationEngine
 
 
@@ -41,6 +43,19 @@ def _error_response(code: str, message: str, status_code: int) -> JSONResponse:
     return JSONResponse(status_code=status_code, content=body.model_dump(mode="json"))
 
 
+def _configured_recommendation_engine() -> RecommendationEngine:
+    """Select the development or replay-safe recommendation implementation."""
+
+    mode = os.getenv("RECOMMENDATION_ENGINE", "mock").strip().lower()
+    if mode == "mock":
+        return MockRecommendationEngine()
+    if mode == "research_version":
+        return ResearchGazeScoreEngine()
+    raise ValueError(
+        "RECOMMENDATION_ENGINE must be 'mock' or 'research_version'"
+    )
+
+
 def create_app(
     store: MemoryStore | None = None,
     recommendation_engine: RecommendationEngine | None = None,
@@ -53,7 +68,7 @@ def create_app(
         description="Contract-first API scaffold; raw webcam frames are not accepted.",
     )
     app.state.store = store or MemoryStore()
-    app.state.recommendation_engine = recommendation_engine or MockRecommendationEngine()
+    app.state.recommendation_engine = recommendation_engine or _configured_recommendation_engine()
 
     @app.exception_handler(DomainError)
     async def handle_domain_error(_: Request, exc: DomainError) -> JSONResponse:

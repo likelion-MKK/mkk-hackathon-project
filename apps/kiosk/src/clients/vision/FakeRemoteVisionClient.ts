@@ -23,6 +23,7 @@ export class FakeRemoteVisionClient implements RemoteVisionClient {
   private readonly mockVisionClient: MockVisionClient;
   private sessionContext: VisionSessionContext | null = null;
   private frameInFlight = false;
+  private inferenceActive = false;
 
   constructor(scenario: MockVisionScenario = "valid") {
     this.mockVisionClient = new MockVisionClient(scenario);
@@ -35,14 +36,16 @@ export class FakeRemoteVisionClient implements RemoteVisionClient {
     await this.mockVisionClient.startSession(context, options);
     this.sessionContext = { ...context };
     this.frameInFlight = false;
+    this.inferenceActive = false;
   }
 
   startCalibration(pattern: CalibrationPattern): Promise<CalibrationResult> {
     return this.mockVisionClient.startCalibration(pattern);
   }
 
-  startInference(): Promise<void> {
-    return this.mockVisionClient.startInference();
+  async startInference(): Promise<void> {
+    await this.mockVisionClient.startInference({ emitInitialSample: false });
+    this.inferenceActive = true;
   }
 
   onGazeSample(listener: GazeSampleListener): Unsubscribe {
@@ -83,6 +86,7 @@ export class FakeRemoteVisionClient implements RemoteVisionClient {
     try {
       await Promise.resolve();
       signal?.throwIfAborted();
+      if (this.inferenceActive) this.mockVisionClient.emitFrameInference(context);
       return {
         frame_id: context.frame_id,
         status: "accepted",
@@ -96,6 +100,7 @@ export class FakeRemoteVisionClient implements RemoteVisionClient {
   async stopSession(): Promise<void> {
     this.sessionContext = null;
     this.frameInFlight = false;
+    this.inferenceActive = false;
     await this.mockVisionClient.stopSession();
   }
 

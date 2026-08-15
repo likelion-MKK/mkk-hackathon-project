@@ -1,0 +1,47 @@
+{
+  "fixture_revision": "eye-gaze-replay-d3-v1",
+  "records": [
+    {
+      "screen_x_norm": 0.2,
+      "screen_y_norm": 0.5,
+      "valid": true,
+      "confidence": 0.9,
+      "reason": null
+    },
+    {
+      "screen_x_norm": 0.22,
+      "screen_y_norm": 0.5,
+      "valid": true,
+      "confidence": 0.85,
+      "reason": null
+    },
+    {
+      "screen_x_norm": 0.8,
+      "screen_y_norm": 0.5,
+      "valid": true,
+      "confidence": 0.88,
+      "reason": null
+    },
+    {
+      "screen_x_norm": null,
+      "screen_y_norm": null,
+      "valid": false,
+      "confidence": 0.0,
+      "reason": "no_face"
+    },
+    {
+      "screen_x_norm": 0.2,
+      "screen_y_norm": 0.5,
+      "valid": true,
+      "confidence": 0.91,
+      "reason": null
+    },
+    {
+      "screen_x_norm": 0.8,
+      "screen_y_norm": 0.5,
+      "valid": true,
+      "confidence": 0.82,
+      "reason": null
+    }
+  ]
+}
