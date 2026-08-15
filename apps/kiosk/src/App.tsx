@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import bagImage from "./assets/categories/category-bags.png";
 import apparelImage from "./assets/categories/category-apparel.png";
 import accessoryImage from "./assets/categories/category-accessories.png";
+import menuApparelImage from "./assets/categories/category-apparel-menu.png";
+import menuAccessoryImage from "./assets/categories/category-accessories-menu.png";
+import menuCollectionImage from "./assets/categories/category-collection-menu.png";
 import screensaverImageOne from "./assets/categories/screensaver-01.jpg";
 import screensaverCommunityImage from "./assets/screensaver/mcm-community.png";
 import screensaverCraftImage from "./assets/screensaver/mcm-craft.png";
@@ -85,35 +88,30 @@ const calibrationPattern = {
 
 type CategoryOption = {
   name: ProductCategory;
+  label: string;
   englishName: string;
-  number: string;
-  description: string;
 };
 
 const productCategories: CategoryOption[] = [
   {
     name: "가방",
+    label: "가방",
     englishName: "BAGS",
-    number: "01",
-    description: "아이코닉 백과 데일리 백",
   },
   {
     name: "의류",
+    label: "의류",
     englishName: "READY-TO-WEAR",
-    number: "02",
-    description: "새로운 시즌의 룩",
   },
   {
     name: "액세서리",
+    label: "악세서리",
     englishName: "ACCESSORIES",
-    number: "03",
-    description: "스타일을 완성하는 디테일",
   },
   {
     name: "전체 컬렉션",
+    label: "전체컬렉션",
     englishName: "VIEW ALL",
-    number: "04",
-    description: "모든 카테고리에서 발견하기",
   },
 ];
 
@@ -291,30 +289,37 @@ function Screensaver({ onStart }: { onStart: () => void }) {
   );
 }
 
-function CategoryMedia({ index }: { index: number }) {
-  if (index === 0) {
+function CategoryMedia({ category }: { category: ProductCategory }) {
+  if (category === "가방") {
     return <img className="category-card__image category-card__image--bag" src={bagImage} alt="" />;
   }
 
-  if (index === 1) {
-    return <img className="category-card__image category-card__image--apparel" src={apparelImage} alt="" />;
+  if (category === "의류") {
+    return (
+      <img
+        className="category-card__image category-card__image--apparel"
+        src={menuApparelImage}
+        alt=""
+      />
+    );
   }
 
-  if (index === 2) {
+  if (category === "액세서리") {
     return (
       <img
         className="category-card__image category-card__image--accessory"
-        src={accessoryImage}
+        src={menuAccessoryImage}
         alt=""
       />
     );
   }
 
   return (
-    <div className="collection-collage">
-      <img src={apparelImage} alt="" />
-      <img src={bagImage} alt="" />
-    </div>
+    <img
+      className="category-card__image category-card__image--collection"
+      src={menuCollectionImage}
+      alt=""
+    />
   );
 }
 
@@ -327,22 +332,22 @@ function CategoryMenu({
 }) {
   return (
     <main className="store-screen gallery-screen screen-enter">
-      <StoreChrome onHome={onHome} step="01" />
+      <header className="gallery-header">
+        <button className="wordmark-button gallery-home" type="button" onClick={onHome}>
+          <Wordmark light />
+          <span className="sr-only">처음 화면으로 이동</span>
+        </button>
+      </header>
 
       <section className="gallery-heading" aria-labelledby="menu-title">
-        <div>
-          <p className="section-label">CHOOSE A CATEGORY</p>
-          <h1 id="menu-title">어떤 스타일을 발견해볼까요?</h1>
-        </div>
-        <p>
-          지금 가장 마음이 가는 카테고리를 선택해주세요.
-          <br />
-          선택한 컬렉션으로 룩북을 시작합니다.
+        <p className="gallery-heading__eyebrow" lang="en">
+          choose a category
         </p>
+        <h1 id="menu-title">원하는 카테고리를 선택하세요</h1>
       </section>
 
       <section className="category-gallery" aria-label="상품 카테고리">
-        {productCategories.map((category, index) => (
+        {productCategories.map((category) => (
           <button
             className="category-card"
             key={category.name}
@@ -350,26 +355,28 @@ function CategoryMenu({
             onClick={() => onSelect(category.name)}
           >
             <span className="category-card__media">
-              <CategoryMedia index={index} />
-              <span className="category-card__number">{category.number}</span>
+              <CategoryMedia category={category.name} />
             </span>
             <span className="category-card__details">
-              <span>
-                <strong>{category.name}</strong>
-                <small>{category.englishName}</small>
-              </span>
-              <span className="category-card__description">{category.description}</span>
-              <span className="category-card__arrow">
-                <ArrowIcon />
-              </span>
+              <strong>{category.label}</strong>
+              <small lang="en">{category.englishName}</small>
             </span>
           </button>
         ))}
       </section>
 
-      <button className="back-link" type="button" onClick={onHome}>
-        ← 처음으로
-      </button>
+      <footer className="gallery-footer">
+        <aside className="gallery-editorial" aria-labelledby="gallery-editorial-title">
+          <h2 id="gallery-editorial-title" lang="en">
+            Designed for every journey
+          </h2>
+          <p lang="en">
+            Mobility has always been at the heart of MCM. Since Michael Cromer introduced the
+            house&apos;s first travel pieces in 1976, MCM has continued to design for today&apos;s
+            nomads, who see the world as home.
+          </p>
+        </aside>
+      </footer>
     </main>
   );
 }
