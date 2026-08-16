@@ -1,0 +1,586 @@
+"""Localhost ASGI Vision Stream v1 Gateway, Face-only vertical slice."""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import json
+import secrets
+from collections import deque
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any, Callable, Mapping, Protocol
+
+from mcm_face import FaceWorker, SelectedFaceAdapter
+from starlette.types import Receive, Scope, Send
+from starlette.websockets import WebSocket, WebSocketDisconnect
+
+from apps.vision_gateway.vision_stream import (
+    DecodedBinaryFrame,
+    FrameDecoder,
+    StreamFrameContext,
+    VisionStreamProtocolError,
+    decode_binary_frame,
+    default_frame_decoder,
+)
+
+
+_CONTROL_ACTIONS = frozenset(
+    {"start_calibration", "start_inference", "stop_inference", "stop_session"}
+)
+_CONTROL_FIELDS = frozenset(
+    {"type", "protocol_version", "request_id", "action", "payload"}
+)
+
+
+class VisionTokenVerifier(Protocol):
+    def consume(self, token: str) -> "VisionTokenClaims | None": ...
+
+
+@dataclass(frozen=True, slots=True)
+class VisionTokenClaims:
+    session_id: str
+    video_id: str
+    expires_at: datetime
+
+
+class VisionAuthorizationError(VisionStreamProtocolError):
+    """A hello token cannot authorize the requested session and video."""
+
+
+class LocalVisionTokenIssuer:
+    """Development-only one-time token store; no token is written to disk or logs."""
+
+    def __init__(self, *, ttl_seconds: int = 60) -> None:
+        if ttl_seconds <= 0:
+            raise ValueError("ttl_seconds must be positive")
+        self._ttl = timedelta(seconds=ttl_seconds)
+        self._tokens: dict[str, VisionTokenClaims] = {}
+
+    def issue(self, session_id: str, video_id: str) -> dict[str, str]:
+        expires_at = datetime.now(timezone.utc) + self._ttl
+        token = secrets.token_urlsafe(32)
+        self._tokens[token] = VisionTokenClaims(session_id, video_id, expires_at)
+        return {
+            "protocol_version": "1.0",
+            "session_id": session_id,
+            "video_id": video_id,
+            "stream_token": token,
+            "expires_at": expires_at.isoformat().replace("+00:00", "Z"),
+            "websocket_path": "/vision/v1/stream",
+        }
+
+    def consume(self, token: str) -> VisionTokenClaims | None:
+        claims = self._tokens.pop(token, None)
+        if claims is None or claims.expires_at <= datetime.now(timezone.utc):
+            return None
+        return claims
+
+
+FaceWorkerFactory = Callable[[], FaceWorker]
+
+
+def selected_face_worker_factory(
+    model_path: str | Path,
+    *,
+    timeout_ms: int = 500,
+) -> FaceWorkerFactory:
+    """Build the real MediaPipe worker lazily when a stream is accepted."""
+
+    def factory() -> FaceWorker:
+        return FaceWorker(SelectedFaceAdapter(model_path=model_path), timeout_ms=timeout_ms)
+
+    return factory
+
+
+@dataclass(frozen=True, slots=True)
+class _FrameOutcome:
+    kind: str
+    payload: Mapping[str, object]
+
+
+class VisionStreamApp:
+    """ASGI app exposing only the localhost `/vision/v1/stream` WebSocket."""
+
+    def __init__(
+        self,
+        *,
+        token_verifier: VisionTokenVerifier,
+        face_worker_factory: FaceWorkerFactory,
+        frame_decoder: FrameDecoder = default_frame_decoder,
+        max_frame_bytes: int = 524_288,
+        max_fps: float = 4.0,
+        decode_timeout_ms: int = 250,
+        inference_timeout_ms: int = 500,
+    ) -> None:
+        if max_frame_bytes <= 0 or max_fps <= 0:
+            raise ValueError("Vision Stream limits must be positive")
+        self.token_verifier = token_verifier
+        self.face_worker_factory = face_worker_factory
+        self.frame_decoder = frame_decoder
+        self.max_frame_bytes = max_frame_bytes
+        self.max_fps = max_fps
+        self.decode_timeout_ms = decode_timeout_ms
+        self.inference_timeout_ms = inference_timeout_ms
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope.get("type") == "lifespan":
+            await self._lifespan(receive, send)
+            return
+        if scope.get("type") != "websocket":
+            await self._http_not_found(scope, receive, send)
+            return
+        websocket = WebSocket(scope, receive=receive, send=send)
+        if scope.get("path") != "/vision/v1/stream":
+            await websocket.accept()
+            await self._send_close(websocket, code=1008, reason="unauthorized")
+            return
+        await self._handle(websocket)
+
+    async def _lifespan(self, receive: Receive, send: Send) -> None:
+        while True:
+            event = await receive()
+            if event.get("type") == "lifespan.startup":
+                await send({"type": "lifespan.startup.complete"})
+            elif event.get("type") == "lifespan.shutdown":
+                await send({"type": "lifespan.shutdown.complete"})
+                return
+
+    async def _http_not_found(self, scope: Scope, receive: Receive, send: Send) -> None:
+        del scope, receive
+        await send({"type": "http.response.start", "status": 404, "headers": []})
+        await send({"type": "http.response.body", "body": b"not found"})
+
+    async def _handle(self, websocket: WebSocket) -> None:
+        await websocket.accept()
+        worker: FaceWorker | None = None
+        process_task: asyncio.Task[_FrameOutcome] | None = None
+        receive_task: asyncio.Task[dict[str, Any]] | None = None
+        close_requested: tuple[str, str] | None = None
+        try:
+            first = await websocket.receive()
+            if first.get("type") == "websocket.disconnect":
+                return
+            try:
+                hello = self._json_message(first)
+                claims = self._authenticate_hello(hello)
+                selected_encoding = self._select_encoding(hello)
+            except VisionAuthorizationError:
+                await self._send_error(websocket, "unauthorized", retryable=False)
+                await self._send_close(websocket, code=1008, reason="unauthorized")
+                return
+            except VisionStreamProtocolError:
+                await self._send_error(websocket, "invalid_message", retryable=False)
+                await self._send_close(websocket, code=1002, reason="protocol_error")
+                return
+            worker = self.face_worker_factory()
+            await asyncio.to_thread(worker.start)
+            await websocket.send_json(
+                {
+                    "type": "ready",
+                    "protocol_version": "1.0",
+                    "session_id": claims.session_id,
+                    "video_id": claims.video_id,
+                    "selected_frame_encoding": selected_encoding,
+                    "limits": {
+                        "in_flight_limit": 1,
+                        "max_frame_bytes": self.max_frame_bytes,
+                        "max_fps": self.max_fps,
+                        "decode_timeout_ms": self.decode_timeout_ms,
+                        "inference_timeout_ms": self.inference_timeout_ms,
+                    },
+                }
+            )
+            state = _StreamState(claims, selected_encoding)
+            receive_task = asyncio.create_task(websocket.receive())
+            while True:
+                wait_for: set[asyncio.Task[Any]] = {receive_task}
+                if process_task is not None:
+                    wait_for.add(process_task)
+                done, _ = await asyncio.wait(wait_for, return_when=asyncio.FIRST_COMPLETED)
+
+                if process_task is not None and process_task in done:
+                    outcome = process_task.result()
+                    process_task = None
+                    await websocket.send_json(dict(outcome.payload))
+                    if close_requested is not None:
+                        request_id, action = close_requested
+                        await self._send_control_result(
+                            websocket,
+                            request_id=request_id,
+                            action=action,
+                            valid=True,
+                            reason=None,
+                        )
+                        await self._send_close(websocket, code=1000, reason="normal")
+                        return
+
+                if receive_task not in done:
+                    continue
+                event = receive_task.result()
+                receive_task = asyncio.create_task(websocket.receive())
+                event_type = event.get("type")
+                if event_type == "websocket.disconnect":
+                    break
+                if event_type == "websocket.receive" and isinstance(event.get("bytes"), bytes):
+                    try:
+                        binary = decode_binary_frame(
+                            event["bytes"], max_frame_bytes=self.max_frame_bytes
+                        )
+                        state.validate(binary)
+                    except VisionStreamProtocolError as error:
+                        del error
+                        await self._send_error(websocket, "invalid_message", retryable=False)
+                        await self._send_close(websocket, code=1002, reason="protocol_error")
+                        return
+                    rejection = state.rejection_reason(binary.metadata.context)
+                    if rejection is not None:
+                        await websocket.send_json(
+                            self._drop(binary.metadata.context, rejection, retryable=True)
+                        )
+                        event = {}
+                        continue
+                    if process_task is not None:
+                        await websocket.send_json(
+                            self._drop(binary.metadata.context, "in_flight", retryable=True)
+                        )
+                        event = {}
+                        continue
+                    if not state.inference_started:
+                        await self._send_error(websocket, "invalid_message", retryable=False)
+                        await self._send_close(websocket, code=1002, reason="protocol_error")
+                        return
+                    state.accept(binary.metadata.context)
+                    process_task = asyncio.create_task(
+                        self._process_frame(binary, worker, state, claims.session_id)
+                    )
+                    del binary
+                    event = {}
+                    continue
+                if event_type == "websocket.receive" and isinstance(event.get("text"), str):
+                    try:
+                        request_id, action = self._control_message(event)
+                    except VisionStreamProtocolError:
+                        await self._send_error(websocket, "invalid_message", retryable=False)
+                        await self._send_close(websocket, code=1002, reason="protocol_error")
+                        return
+                    if action == "start_inference":
+                        state.inference_started = True
+                        await self._send_control_result(
+                            websocket,
+                            request_id=request_id,
+                            action=action,
+                            valid=True,
+                            reason=None,
+                        )
+                    elif action == "stop_inference":
+                        state.inference_started = False
+                        await self._send_control_result(
+                            websocket,
+                            request_id=request_id,
+                            action=action,
+                            valid=True,
+                            reason=None,
+                        )
+                    elif action == "start_calibration":
+                        await self._send_control_result(
+                            websocket,
+                            request_id=request_id,
+                            action=action,
+                            valid=False,
+                            reason="eye_not_connected",
+                            calibration_id=f"calibration-unavailable-{request_id}",
+                        )
+                    elif action == "stop_session":
+                        if process_task is None:
+                            await self._send_control_result(
+                                websocket,
+                                request_id=request_id,
+                                action=action,
+                                valid=True,
+                                reason=None,
+                            )
+                            await self._send_close(websocket, code=1000, reason="normal")
+                            return
+                        close_requested = (request_id, action)
+                    else:
+                        await self._send_error(websocket, "invalid_message", retryable=False)
+                        await self._send_close(websocket, code=1002, reason="protocol_error")
+                        return
+        except (WebSocketDisconnect, VisionStreamProtocolError):
+            with contextlib.suppress(Exception):
+                await self._send_close(websocket, code=1002, reason="protocol_error")
+        finally:
+            if receive_task is not None:
+                receive_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await receive_task
+            if process_task is not None:
+                with contextlib.suppress(Exception):
+                    await process_task
+            if worker is not None:
+                await asyncio.to_thread(worker.close)
+
+    async def _process_frame(
+        self,
+        binary: DecodedBinaryFrame,
+        worker: FaceWorker,
+        state: "_StreamState",
+        session_id: str,
+    ) -> _FrameOutcome:
+        metadata = binary.metadata
+        context = metadata.context
+        frame: Any | None = None
+        try:
+            if not state.inference_started:
+                return _FrameOutcome(
+                    "drop", self._drop(context, "session_closing", retryable=False)
+                )
+            try:
+                frame = await asyncio.wait_for(
+                    asyncio.to_thread(self.frame_decoder, binary.image_bytes, metadata),
+                    timeout=self.decode_timeout_ms / 1000,
+                )
+            except (asyncio.TimeoutError, VisionStreamProtocolError):
+                return _FrameOutcome(
+                    "drop", self._drop(context, "decode_timeout", retryable=True)
+                )
+            except Exception:
+                return _FrameOutcome(
+                    "error",
+                    self._error("invalid_message", retryable=False, frame=context),
+                )
+            try:
+                observation = await asyncio.to_thread(worker.process, frame, context)
+            except Exception:
+                return _FrameOutcome(
+                    "error",
+                    self._error("vision_unavailable", retryable=True, frame=context),
+                )
+            sample = observation.sample
+            if sample.session_id != session_id or sample.frame_id != context.frame_id:
+                return _FrameOutcome(
+                    "error",
+                    self._error("vision_unavailable", retryable=True, frame=context),
+                )
+            if sample.reason == "timeout":
+                return _FrameOutcome(
+                    "drop", self._drop(context, "inference_timeout", retryable=True)
+                )
+            return _FrameOutcome(
+                "result",
+                {
+                    "type": "result",
+                    "protocol_version": "1.0",
+                    **context.as_payload(),
+                    "gaze_sample": None,
+                    "gaze_reason": "eye_not_connected",
+                    "expression_sample": sample.to_payload(),
+                    "expression_reason": None,
+                },
+            )
+        finally:
+            if frame is not None:
+                close = getattr(frame, "close", None)
+                if callable(close):
+                    close()
+                del frame
+            del binary
+
+    def _authenticate_hello(self, hello: Mapping[str, object]) -> VisionTokenClaims:
+        if hello.get("type") != "hello" or hello.get("protocol_version") != "1.0":
+            raise VisionStreamProtocolError("hello is invalid")
+        session_id = hello.get("session_id")
+        video_id = hello.get("video_id")
+        token = hello.get("stream_token")
+        if not all(isinstance(value, str) and value for value in (session_id, video_id, token)):
+            raise VisionStreamProtocolError("hello credentials are invalid")
+        claims = self.token_verifier.consume(token)
+        if claims is None or claims.session_id != session_id or claims.video_id != video_id:
+            raise VisionAuthorizationError("hello authorization failed")
+        return claims
+
+    def _select_encoding(self, hello: Mapping[str, object]) -> str:
+        offered = hello.get("offered_frame_encodings")
+        if not isinstance(offered, list):
+            raise VisionStreamProtocolError("offered frame encodings are required")
+        for encoding in offered:
+            if encoding in ("image/jpeg", "image/webp"):
+                return encoding
+        raise VisionStreamProtocolError("no supported frame encoding was offered")
+
+    @classmethod
+    def _control_message(cls, event: Mapping[str, object]) -> tuple[str, str]:
+        control = cls._json_message(event)
+        if set(control) - _CONTROL_FIELDS:
+            raise VisionStreamProtocolError("control message has unknown fields")
+        if control.get("type") != "control" or control.get("protocol_version") != "1.0":
+            raise VisionStreamProtocolError("control message is invalid")
+        request_id = control.get("request_id")
+        action = control.get("action")
+        if not isinstance(request_id, str) or not request_id:
+            raise VisionStreamProtocolError("control request_id is invalid")
+        if not isinstance(action, str) or action not in _CONTROL_ACTIONS:
+            raise VisionStreamProtocolError("control action is invalid")
+        if action == "start_calibration":
+            payload = control.get("payload")
+            cls._validate_calibration_payload(payload)
+        elif "payload" in control:
+            raise VisionStreamProtocolError("control payload is not allowed")
+        return request_id, action
+
+    @staticmethod
+    def _validate_calibration_payload(payload: object) -> None:
+        if not isinstance(payload, Mapping) or set(payload) != {"pattern_id", "points"}:
+            raise VisionStreamProtocolError("calibration payload is invalid")
+        pattern_id = payload.get("pattern_id")
+        points = payload.get("points")
+        if not isinstance(pattern_id, str) or not pattern_id:
+            raise VisionStreamProtocolError("calibration pattern_id is invalid")
+        if not isinstance(points, list) or not 1 <= len(points) <= 32:
+            raise VisionStreamProtocolError("calibration points are invalid")
+        for point in points:
+            if (
+                not isinstance(point, list)
+                or len(point) != 2
+                or any(
+                    isinstance(value, bool)
+                    or not isinstance(value, (int, float))
+                    or not 0 <= value <= 1
+                    for value in point
+                )
+            ):
+                raise VisionStreamProtocolError("calibration points are invalid")
+
+    @staticmethod
+    def _json_message(event: Mapping[str, object]) -> Mapping[str, object]:
+        text = event.get("text")
+        if not isinstance(text, str):
+            raise VisionStreamProtocolError("expected a text JSON message")
+        try:
+            value = json.loads(text)
+        except json.JSONDecodeError as error:
+            raise VisionStreamProtocolError("text message is not valid JSON") from error
+        if not isinstance(value, Mapping):
+            raise VisionStreamProtocolError("text message must be an object")
+        return value
+
+    @staticmethod
+    async def _send_control_result(
+        websocket: WebSocket,
+        *,
+        request_id: str,
+        action: str,
+        valid: bool,
+        reason: str | None,
+        calibration_id: str | None = None,
+    ) -> None:
+        payload: dict[str, object] = {
+            "type": "control_result",
+            "protocol_version": "1.0",
+            "request_id": request_id,
+            "action": action,
+            "valid": valid,
+            "reason": reason,
+        }
+        if calibration_id is not None:
+            payload["calibration_id"] = calibration_id
+        await websocket.send_json(payload)
+
+    @staticmethod
+    async def _send_error(
+        websocket: WebSocket,
+        code: str,
+        *,
+        retryable: bool,
+        frame: StreamFrameContext | None = None,
+    ) -> None:
+        await websocket.send_json(VisionStreamApp._error(code, retryable=retryable, frame=frame))
+
+    @staticmethod
+    def _error(
+        code: str,
+        *,
+        retryable: bool,
+        frame: StreamFrameContext | None = None,
+    ) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "type": "error",
+            "protocol_version": "1.0",
+            "code": code,
+            "retryable": retryable,
+        }
+        if frame is not None:
+            payload["frame"] = frame.as_payload()
+        return payload
+
+    @staticmethod
+    def _drop(
+        context: StreamFrameContext,
+        reason: str,
+        *,
+        retryable: bool,
+    ) -> dict[str, object]:
+        return {
+            "type": "drop",
+            "protocol_version": "1.0",
+            **context.as_payload(),
+            "reason": reason,
+            "retryable": retryable,
+        }
+
+    @staticmethod
+    async def _send_close(websocket: WebSocket, *, code: int, reason: str) -> None:
+        await websocket.send_json(
+            {
+                "type": "close",
+                "protocol_version": "1.0",
+                "code": code,
+                "reason": reason,
+                "retryable": code in (1011, 1013),
+            }
+        )
+        await websocket.close(code=code, reason=reason)
+
+
+@dataclass(slots=True)
+class _StreamState:
+    claims: VisionTokenClaims
+    selected_encoding: str
+    inference_started: bool = False
+    current_epoch: int | None = None
+    last_sequence: int = -1
+    frame_keys: set[tuple[int, str]] | None = None
+    frame_order: deque[tuple[int, str]] | None = None
+
+    def __post_init__(self) -> None:
+        self.frame_keys = set()
+        self.frame_order = deque(maxlen=512)
+
+    def validate(self, binary: DecodedBinaryFrame) -> None:
+        context = binary.metadata.context
+        if context.session_id != self.claims.session_id or context.video_id != self.claims.video_id:
+            raise VisionStreamProtocolError("frame session binding does not match hello")
+        if binary.metadata.encoding != self.selected_encoding:
+            raise VisionStreamProtocolError("frame encoding does not match ready")
+
+    def rejection_reason(self, context: StreamFrameContext) -> str | None:
+        key = (context.playback_epoch, context.frame_id)
+        if key in (self.frame_keys or set()):
+            return "duplicate_frame"
+        if self.current_epoch is not None and context.playback_epoch < self.current_epoch:
+            return "stale_epoch"
+        if context.sequence <= self.last_sequence:
+            return "out_of_order"
+        return None
+
+    def accept(self, context: StreamFrameContext) -> None:
+        self.current_epoch = max(self.current_epoch or context.playback_epoch, context.playback_epoch)
+        self.last_sequence = context.sequence
+        key = (context.playback_epoch, context.frame_id)
+        assert self.frame_keys is not None and self.frame_order is not None
+        if len(self.frame_order) == self.frame_order.maxlen:
+            self.frame_keys.discard(self.frame_order.popleft())
+        self.frame_order.append(key)
+        self.frame_keys.add(key)
