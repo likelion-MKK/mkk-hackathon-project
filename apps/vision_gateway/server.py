@@ -7,9 +7,10 @@ import contextlib
 import json
 import secrets
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from time import monotonic
 from typing import Any, Callable, Mapping, Protocol
 
 from mcm_face import FaceWorker, SelectedFaceAdapter
@@ -32,6 +33,38 @@ _CONTROL_ACTIONS = frozenset(
 _CONTROL_FIELDS = frozenset(
     {"type", "protocol_version", "request_id", "action", "payload"}
 )
+
+
+def _close_frame(frame: Any) -> None:
+    close = getattr(frame, "close", None)
+    if callable(close):
+        with contextlib.suppress(Exception):
+            close()
+
+
+def _consume_task(task: asyncio.Task[Any]) -> None:
+    with contextlib.suppress(BaseException):
+        task.result()
+
+
+def _same_frame_context(
+    sample: Any,
+    context: StreamFrameContext,
+    *,
+    session_id: str,
+) -> bool:
+    return all(
+        (
+            sample.session_id == session_id,
+            sample.session_id == context.session_id,
+            sample.video_id == context.video_id,
+            sample.frame_id == context.frame_id,
+            sample.sequence == context.sequence,
+            sample.captured_at_mono_ms == context.captured_at_mono_ms,
+            sample.video_time_ms == context.video_time_ms,
+            sample.playback_epoch == context.playback_epoch,
+        )
+    )
 
 
 class VisionTokenVerifier(Protocol):
@@ -113,8 +146,15 @@ class VisionStreamApp:
         max_fps: float = 4.0,
         decode_timeout_ms: int = 250,
         inference_timeout_ms: int = 500,
+        worker_cleanup_timeout_ms: int = 250,
     ) -> None:
-        if max_frame_bytes <= 0 or max_fps <= 0:
+        if (
+            max_frame_bytes <= 0
+            or max_fps <= 0
+            or decode_timeout_ms <= 0
+            or inference_timeout_ms <= 0
+            or worker_cleanup_timeout_ms <= 0
+        ):
             raise ValueError("Vision Stream limits must be positive")
         self.token_verifier = token_verifier
         self.face_worker_factory = face_worker_factory
@@ -123,6 +163,7 @@ class VisionStreamApp:
         self.max_fps = max_fps
         self.decode_timeout_ms = decode_timeout_ms
         self.inference_timeout_ms = inference_timeout_ms
+        self.worker_cleanup_timeout_ms = worker_cleanup_timeout_ms
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope.get("type") == "lifespan":
@@ -157,6 +198,7 @@ class VisionStreamApp:
         worker: FaceWorker | None = None
         process_task: asyncio.Task[_FrameOutcome] | None = None
         receive_task: asyncio.Task[dict[str, Any]] | None = None
+        state: _StreamState | None = None
         close_requested: tuple[str, str] | None = None
         try:
             first = await websocket.receive()
@@ -192,7 +234,7 @@ class VisionStreamApp:
                     },
                 }
             )
-            state = _StreamState(claims, selected_encoding)
+            state = _StreamState(claims, selected_encoding, max_fps=self.max_fps)
             receive_task = asyncio.create_task(websocket.receive())
             while True:
                 wait_for: set[asyncio.Task[Any]] = {receive_task}
@@ -241,9 +283,16 @@ class VisionStreamApp:
                         )
                         event = {}
                         continue
-                    if process_task is not None:
+                    if process_task is not None or state.has_pending_work:
                         await websocket.send_json(
                             self._drop(binary.metadata.context, "in_flight", retryable=True)
+                        )
+                        event = {}
+                        continue
+                    rate_rejection = state.rate_rejection_reason()
+                    if rate_rejection is not None:
+                        await websocket.send_json(
+                            self._drop(binary.metadata.context, rate_rejection, retryable=True)
                         )
                         event = {}
                         continue
@@ -320,7 +369,7 @@ class VisionStreamApp:
                 with contextlib.suppress(Exception):
                     await process_task
             if worker is not None:
-                await asyncio.to_thread(worker.close)
+                await self._cleanup_worker(worker, state)
 
     async def _process_frame(
         self,
@@ -332,19 +381,37 @@ class VisionStreamApp:
         metadata = binary.metadata
         context = metadata.context
         frame: Any | None = None
+        frame_cleanup_deferred = False
+        decode_task: asyncio.Task[Any] | None = None
+        worker_task: asyncio.Task[Any] | None = None
         try:
             if not state.inference_started:
                 return _FrameOutcome(
                     "drop", self._drop(context, "session_closing", retryable=False)
                 )
             try:
+                decode_task = asyncio.create_task(
+                    asyncio.to_thread(self.frame_decoder, binary.image_bytes, metadata)
+                )
                 frame = await asyncio.wait_for(
-                    asyncio.to_thread(self.frame_decoder, binary.image_bytes, metadata),
+                    asyncio.shield(decode_task),
                     timeout=self.decode_timeout_ms / 1000,
                 )
-            except (asyncio.TimeoutError, VisionStreamProtocolError):
+            except asyncio.TimeoutError:
+                assert decode_task is not None
+                state.defer_cleanup(decode_task, _close_frame)
+                decode_task = None
                 return _FrameOutcome(
                     "drop", self._drop(context, "decode_timeout", retryable=True)
+                )
+            except asyncio.CancelledError:
+                if decode_task is not None and not decode_task.done():
+                    state.defer_cleanup(decode_task, _close_frame)
+                    decode_task = None
+                raise
+            except VisionStreamProtocolError:
+                return _FrameOutcome(
+                    "drop", self._drop(context, "decode_invalid", retryable=False)
                 )
             except Exception:
                 return _FrameOutcome(
@@ -352,14 +419,42 @@ class VisionStreamApp:
                     self._error("invalid_message", retryable=False, frame=context),
                 )
             try:
-                observation = await asyncio.to_thread(worker.process, frame, context)
+                worker_task = asyncio.create_task(
+                    asyncio.to_thread(worker.process, frame, context)
+                )
+                observation = await asyncio.wait_for(
+                    asyncio.shield(worker_task),
+                    timeout=self.inference_timeout_ms / 1000,
+                )
+            except asyncio.TimeoutError:
+                assert worker_task is not None
+                captured_frame = frame
+                state.defer_cleanup(
+                    worker_task,
+                    lambda _result: _close_frame(captured_frame),
+                )
+                frame_cleanup_deferred = True
+                worker_task = None
+                return _FrameOutcome(
+                    "drop", self._drop(context, "inference_timeout", retryable=True)
+                )
+            except asyncio.CancelledError:
+                if worker_task is not None and not worker_task.done():
+                    captured_frame = frame
+                    state.defer_cleanup(
+                        worker_task,
+                        lambda _result: _close_frame(captured_frame),
+                    )
+                    worker_task = None
+                    frame_cleanup_deferred = True
+                raise
             except Exception:
                 return _FrameOutcome(
                     "error",
                     self._error("vision_unavailable", retryable=True, frame=context),
                 )
             sample = observation.sample
-            if sample.session_id != session_id or sample.frame_id != context.frame_id:
+            if not _same_frame_context(sample, context, session_id=session_id):
                 return _FrameOutcome(
                     "error",
                     self._error("vision_unavailable", retryable=True, frame=context),
@@ -381,12 +476,50 @@ class VisionStreamApp:
                 },
             )
         finally:
-            if frame is not None:
-                close = getattr(frame, "close", None)
-                if callable(close):
-                    close()
-                del frame
+            if frame is not None and not frame_cleanup_deferred:
+                _close_frame(frame)
+            del frame
             del binary
+
+    async def _cleanup_worker(
+        self,
+        worker: FaceWorker,
+        state: "_StreamState | None",
+    ) -> None:
+        if state is not None:
+            pending = state.pending_tasks_snapshot()
+            if pending:
+                pending_group = asyncio.gather(*pending, return_exceptions=True)
+                try:
+                    await asyncio.wait_for(
+                        asyncio.shield(pending_group),
+                        timeout=self.worker_cleanup_timeout_ms / 1000,
+                    )
+                except asyncio.TimeoutError:
+                    cleanup_task = asyncio.create_task(
+                        self._close_worker_after(worker, pending_group)
+                    )
+                    cleanup_task.add_done_callback(_consume_task)
+                    return
+        await self._close_worker_with_deadline(worker)
+
+    async def _close_worker_after(self, worker: FaceWorker, pending: Any) -> None:
+        with contextlib.suppress(BaseException):
+            await pending
+        await self._close_worker_with_deadline(worker)
+
+    async def _close_worker_with_deadline(self, worker: FaceWorker) -> None:
+        close_task = asyncio.create_task(asyncio.to_thread(worker.close))
+        try:
+            await asyncio.wait_for(
+                asyncio.shield(close_task),
+                timeout=self.worker_cleanup_timeout_ms / 1000,
+            )
+        except asyncio.TimeoutError:
+            close_task.add_done_callback(_consume_task)
+        except Exception:
+            with contextlib.suppress(BaseException):
+                close_task.result()
 
     def _authenticate_hello(self, hello: Mapping[str, object]) -> VisionTokenClaims:
         if hello.get("type") != "hello" or hello.get("protocol_version") != "1.0":
@@ -548,11 +681,14 @@ class VisionStreamApp:
 class _StreamState:
     claims: VisionTokenClaims
     selected_encoding: str
+    max_fps: float
     inference_started: bool = False
     current_epoch: int | None = None
     last_sequence: int = -1
+    last_received_at: float | None = None
     frame_keys: set[tuple[int, str]] | None = None
     frame_order: deque[tuple[int, str]] | None = None
+    pending_tasks: set[asyncio.Task[Any]] = field(default_factory=set)
 
     def __post_init__(self) -> None:
         self.frame_keys = set()
@@ -575,7 +711,40 @@ class _StreamState:
             return "out_of_order"
         return None
 
+    @property
+    def has_pending_work(self) -> bool:
+        return bool(self.pending_tasks)
+
+    def rate_rejection_reason(self) -> str | None:
+        if self.last_received_at is None:
+            return None
+        if monotonic() - self.last_received_at < 1.0 / self.max_fps:
+            return "rate_limited"
+        return None
+
+    def defer_cleanup(
+        self,
+        task: asyncio.Task[Any],
+        cleanup: Callable[[Any], None],
+    ) -> None:
+        self.pending_tasks.add(task)
+
+        def on_done(done: asyncio.Task[Any]) -> None:
+            self.pending_tasks.discard(done)
+            try:
+                result = done.result()
+            except BaseException:
+                return
+            with contextlib.suppress(Exception):
+                cleanup(result)
+
+        task.add_done_callback(on_done)
+
+    def pending_tasks_snapshot(self) -> tuple[asyncio.Task[Any], ...]:
+        return tuple(self.pending_tasks)
+
     def accept(self, context: StreamFrameContext) -> None:
+        self.last_received_at = monotonic()
         self.current_epoch = max(self.current_epoch or context.playback_epoch, context.playback_epoch)
         self.last_sequence = context.sequence
         key = (context.playback_epoch, context.frame_id)
