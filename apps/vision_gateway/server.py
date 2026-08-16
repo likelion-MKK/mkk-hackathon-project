@@ -411,7 +411,8 @@ class VisionStreamApp:
                 raise
             except VisionStreamProtocolError:
                 return _FrameOutcome(
-                    "drop", self._drop(context, "decode_invalid", retryable=False)
+                    "error",
+                    self._error("invalid_message", retryable=False, frame=context),
                 )
             except Exception:
                 return _FrameOutcome(
@@ -719,7 +720,7 @@ class _StreamState:
         if self.last_received_at is None:
             return None
         if monotonic() - self.last_received_at < 1.0 / self.max_fps:
-            return "rate_limited"
+            return "fps_limited"
         return None
 
     def defer_cleanup(
@@ -734,7 +735,7 @@ class _StreamState:
             try:
                 result = done.result()
             except BaseException:
-                return
+                result = None
             with contextlib.suppress(Exception):
                 cleanup(result)
 

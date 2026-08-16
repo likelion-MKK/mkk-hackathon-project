@@ -8,7 +8,10 @@ from mcm_face import FakeFaceAdapter, FaceWorker
 from starlette.testclient import TestClient
 
 from apps.vision_gateway.server import LocalVisionTokenIssuer, VisionStreamApp
-from apps.vision_gateway.vision_stream import encode_binary_frame
+from apps.vision_gateway.vision_stream import (
+    VisionStreamProtocolError,
+    encode_binary_frame,
+)
 
 
 def frame_metadata(
@@ -475,6 +478,195 @@ def test_max_fps_is_enforced_at_frame_ingress() -> None:
                     b"\xff\xd8\xff\xd9",
                 )
             )
-            rate_limited = websocket.receive_json()
-            assert rate_limited["type"] == "drop"
-            assert rate_limited["reason"] == "rate_limited"
+            fps_limited = websocket.receive_json()
+            assert fps_limited["type"] == "drop"
+            assert fps_limited["reason"] == "fps_limited"
+
+
+def test_late_worker_exception_still_closes_deferred_frame() -> None:
+    started = threading.Event()
+    release = threading.Event()
+    frame_closed = threading.Event()
+    worker_closed = threading.Event()
+
+    class EphemeralTestFrame:
+        def close(self) -> None:
+            frame_closed.set()
+
+    class LateRaisingWorker:
+        def start(self) -> None:
+            pass
+
+        def process(self, _frame: Any, _context: Any) -> Any:
+            started.set()
+            release.wait(timeout=2)
+            raise RuntimeError("late worker failure")
+
+        def close(self) -> None:
+            worker_closed.set()
+
+    worker = LateRaisingWorker()
+    app, issuer = make_app(
+        lambda _image_bytes, _metadata: EphemeralTestFrame(),
+        face_worker_factory=lambda: worker,
+        inference_timeout_ms=20,
+        worker_cleanup_timeout_ms=500,
+    )
+    token = issuer.issue("session-local-001", "mcm-lookbook-example-v1")["stream_token"]
+
+    with TestClient(app) as client:
+        with client.websocket_connect("/vision/v1/stream") as websocket:
+            websocket.send_json(hello(token))
+            assert websocket.receive_json()["type"] == "ready"
+            websocket.send_json(
+                {
+                    "type": "control",
+                    "protocol_version": "1.0",
+                    "request_id": "late-error-start",
+                    "action": "start_inference",
+                }
+            )
+            assert websocket.receive_json()["valid"] is True
+            websocket.send_bytes(
+                encode_binary_frame(frame_metadata(), b"\xff\xd8\xff\xd9")
+            )
+            assert started.wait(timeout=1)
+            assert websocket.receive_json()["reason"] == "inference_timeout"
+            assert not frame_closed.is_set()
+
+            release.set()
+            assert frame_closed.wait(timeout=1)
+            websocket.send_json(
+                {
+                    "type": "control",
+                    "protocol_version": "1.0",
+                    "request_id": "late-error-stop",
+                    "action": "stop_session",
+                }
+            )
+            assert websocket.receive_json()["type"] == "control_result"
+            assert websocket.receive_json()["type"] == "close"
+
+    assert worker_closed.wait(timeout=1)
+
+
+def test_face_worker_internal_timeout_releases_gateway_frame_after_return() -> None:
+    started = threading.Event()
+    release = threading.Event()
+    frame_closed = threading.Event()
+    worker_closed = threading.Event()
+
+    class BlockingAdapter:
+        def __init__(self) -> None:
+            self.delegate = FakeFaceAdapter()
+
+        def metadata(self) -> Any:
+            return self.delegate.metadata()
+
+        def initialize(self) -> None:
+            self.delegate.initialize()
+
+        def warmup(self) -> None:
+            self.delegate.warmup()
+
+        def infer(self, frame: Any, context: Any) -> Any:
+            started.set()
+            release.wait(timeout=2)
+            return self.delegate.infer(frame, context)
+
+        def dispose(self) -> None:
+            self.delegate.dispose()
+
+    class EphemeralTestFrame:
+        def close(self) -> None:
+            frame_closed.set()
+
+    class TrackingWorker:
+        def __init__(self) -> None:
+            self.delegate = FaceWorker(BlockingAdapter(), timeout_ms=50)
+
+        def start(self) -> None:
+            self.delegate.start()
+
+        def process(self, frame: Any, context: Any) -> Any:
+            return self.delegate.process(frame, context)
+
+        def close(self) -> None:
+            worker_closed.set()
+            self.delegate.close()
+
+    worker = TrackingWorker()
+    app, issuer = make_app(
+        lambda _image_bytes, _metadata: EphemeralTestFrame(),
+        face_worker_factory=lambda: worker,
+        inference_timeout_ms=10,
+        worker_cleanup_timeout_ms=500,
+    )
+    token = issuer.issue("session-local-001", "mcm-lookbook-example-v1")["stream_token"]
+
+    with TestClient(app) as client:
+        with client.websocket_connect("/vision/v1/stream") as websocket:
+            websocket.send_json(hello(token))
+            assert websocket.receive_json()["type"] == "ready"
+            websocket.send_json(
+                {
+                    "type": "control",
+                    "protocol_version": "1.0",
+                    "request_id": "face-timeout-start",
+                    "action": "start_inference",
+                }
+            )
+            assert websocket.receive_json()["valid"] is True
+            websocket.send_bytes(
+                encode_binary_frame(frame_metadata(), b"\xff\xd8\xff\xd9")
+            )
+            assert started.wait(timeout=1)
+            assert websocket.receive_json()["reason"] == "inference_timeout"
+            assert not frame_closed.is_set()
+
+            # FaceWorker returns its own invalid timeout before the adapter's
+            # blocked call is released. The Gateway must close the frame only
+            # after that worker call has returned to the Gateway boundary.
+            assert frame_closed.wait(timeout=1)
+            release.set()
+            websocket.send_json(
+                {
+                    "type": "control",
+                    "protocol_version": "1.0",
+                    "request_id": "face-timeout-stop",
+                    "action": "stop_session",
+                }
+            )
+            assert websocket.receive_json()["type"] == "control_result"
+            assert websocket.receive_json()["type"] == "close"
+
+    assert worker_closed.wait(timeout=1)
+
+
+def test_decoder_error_uses_contract_error_code() -> None:
+    def decoder(_image_bytes: bytes, _metadata: Any) -> object:
+        raise VisionStreamProtocolError("invalid image")
+
+    app, issuer = make_app(decoder)
+    token = issuer.issue("session-local-001", "mcm-lookbook-example-v1")["stream_token"]
+
+    with TestClient(app) as client:
+        with client.websocket_connect("/vision/v1/stream") as websocket:
+            websocket.send_json(hello(token))
+            assert websocket.receive_json()["type"] == "ready"
+            websocket.send_json(
+                {
+                    "type": "control",
+                    "protocol_version": "1.0",
+                    "request_id": "decoder-error-start",
+                    "action": "start_inference",
+                }
+            )
+            assert websocket.receive_json()["valid"] is True
+            websocket.send_bytes(
+                encode_binary_frame(frame_metadata(), b"\xff\xd8\xff\xd9")
+            )
+            error = websocket.receive_json()
+            assert error["type"] == "error"
+            assert error["code"] == "invalid_message"
+            assert error["frame"]["frame_id"] == "frame-0001"
