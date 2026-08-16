@@ -44,9 +44,6 @@ uv run pytest -c pyproject.toml --rootdir . ../../tests/contract ../../tests/int
 test에서는 추천 입력에 직접 사용하지 않고, 추천 결과는 항상 `engine_mode=mock`으로
 검증한다. 운영 acceptance는 별도의 v2 replay에서 Eye·Face 결합 관찰값, self-hosted AI
 경계, 정확히 한 상품과 transient buffer 폐기를 확인해야 한다.
-없으므로 P001/P002 AOI를 가리키는 파생 gaze replay port를 사용한다. Face 결과는
-추천 입력에 직접 사용하지 않고, 추천 결과는 항상 `engine_mode=mock`으로 검증한다.
-
 ## D8 Development Camera Slice
 
 `test_d8_live_camera_slice.py`는 실제 장치나 모델 download 없이 synthetic camera와
