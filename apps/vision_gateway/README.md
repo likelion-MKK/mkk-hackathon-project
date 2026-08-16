@@ -7,6 +7,27 @@ It validates a one-time in-memory token, receives the v1 binary frame envelope,
 and returns only a derived `ExpressionSample`. Until EyeTrax is connected,
 `gaze_sample` is explicitly `null` with `gaze_reason=eye_not_connected`.
 
+## 브라우저 localhost Face-only live 개발
+
+`local_server.py`는 PR #44의 WebSocket Gateway에 개발용 일회성 token bootstrap만
+추가한다. 원본 frame은 계속 binary WebSocket과 Worker 메모리 경계 안에서만 처리하며,
+token은 URL·로그·파일에 기록하지 않는다. 이 경로는 운영용 Backend token endpoint가
+아니다.
+
+```powershell
+Set-Location apps/api
+uv sync --locked
+Set-Location ../..
+uv run --project apps/api --with "mediapipe==1.0.0" python -m uvicorn `
+  apps.vision_gateway.local_server:app --host 127.0.0.1 --port 8765
+```
+
+Kiosk는 `.env.local`에서 `VITE_VISION_MODE=live`와
+`VITE_VISION_TOKEN_MODE=local`을 설정한다. 현재 Gateway는 Face-only이므로
+`gaze_sample=null`, `gaze_reason=eye_not_connected`를 반환한다. Backend의 공식
+`/api/v1/sessions/{session_id}/vision-stream-token` 연결과 EyeTrax fan-out은
+별도 작업이다.
+
 The D7 in-process harness bounds its wait for a timed-out adapter completion.
 If that bound is exceeded, `dispatch_next()` returns the fail-closed observation
 while retaining `in_flight` and the frame until the adapter completion callback;
