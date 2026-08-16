@@ -240,7 +240,7 @@ def test_ready_initialize_preserves_cache_but_dispose_clears_it() -> None:
     assert backend.infer_count == 2
 
 
-def test_actual_mediapipe_landmark_with_unset_quality_is_unverified() -> None:
+def test_actual_mediapipe_landmark_with_unset_quality_uses_geometry_proxy() -> None:
     mediapipe = pytest.importorskip("mediapipe")
     del mediapipe
     from mediapipe.tasks.python.components.containers.landmark import NormalizedLandmark
@@ -249,7 +249,7 @@ def test_actual_mediapipe_landmark_with_unset_quality_is_unverified() -> None:
     landmark = NormalizedLandmark(x=0.1, y=0.2, z=0.3)
     assert landmark.presence is None
     assert landmark.visibility is None
-    assert _quality_from_landmarks(((landmark,),), face_count=1) is None
+    assert _quality_from_landmarks(((landmark,),), face_count=1) == 0.0
 
 
 def test_quality_requires_a_complete_supported_landmark_channel() -> None:
@@ -257,12 +257,12 @@ def test_quality_requires_a_complete_supported_landmark_channel() -> None:
     from mcm_face.adapters.selected import _quality_from_landmarks
 
     partial = (
-        SimpleNamespace(presence=0.9, visibility=None),
-        SimpleNamespace(presence=None, visibility=None),
+        SimpleNamespace(x=0.4, y=0.4, z=0.0, presence=0.9, visibility=None),
+        SimpleNamespace(x=0.6, y=0.6, z=0.0, presence=None, visibility=None),
     )
     complete = (
-        SimpleNamespace(presence=0.8, visibility=None),
-        SimpleNamespace(presence=1.0, visibility=None),
+        SimpleNamespace(x=0.4, y=0.4, z=0.0, presence=0.8, visibility=None),
+        SimpleNamespace(x=0.6, y=0.6, z=0.0, presence=1.0, visibility=None),
     )
-    assert _quality_from_landmarks((partial,), face_count=1) is None
+    assert _quality_from_landmarks((partial,), face_count=1) == 1.0
     assert _quality_from_landmarks((complete,), face_count=1) == pytest.approx(0.9)

@@ -10,6 +10,11 @@ dependencies = [
   "psycopg[binary]>=3.2,<4",
 ]
 
+[project.optional-dependencies]
+camera = [
+  "mcm-face-service[camera]; python_full_version == '3.13.15'",
+]
+
 [dependency-groups]
 dev = [
   "httpx>=0.27,<1",

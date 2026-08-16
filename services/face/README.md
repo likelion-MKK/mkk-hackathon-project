@@ -39,8 +39,11 @@ python scripts/validate_contracts.py
 원문 context tuple 대신 전체 context로 만든 결정적 `event_id` digest를 key로 사용한다.
 cache value에도 원문 session/frame/video ID가 없는 context-free canonical 파생 필드만 둔다.
 cache는 최초 initialize, TTL 만료와 dispose 경계에서 정리한다. MediaPipe landmark의
-`presence`/`visibility` 품질 channel이 완전하게
-제공되지 않으면 quality를 임의 추정하지 않고 `low_quality`로 fail-closed 처리한다.
+`presence`/`visibility` 품질 channel이 완전하면 그 평균을 사용한다. D8 개발 camera
+경로에서 channel이 비어 있으면 finite landmark, 화면 내부 비율과 얼굴 bbox extent로
+기술적 usability proxy를 계산한다. 기본식과 한계는
+[`apps/vision_gateway/D8_README.md`](../../apps/vision_gateway/D8_README.md)에 기록하며,
+감정 정확도나 고객 선호 confidence로 사용하지 않는다.
 
 카메라 기능은 기본 테스트 의존성에서 분리되어 있다.
 
@@ -80,8 +83,10 @@ uv run --extra camera camera-preview --device 0 --width 640 --height 480
 preview는 자동 테스트와 CI에서 실행하지 않는다. 운영 Kiosk의 카메라 화면·권한 UX는
 `apps/kiosk`와 D8 live gate의 별도 책임이다.
 
-운영 브라우저의 권한 UX, WSS Gateway, 실제 Kiosk-to-server 지연, 현장 품질 threshold,
-장시간·동시 세션과 worker process 강제 재시작은 D8 live gate에서 검증한다.
+Face-only D6 명령과 별도로 D8은 실제 camera를 D7 Eye/AOI·ReactionBatch·API ingest에
+연결하는 개발 전용 smoke를 제공한다. 운영 브라우저의 권한 UX, WSS Gateway, 실제
+Kiosk-to-server 지연, 현장 품질 threshold, 장시간·동시 세션과 worker process 강제
+재시작은 D9/운영 gate에서 검증한다.
 
 ## Fake Adapter 사용
 

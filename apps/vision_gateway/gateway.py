@@ -5,12 +5,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from hashlib import sha256
 from threading import RLock
-from typing import Callable, Literal, Mapping, Sequence
+from typing import Callable, Literal, Mapping, Protocol, Sequence
 
 from mcm_face import ExpressionSample, FaceWorker
 
 
-TransportMode = Literal["synthetic", "replay"]
+TransportMode = Literal["synthetic", "replay", "camera_development"]
+
+
+class TransientFrame(Protocol):
+    """Memory-only frame whose resources can be released deterministically."""
+
+    def close(self) -> None: ...
 
 
 class GatewayStateError(RuntimeError):
@@ -26,8 +32,8 @@ class VisionHandshake:
     def __post_init__(self) -> None:
         if not self.session_id or not self.video_id:
             raise ValueError("session_id and video_id are required")
-        if self.mode not in ("synthetic", "replay"):
-            raise ValueError("D7 mode must be synthetic or replay")
+        if self.mode not in ("synthetic", "replay", "camera_development"):
+            raise ValueError("vision harness mode must be synthetic, replay, or camera_development")
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,7 +128,7 @@ class ReplayEyePort:
         self._cursor = 0
         self._closed = False
 
-    def infer(self, frame: SyntheticFrame, context: FrameEnvelope) -> D7GazeSample:
+    def infer(self, frame: TransientFrame, context: FrameEnvelope) -> D7GazeSample:
         if self._closed:
             raise GatewayStateError("Eye replay port is closed")
         del frame
@@ -244,7 +250,7 @@ class DropNotice:
 
 
 FaceWorkerFactory = Callable[[], FaceWorker]
-FrameFactory = Callable[[str], SyntheticFrame]
+FrameFactory = Callable[[str], TransientFrame]
 
 
 class InProcessVisionGateway:
@@ -310,8 +316,9 @@ class InProcessVisionGateway:
                 return None
             envelope, self._pending = self._pending, None
             self._in_flight = True
-        frame = self._frame_factory(envelope.frame_id)
+        frame: TransientFrame | None = None
         try:
+            frame = self._frame_factory(envelope.frame_id)
             gaze = self._eye_port.infer(frame, envelope)
             worker = self._worker
             if worker is None:
@@ -336,8 +343,9 @@ class InProcessVisionGateway:
                 ) or joined
             return joined or self._joiner.flush_nearest()
         finally:
-            frame.close()
-            del frame
+            if frame is not None:
+                frame.close()
+                del frame
             with self._lock:
                 self._in_flight = False
 
