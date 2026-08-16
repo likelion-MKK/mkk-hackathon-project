@@ -85,6 +85,8 @@ const configuredVisionMode = import.meta.env.VITE_VISION_MODE?.trim() || "replay
 if (configuredVisionMode !== "replay") {
   throw new Error("VITE_VISION_MODE currently supports only the approved replay boundary.");
 }
+const enableAoiDebugOverlay =
+  import.meta.env.DEV || import.meta.env.VITE_KIOSK_DEBUG_AOI === "true";
 const MAX_CAPTURED_FRAME_LAYOUTS = 2_048;
 
 function rememberCapturedFrameLayout(
@@ -878,6 +880,8 @@ function App() {
   const [consentIssue, setConsentIssue] = useState<ConsentIssue | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [cameraState, setCameraState] = useState<CameraDisplayState>("idle");
+  const [latestGazeSample, setLatestGazeSample] = useState<GazeSample | null>(null);
+  const [latestGazeLayout, setLatestGazeLayout] = useState<VideoLayout | null>(null);
   const [flowController] = useState(() => new AsyncFlowController());
   const gazeSamples = useRef<GazeSample[]>([]);
   const videoLayoutsByFrameId = useRef<Map<string, VideoLayout>>(new Map());
@@ -898,6 +902,8 @@ function App() {
     const layoutsByFrameId = videoLayoutsByFrameId.current;
     const removeGazeListener = visionClient.onGazeSample((sample) => {
       gazeSamples.current.push(sample);
+      setLatestGazeSample(sample);
+      setLatestGazeLayout(layoutsByFrameId.get(sample.frame_id) ?? null);
     });
     const removeExpressionListener = visionClient.onExpressionSample((sample) => {
       expressionSamples.current.push(sample);
@@ -943,6 +949,8 @@ function App() {
     setConsentIssue(null);
     setIsStarting(false);
     setCameraState("idle");
+    setLatestGazeSample(null);
+    setLatestGazeLayout(null);
     send("RESTART");
 
     try {
@@ -972,6 +980,8 @@ function App() {
     setConsentIssue(null);
     setIsStarting(false);
     setCameraState("idle");
+    setLatestGazeSample(null);
+    setLatestGazeLayout(null);
     send("CANCEL");
 
     try {
@@ -992,6 +1002,8 @@ function App() {
     expressionSamples.current.length = 0;
     setIsStarting(false);
     setCameraState("idle");
+    setLatestGazeSample(null);
+    setLatestGazeLayout(null);
     setConsentIssue("idle-timeout");
 
     void flowController.runSerialized(() => visionClient.stopSession()).catch(() => {
@@ -1007,6 +1019,8 @@ function App() {
     gazeSamples.current.length = 0;
     videoLayoutsByFrameId.current.clear();
     expressionSamples.current.length = 0;
+    setLatestGazeSample(null);
+    setLatestGazeLayout(null);
     const generation = flowController.invalidateCurrentFlow();
     const abortController = new AbortController();
     sessionStartAbortController.current = abortController;
@@ -1195,6 +1209,8 @@ function App() {
         gazeSamples.current.length = 0;
         videoLayoutsByFrameId.current.clear();
         expressionSamples.current.length = 0;
+        setLatestGazeSample(null);
+        setLatestGazeLayout(null);
       }
     }
   }, [flowController, manifest, send, session]);
@@ -1388,6 +1404,10 @@ function App() {
         cameraState={cameraState}
         categoryLabel={selectedCategory ?? "전체 컬렉션"}
         chrome={<StoreChrome onHome={restart} step="03" overlay />}
+        debugEnabled={enableAoiDebugOverlay}
+        debugGazeLayout={latestGazeLayout}
+        debugGazeSample={latestGazeSample}
+        manifest={manifest}
         posterUrl={getLookbookPoster(selectedCategory)}
         sessionId={session.session_id}
         videoId={manifest.video_id}

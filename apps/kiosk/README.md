@@ -51,6 +51,7 @@ S04는 `completed` 결과의 단일 `selected_product_id`만 표시한다. `insu
 - `VITE_VISION_MODE=replay`: 승인 전 local/in-process replay producer
 - `VITE_LOOKBOOK_ID=mcm-central-ai-replay-v2`: canonical 가방 룩북
 - `VITE_LOOKBOOK_VIDEO_URL`: 승인된 룩북 영상 URL
+- `VITE_KIOSK_DEBUG_AOI`: 개발용 AOI·gaze overlay 명시적 활성화 (`true`)
 
 저장소 루트에서 Node.js `24.19.0`과 npm을 사용한다.
 
@@ -66,3 +67,13 @@ npm test --workspace @mkk/kiosk
 npm run lint --workspace @mkk/kiosk
 npm run build --workspace @mkk/kiosk
 ```
+
+## D04 개발용 AOI overlay
+
+S03 룩북 화면은 개발 검증을 위해 현재 `video_time_ms`에 활성화된 manifest exposure polygon과 최신 gaze 위치를 실제 영상 content 영역 위에 표시한다. gaze는 해당 frame의 캡처 시점 `VideoLayout`으로 video 정규화 좌표에 매핑한다.
+
+- `valid=false`와 `outside_video`를 별도 상태로 표시하고 좌표나 상품 후보로 대체하지 않는다.
+- AOI hit 여부는 기존 `LookbookManifest`와 시선 파생 신호로만 계산한다.
+- 개발 빌드에서는 overlay가 기본 활성화되며, release 빌드는 `VITE_KIOSK_DEBUG_AOI=true`일 때만 활성화된다.
+- overlay는 디버그 표시만 담당하며 중앙 추천 v2의 S04 Top 1 결과와 Manager 요청 흐름을 변경하지 않는다.
+- 원본 frame, image bytes, base64와 얼굴 embedding을 파일·DB·API·로그·브라우저 저장소에 추가하지 않는다.

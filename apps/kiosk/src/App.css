@@ -1794,3 +1794,137 @@
     padding: 0.7rem 0;
   }
 }
+
+/* << D04: DEV AOI OVERLAY >> */
+
+.lookbook-debug-canvas {
+  position: absolute;
+  z-index: 4;
+  overflow: visible;
+  pointer-events: none;
+  border: 1px solid rgba(214, 255, 101, 0.42);
+}
+
+.lookbook-aoi-region,
+.lookbook-aoi-region__fill {
+  position: absolute;
+  inset: 0;
+}
+
+.lookbook-aoi-region__fill {
+  background: rgba(214, 255, 101, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(214, 255, 101, 0.95);
+}
+
+.lookbook-aoi-region__label {
+  position: absolute;
+  padding: 0.28rem 0.4rem;
+  color: #0b0d08;
+  font-size: 0.52rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  background: #d6ff65;
+  transform: translate(-50%, -50%);
+}
+
+.lookbook-gaze-point {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border: 2px solid #f8f6ee;
+  border-radius: 50%;
+  background: rgba(214, 255, 101, 0.34);
+  box-shadow: 0 0 0 5px rgba(214, 255, 101, 0.18), 0 0 18px rgba(214, 255, 101, 0.85);
+  transform: translate(-50%, -50%);
+}
+
+.lookbook-gaze-point::before,
+.lookbook-gaze-point::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  content: "";
+  background: #f8f6ee;
+  transform: translate(-50%, -50%);
+}
+
+.lookbook-gaze-point::before {
+  width: 34px;
+  height: 1px;
+}
+
+.lookbook-gaze-point::after {
+  width: 1px;
+  height: 34px;
+}
+
+.lookbook-debug-panel {
+  position: absolute;
+  z-index: 7;
+  top: clamp(5.4rem, 12vh, 8.4rem);
+  right: clamp(1.25rem, 3.6vw, 4rem);
+  width: min(19rem, calc(100% - 2.5rem));
+  padding: 0.9rem 1rem 0.95rem;
+  color: #f8f6ee;
+  border: 1px solid rgba(214, 255, 101, 0.44);
+  background: rgba(7, 8, 6, 0.78);
+  box-shadow: 0 12px 42px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(14px);
+}
+
+.lookbook-debug-panel__topline,
+.lookbook-debug-panel dl > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.lookbook-debug-panel__topline {
+  color: #d6ff65;
+  font-size: 0.52rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.lookbook-debug-panel > strong {
+  display: block;
+  margin-top: 0.6rem;
+  color: #f8f6ee;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.lookbook-debug-panel dl {
+  display: grid;
+  margin-top: 0.85rem;
+  gap: 0.38rem;
+}
+
+.lookbook-debug-panel dt,
+.lookbook-debug-panel dd {
+  margin: 0;
+  font-size: 0.51rem;
+  line-height: 1.3;
+}
+
+.lookbook-debug-panel dt {
+  color: rgba(248, 246, 238, 0.52);
+  letter-spacing: 0.12em;
+}
+
+.lookbook-debug-panel dd {
+  color: rgba(248, 246, 238, 0.88);
+  font-weight: 650;
+  letter-spacing: 0.06em;
+}
+
+@media (max-width: 720px) {
+  .lookbook-debug-panel {
+    top: auto;
+    right: 1rem;
+    bottom: 8.4rem;
+    width: min(17rem, calc(100% - 2rem));
+  }
+}
