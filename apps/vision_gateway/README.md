@@ -16,9 +16,9 @@ token은 URL·로그·파일에 기록하지 않는다. 이 경로는 운영용 
 
 ```powershell
 Set-Location apps/api
-uv sync --locked --extra camera
+uv sync --locked
 Set-Location ../..
-uv run --project apps/api --extra camera python -m uvicorn `
+uv run --project apps/api --with "mediapipe==1.0.0" python -m uvicorn `
   apps.vision_gateway.local_server:app --host 127.0.0.1 --port 8765
 ```
 
