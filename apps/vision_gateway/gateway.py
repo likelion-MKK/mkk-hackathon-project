@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import Future, TimeoutError as FutureTimeout
 from dataclasses import dataclass
 from hashlib import sha256
 from threading import RLock
@@ -263,11 +264,15 @@ class InProcessVisionGateway:
         eye_port: ReplayEyePort | None = None,
         frame_factory: FrameFactory = SyntheticFrame,
         delivery_order: Literal["eye_first", "face_first"] = "eye_first",
+        adapter_completion_timeout_ms: int = 1_000,
     ) -> None:
+        if adapter_completion_timeout_ms <= 0:
+            raise ValueError("adapter_completion_timeout_ms must be positive")
         self._face_worker_factory = face_worker_factory
         self._eye_port = eye_port or ReplayEyePort()
         self._frame_factory = frame_factory
         self._delivery_order = delivery_order
+        self._adapter_completion_timeout_ms = adapter_completion_timeout_ms
         self._worker: FaceWorker | None = None
         self._handshake: VisionHandshake | None = None
         self._pending: FrameEnvelope | None = None
@@ -318,7 +323,7 @@ class InProcessVisionGateway:
             self._in_flight = True
         frame: TransientFrame | None = None
         frame_cleanup_deferred = False
-        adapter_completion: object | None = None
+        adapter_completion: Future[object] | None = None
         try:
             frame = self._frame_factory(envelope.frame_id)
             gaze = self._eye_port.infer(frame, envelope)
@@ -335,7 +340,11 @@ class InProcessVisionGateway:
                 # boundary while still keeping the frame alive until the
                 # timed-out adapter call has actually stopped using it.
                 try:
-                    adapter_completion.result()
+                    adapter_completion.result(
+                        timeout=self._adapter_completion_timeout_ms / 1000
+                    )
+                except FutureTimeout:
+                    pass
                 except Exception:
                     pass
             if self._restart_pending:

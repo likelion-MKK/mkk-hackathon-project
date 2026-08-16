@@ -250,6 +250,112 @@ def test_calibration_requires_contract_payload_and_reports_eye_boundary() -> Non
             }
 
 
+@pytest.mark.parametrize("bad_request_id", ["bad id", "r" * 129])
+def test_control_request_id_uses_contract_id_limits(bad_request_id: str) -> None:
+    app, issuer = make_app(lambda _image_bytes, _metadata: object())
+    token = issuer.issue("session-local-001", "mcm-lookbook-example-v1")["stream_token"]
+
+    with TestClient(app) as client:
+        with client.websocket_connect("/vision/v1/stream") as websocket:
+            websocket.send_json(hello(token))
+            assert websocket.receive_json()["type"] == "ready"
+            websocket.send_json(
+                {
+                    "type": "control",
+                    "protocol_version": "1.0",
+                    "request_id": bad_request_id,
+                    "action": "start_inference",
+                }
+            )
+            assert websocket.receive_json()["code"] == "invalid_message"
+            assert websocket.receive_json()["type"] == "close"
+
+
+@pytest.mark.parametrize("bad_pattern_id", ["bad pattern", "p" * 129])
+def test_calibration_pattern_id_uses_contract_id_limits(bad_pattern_id: str) -> None:
+    app, issuer = make_app(lambda _image_bytes, _metadata: object())
+    token = issuer.issue("session-local-001", "mcm-lookbook-example-v1")["stream_token"]
+
+    with TestClient(app) as client:
+        with client.websocket_connect("/vision/v1/stream") as websocket:
+            websocket.send_json(hello(token))
+            assert websocket.receive_json()["type"] == "ready"
+            websocket.send_json(
+                {
+                    "type": "control",
+                    "protocol_version": "1.0",
+                    "request_id": "calibration-invalid-id",
+                    "action": "start_calibration",
+                    "payload": {
+                        "pattern_id": bad_pattern_id,
+                        "points": [[0.1, 0.1]],
+                    },
+                }
+            )
+            assert websocket.receive_json()["code"] == "invalid_message"
+            assert websocket.receive_json()["type"] == "close"
+
+
+def test_long_request_id_keeps_generated_calibration_id_within_contract() -> None:
+    app, issuer = make_app(lambda _image_bytes, _metadata: object())
+    token = issuer.issue("session-local-001", "mcm-lookbook-example-v1")["stream_token"]
+    request_id = "r" * 128
+
+    with TestClient(app) as client:
+        with client.websocket_connect("/vision/v1/stream") as websocket:
+            websocket.send_json(hello(token))
+            assert websocket.receive_json()["type"] == "ready"
+            websocket.send_json(
+                {
+                    "type": "control",
+                    "protocol_version": "1.0",
+                    "request_id": request_id,
+                    "action": "start_calibration",
+                    "payload": {
+                        "pattern_id": "nine-point-v1",
+                        "points": [[0.1, 0.1]],
+                    },
+                }
+            )
+            result = websocket.receive_json()
+            assert result["type"] == "control_result"
+            assert len(result["request_id"]) == 128
+            assert len(result["calibration_id"]) <= 128
+            assert result["calibration_id"].startswith("calibration-unavailable-")
+
+
+def test_oversized_frame_closes_with_contract_code_and_reason() -> None:
+    app, issuer = make_app(
+        lambda _image_bytes, _metadata: object(),
+        max_frame_bytes=4,
+    )
+    token = issuer.issue("session-local-001", "mcm-lookbook-example-v1")["stream_token"]
+
+    with TestClient(app) as client:
+        with client.websocket_connect("/vision/v1/stream") as websocket:
+            websocket.send_json(hello(token))
+            assert websocket.receive_json()["type"] == "ready"
+            websocket.send_json(
+                {
+                    "type": "control",
+                    "protocol_version": "1.0",
+                    "request_id": "oversized-start",
+                    "action": "start_inference",
+                }
+            )
+            assert websocket.receive_json()["valid"] is True
+            websocket.send_bytes(
+                encode_binary_frame(frame_metadata(byte_length=5), b"12345")
+            )
+            assert websocket.receive_json() == {
+                "type": "close",
+                "protocol_version": "1.0",
+                "code": 1009,
+                "reason": "frame_too_large",
+                "retryable": False,
+            }
+
+
 def test_inference_timeout_keeps_in_flight_and_closes_frame_after_worker_returns() -> None:
     started = threading.Event()
     release = threading.Event()

@@ -51,6 +51,10 @@ class VisionStreamProtocolError(ValueError):
     """A malformed or unsupported wire message without frame content in its text."""
 
 
+class VisionStreamFrameTooLargeError(VisionStreamProtocolError):
+    """A binary frame exceeds the negotiated or framing metadata limit."""
+
+
 @dataclass(frozen=True, slots=True)
 class StreamFrameContext:
     session_id: str
@@ -167,13 +171,13 @@ def decode_binary_frame(message: bytes, *, max_frame_bytes: int) -> DecodedBinar
     if magic != MAGIC:
         raise VisionStreamProtocolError("binary frame magic is invalid")
     if metadata_length > MAX_METADATA_BYTES:
-        raise VisionStreamProtocolError("frame metadata is too large")
+        raise VisionStreamFrameTooLargeError("frame metadata is too large")
     header_end = PREFIX.size + metadata_length
     if header_end > len(message):
         raise VisionStreamProtocolError("binary frame metadata is truncated")
     image_bytes = message[header_end:]
     if len(image_bytes) > max_frame_bytes:
-        raise VisionStreamProtocolError("binary frame is too large")
+        raise VisionStreamFrameTooLargeError("binary frame is too large")
     try:
         raw_metadata = json.loads(message[PREFIX.size:header_end].decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -191,7 +195,7 @@ def encode_binary_frame(metadata: Mapping[str, object], image_bytes: bytes) -> b
 
     header = json.dumps(metadata, separators=(",", ":")).encode("utf-8")
     if len(header) > MAX_METADATA_BYTES:
-        raise VisionStreamProtocolError("frame metadata is too large")
+        raise VisionStreamFrameTooLargeError("frame metadata is too large")
     return PREFIX.pack(MAGIC, len(header)) + header + image_bytes
 
 

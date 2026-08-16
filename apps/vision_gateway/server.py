@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import json
 import re
 import secrets
@@ -22,6 +23,7 @@ from apps.vision_gateway.vision_stream import (
     DecodedBinaryFrame,
     FrameDecoder,
     StreamFrameContext,
+    VisionStreamFrameTooLargeError,
     VisionStreamProtocolError,
     decode_binary_frame,
     default_frame_decoder,
@@ -46,6 +48,7 @@ _HELLO_FIELDS = frozenset(
 )
 _ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _MEDIA_TYPE_PATTERN = re.compile(r"^image/[a-z0-9][a-z0-9.+-]{0,63}$")
+_CALIBRATION_UNAVAILABLE_PREFIX = "calibration-unavailable-"
 
 
 def _close_frame(frame: Any) -> None:
@@ -65,6 +68,16 @@ def _finish_worker_frame(
         state.track_adapter_completion(adapter_completion)
     if not getattr(observation, "frame_cleanup_deferred", False):
         _close_frame(frame)
+
+
+def _calibration_unavailable_id(request_id: str) -> str:
+    suffix_limit = 128 - len(_CALIBRATION_UNAVAILABLE_PREFIX)
+    if len(request_id) <= suffix_limit:
+        return f"{_CALIBRATION_UNAVAILABLE_PREFIX}{request_id}"
+    # Keep the generated placeholder a contract-valid ID without allowing a
+    # long but valid request_id to overflow the calibration_id limit.
+    digest = hashlib.sha256(request_id.encode("ascii")).hexdigest()[:16]
+    return f"{_CALIBRATION_UNAVAILABLE_PREFIX}{digest}"
 
 
 def _consume_task(task: asyncio.Task[Any]) -> None:
@@ -296,6 +309,13 @@ class VisionStreamApp:
                             event["bytes"], max_frame_bytes=self.max_frame_bytes
                         )
                         state.validate(binary)
+                    except VisionStreamFrameTooLargeError:
+                        await self._send_close(
+                            websocket,
+                            code=1009,
+                            reason="frame_too_large",
+                        )
+                        return
                     except VisionStreamProtocolError as error:
                         del error
                         await self._send_error(websocket, "invalid_message", retryable=False)
@@ -364,7 +384,7 @@ class VisionStreamApp:
                             action=action,
                             valid=False,
                             reason="eye_not_connected",
-                            calibration_id=f"calibration-unavailable-{request_id}",
+                            calibration_id=_calibration_unavailable_id(request_id),
                         )
                     elif action == "stop_session":
                         if process_task is None:
@@ -603,7 +623,7 @@ class VisionStreamApp:
             raise VisionStreamProtocolError("control message is invalid")
         request_id = control.get("request_id")
         action = control.get("action")
-        if not isinstance(request_id, str) or not request_id:
+        if not isinstance(request_id, str) or _ID_PATTERN.fullmatch(request_id) is None:
             raise VisionStreamProtocolError("control request_id is invalid")
         if not isinstance(action, str) or action not in _CONTROL_ACTIONS:
             raise VisionStreamProtocolError("control action is invalid")
@@ -620,7 +640,7 @@ class VisionStreamApp:
             raise VisionStreamProtocolError("calibration payload is invalid")
         pattern_id = payload.get("pattern_id")
         points = payload.get("points")
-        if not isinstance(pattern_id, str) or not pattern_id:
+        if not isinstance(pattern_id, str) or _ID_PATTERN.fullmatch(pattern_id) is None:
             raise VisionStreamProtocolError("calibration pattern_id is invalid")
         if not isinstance(points, list) or not 1 <= len(points) <= 32:
             raise VisionStreamProtocolError("calibration points are invalid")

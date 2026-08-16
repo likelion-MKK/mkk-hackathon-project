@@ -7,6 +7,11 @@ It validates a one-time in-memory token, receives the v1 binary frame envelope,
 and returns only a derived `ExpressionSample`. Until EyeTrax is connected,
 `gaze_sample` is explicitly `null` with `gaze_reason=eye_not_connected`.
 
+The D7 in-process harness bounds its wait for a timed-out adapter completion.
+If that bound is exceeded, `dispatch_next()` returns the fail-closed observation
+while retaining `in_flight` and the frame until the adapter completion callback;
+it does not wait indefinitely for a blocking adapter.
+
 Tests inject `LocalVisionTokenIssuer` and `FakeFaceAdapter`. A real MediaPipe
 worker can be injected with `selected_face_worker_factory(model_path)`. TLS,
 the Backend token endpoint, browser `getUserMedia`, and EyeTrax fan-out remain
