@@ -45,6 +45,29 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
 
+  /api/v1/sessions/{session_id}/vision-stream-token:
+    post:
+      tags: [Sessions]
+      operationId: issueVisionStreamToken
+      summary: Issue a short-lived one-time Vision Stream credential
+      description: >-
+        The token is bound to the active, consented session and its video. It
+        authorizes only the ephemeral binary WSS Vision Stream and must not be
+        logged, persisted or placed in the WebSocket URL.
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: One-time Vision Stream credential
+          content:
+            application/json:
+              schema:
+                $ref: "./vision-stream-v1/vision-stream-token.schema.json"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
   /api/v1/lookbooks/{lookbook_id}/manifest:
     get:
       tags: [Lookbooks]

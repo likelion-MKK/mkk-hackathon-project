@@ -1,0 +1,9 @@
+{
+  "type": "control_result",
+  "protocol_version": "1.0",
+  "request_id": "control-0001",
+  "action": "start_calibration",
+  "calibration_id": "calibration-example-001",
+  "valid": true,
+  "reason": null
+}

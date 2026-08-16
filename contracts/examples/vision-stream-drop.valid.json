@@ -1,0 +1,13 @@
+{
+  "type": "drop",
+  "protocol_version": "1.0",
+  "session_id": "session-example-001",
+  "video_id": "mcm-lookbook-example-v1",
+  "frame_id": "frame-000008",
+  "sequence": 8,
+  "captured_at_mono_ms": 143470.4,
+  "video_time_ms": 4450,
+  "playback_epoch": 0,
+  "reason": "inference_timeout",
+  "retryable": true
+}

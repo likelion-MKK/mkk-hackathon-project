@@ -1,0 +1,7 @@
+{
+  "type": "close",
+  "protocol_version": "1.0",
+  "code": 1013,
+  "reason": "server_overloaded",
+  "retryable": true
+}

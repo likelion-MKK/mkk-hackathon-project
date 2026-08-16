@@ -1,0 +1,12 @@
+{
+  "examples": {
+    "vision-stream-hello.valid.json": "../vision-stream-v1/vision-stream-message.schema.json",
+    "vision-stream-ready.valid.json": "../vision-stream-v1/vision-stream-message.schema.json",
+    "vision-stream-control.valid.json": "../vision-stream-v1/vision-stream-message.schema.json",
+    "vision-stream-control-result.valid.json": "../vision-stream-v1/vision-stream-message.schema.json",
+    "vision-stream-result.valid.json": "../vision-stream-v1/vision-stream-message.schema.json",
+    "vision-stream-drop.valid.json": "../vision-stream-v1/vision-stream-message.schema.json",
+    "vision-stream-error.valid.json": "../vision-stream-v1/vision-stream-message.schema.json",
+    "vision-stream-close.valid.json": "../vision-stream-v1/vision-stream-message.schema.json"
+  }
+}

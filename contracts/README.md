@@ -60,6 +60,7 @@ Transport routing은 다음과 같습니다.
 - `requests/manager-product-request.schema.json`: S04 고객 제품 요청 body 계약
 - `events/manager-event.schema.json`: 고객의 S04 제품 요청을 매니저 화면에 전달하는 polling 이벤트 계약
 - `events/reaction-batch.schema.json`: Kiosk·AI 영역이 Backend로 전송할 파생 반응 batch 계약
+- `vision-stream-v1/`: Kiosk와 Vision Gateway 사이의 token, text control/result, binary frame envelope 계약
 
 `GET /api/v1/manager/events?after_sequence={last_sequence}`은 매니저 화면이 1~2초 간격으로 polling하는 이벤트 조회 계약입니다. `event_id`로 중복을 제거하고, 가장 큰 `sequence`를 다음 cursor로 사용합니다.
 
@@ -133,7 +134,7 @@ Transport routing은 다음과 같습니다.
 
 Schema와 event에는 웹캠 원본 프레임, 이미지 바이트, 얼굴 embedding, blob, base64 payload나 원본 파일 경로를 정의하지 않습니다. Object는 허용된 필드만 받도록 `additionalProperties: false`를 사용합니다. 상품 catalog의 `image_url`은 표시 자산의 외부 참조이며 이미지 payload가 아닙니다.
 
-원격 추론이 승인되더라도 이 JSON Contract v1과 일반 REST API의 금지 원칙은 유지합니다. Kiosk와 Vision Gateway 사이의 일시적 binary frame transport는 [`ADR-0001`](../docs/adr/0001-remote-vision-inference.md) 승인 후 별도 `Vision Stream v1` Contract PR로 정의하며, 실제 image payload fixture를 Git에 저장하지 않습니다.
+원격 추론이 승인되더라도 이 JSON Contract v1과 일반 REST API의 금지 원칙은 유지합니다. Kiosk와 Vision Gateway 사이의 일시적 binary frame transport는 [`Vision Stream v1`](vision-stream-v1/README.md)에 분리되어 있으며, [`ADR-0001`](../docs/adr/0001-remote-vision-inference.md)이 Accepted되기 전에는 synthetic protocol 검증에만 사용합니다. 실제 image payload fixture는 Git에 저장하지 않습니다.
 
 ## JSON Schema 밖의 통합 불변조건
 

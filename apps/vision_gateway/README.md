@@ -49,6 +49,6 @@ D8의 opt-in 실제 개발 camera 경로와 quality·diagnostics 의미는
 
 ## D8 경계
 
-Vision Stream v1 계약, binary WSS serialization, auth/origin/limit, TLS 배포,
-Kiosk-to-server capture-to-result 측정, 실제 Eye Worker process와 현장 live 검증은
-D9 이후 별도 작업이다.
+[`Vision Stream v1 계약`](../../contracts/vision-stream-v1/README.md)은 정의됐지만,
+binary WSS serialization, auth/origin/limit 구현, TLS 배포, Kiosk-to-server
+capture-to-result 측정, 실제 Eye Worker process와 현장 live 검증은 D9 이후 별도 작업이다.
