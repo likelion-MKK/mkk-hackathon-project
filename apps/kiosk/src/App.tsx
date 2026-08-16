@@ -64,7 +64,12 @@ import {
 import type { ApiClient } from "./clients/api/ApiClient.ts";
 import { HttpApiClient } from "./clients/api/HttpApiClient.ts";
 import { CameraAccessError, FrameSource } from "./camera/FrameSource.ts";
+import { browserFrameEncoder } from "./clients/vision/BrowserFrameEncoder.ts";
 import { FakeRemoteVisionClient } from "./clients/vision/FakeRemoteVisionClient.ts";
+import {
+  createFetchVisionStreamTokenProvider,
+  LocalVisionStreamClient,
+} from "./clients/vision/LocalVisionStreamClient.ts";
 import {
   LookbookPlayer,
   type CameraDisplayState,
@@ -78,13 +83,30 @@ const configuredLookbookId =
 const mockApiClient = new MockApiClient({ sessionStartDelayMs: 450 });
 const httpApiClient = new HttpApiClient(apiBaseUrl);
 const apiClient: ApiClient = useMockApi ? mockApiClient : httpApiClient;
-const visionClient = new FakeRemoteVisionClient();
 const frameSource = new FrameSource();
 const temporaryLookbookVideoUrl = import.meta.env.VITE_LOOKBOOK_VIDEO_URL?.trim() ?? "";
 const configuredVisionMode = import.meta.env.VITE_VISION_MODE?.trim() || "replay";
-if (configuredVisionMode !== "replay") {
-  throw new Error("VITE_VISION_MODE currently supports only the approved replay boundary.");
+if (configuredVisionMode !== "replay" && configuredVisionMode !== "live") {
+  throw new Error("VITE_VISION_MODE must be replay or live.");
 }
+const visionTokenEndpoint =
+  import.meta.env.VITE_VISION_TOKEN_URL?.trim() ||
+  "/api/v1/sessions/{session_id}/vision-stream-token";
+const visionTokenMode =
+  import.meta.env.VITE_VISION_TOKEN_MODE?.trim().toLowerCase() === "local"
+    ? "local"
+    : "backend";
+const visionClient =
+  configuredVisionMode === "live"
+    ? new LocalVisionStreamClient({
+        tokenProvider: createFetchVisionStreamTokenProvider({
+          endpoint: visionTokenEndpoint,
+          mode: visionTokenMode,
+        }),
+        websocketUrl: import.meta.env.VITE_VISION_GATEWAY_WS_URL?.trim() || undefined,
+        frameEncoder: browserFrameEncoder,
+      })
+    : new FakeRemoteVisionClient();
 const enableAoiDebugOverlay =
   import.meta.env.DEV || import.meta.env.VITE_KIOSK_DEBUG_AOI === "true";
 const MAX_CAPTURED_FRAME_LAYOUTS = 2_048;
@@ -1127,7 +1149,14 @@ function App() {
       );
       if (!flowController.isCurrent(generation)) return;
 
-      if (!result.valid) throw new Error(result.reason ?? "calibration_failed");
+      // The merged localhost Gateway is intentionally Face-only. EyeTrax is not
+      // connected yet, so its explicit calibration absence must not block the
+      // MediaPipe live slice. A future Eye-connected Gateway must return valid=true.
+      const faceOnlyCalibration =
+        configuredVisionMode === "live" && result.reason === "eye_not_connected";
+      if (!result.valid && !faceOnlyCalibration) {
+        throw new Error(result.reason ?? "calibration_failed");
+      }
       await flowController.runSerialized(() => visionClient.startInference());
 
       if (flowController.isCurrent(generation)) send("CALIBRATION_SUCCESS");

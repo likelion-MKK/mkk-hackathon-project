@@ -218,7 +218,15 @@ export class FrameSource {
   constructor({
     mediaDevices = globalThis.navigator?.mediaDevices ?? null,
     createVideoElement = () => document.createElement("video"),
-    createFrame = (video) => createImageBitmap(video),
+    createFrame = async (video) => {
+      const bitmap = await createImageBitmap(video);
+      return {
+        width: bitmap.width,
+        height: bitmap.height,
+        source: bitmap,
+        close: () => bitmap.close(),
+      };
+    },
     readyTimeoutMs = 5_000,
   }: FrameSourceDependencies = {}) {
     this.mediaDevices = mediaDevices;

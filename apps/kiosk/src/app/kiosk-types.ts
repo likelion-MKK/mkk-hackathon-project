@@ -441,6 +441,6 @@ export type CalibrationResult = {
 
 export type VisionHealth = {
   status: "ok" | "degraded";
-  runtime: "mock";
+  runtime: "mock" | "mediapipe_gateway";
   session_active: boolean;
 };
