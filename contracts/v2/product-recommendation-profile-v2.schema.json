@@ -1,0 +1,229 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcm-lookbook.example/contracts/v2/product-recommendation-profile-v2.schema.json",
+  "title": "ProductRecommendationProfileV2",
+  "description": "중앙 추천 AI가 선택할 수 있는 정확히 10개의 MCM 공식 listing 확인 상품과 팀 작성 추천 profile입니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "catalog_version", "products"],
+  "properties": {
+    "schema_version": { "const": "2.0" },
+    "catalog_version": { "$ref": "#/$defs/version" },
+    "products": {
+      "type": "array",
+      "minItems": 10,
+      "maxItems": 10,
+      "items": { "$ref": "#/$defs/product" }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "controlledTag": {
+      "enum": [
+        "backpack",
+        "bold",
+        "boston",
+        "classic",
+        "compact",
+        "crossbody",
+        "daily",
+        "evening",
+        "hobo",
+        "leather",
+        "lightweight",
+        "minimal",
+        "modern",
+        "monogram",
+        "neutral",
+        "recycled_material",
+        "shoulder",
+        "shopper",
+        "soft",
+        "spacious",
+        "sporty",
+        "structured",
+        "tambourine",
+        "top_handle",
+        "tote",
+        "travel",
+        "triangle",
+        "weekender",
+        "work"
+      ]
+    },
+    "style": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["silhouette", "visual_tone", "use_cases"],
+      "properties": {
+        "silhouette": {
+          "enum": ["boxy", "cylindrical", "rounded", "slouchy", "trapezoid", "triangular"]
+        },
+        "visual_tone": {
+          "enum": ["bold", "casual", "classic", "minimal", "refined", "sporty"]
+        },
+        "use_cases": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": { "enum": ["daily", "evening", "travel", "weekend", "work"] }
+        }
+      }
+    },
+    "product": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "product_id",
+        "display_name",
+        "category",
+        "controlled_tags",
+        "recommendation_summary",
+        "style",
+        "approved_asset",
+        "source_status",
+        "official_product_url",
+        "official_product_url_reason",
+        "official_listing_url",
+        "image_asset_path",
+        "image_asset_path_reason",
+        "qr_asset_path",
+        "qr_asset_path_reason",
+        "source_note"
+      ],
+      "properties": {
+        "product_id": { "$ref": "#/$defs/id" },
+        "display_name": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "category": { "const": "bag" },
+        "controlled_tags": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 12,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/controlledTag" }
+        },
+        "recommendation_summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "style": { "$ref": "#/$defs/style" },
+        "approved_asset": { "type": "boolean" },
+        "source_status": {
+          "enum": [
+            "demo_placeholder",
+            "official_listing_name_verified_assets_pending",
+            "team_approved_catalog_record"
+          ]
+        },
+        "official_product_url": {
+          "oneOf": [{ "type": "null" }, { "type": "string", "format": "uri", "maxLength": 500 }]
+        },
+        "official_product_url_reason": { "$ref": "#/$defs/nullableReason" },
+        "official_listing_url": { "type": "string", "format": "uri", "maxLength": 500 },
+        "image_asset_path": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/imageAssetPath" }]
+        },
+        "image_asset_path_reason": { "$ref": "#/$defs/nullableReason" },
+        "qr_asset_path": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/qrAssetPath" }]
+        },
+        "qr_asset_path_reason": { "$ref": "#/$defs/nullableReason" },
+        "source_note": { "type": "string", "minLength": 1, "maxLength": 500 }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "source_status": { "const": "demo_placeholder" } },
+            "required": ["source_status"]
+          },
+          "then": {
+            "properties": { "approved_asset": { "const": false } }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source_status": { "const": "official_listing_name_verified_assets_pending" }
+            },
+            "required": ["source_status"]
+          },
+          "then": {
+            "properties": {
+              "approved_asset": { "const": false },
+              "official_product_url": { "type": "null" },
+              "image_asset_path": { "type": "null" },
+              "qr_asset_path": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "official_product_url": { "type": "null" } },
+            "required": ["official_product_url"]
+          },
+          "then": {
+            "properties": { "official_product_url_reason": { "$ref": "#/$defs/reason" } }
+          },
+          "else": {
+            "properties": { "official_product_url_reason": { "type": "null" } }
+          }
+        },
+        {
+          "if": {
+            "properties": { "image_asset_path": { "type": "null" } },
+            "required": ["image_asset_path"]
+          },
+          "then": {
+            "properties": { "image_asset_path_reason": { "$ref": "#/$defs/reason" } }
+          },
+          "else": {
+            "properties": { "image_asset_path_reason": { "type": "null" } }
+          }
+        },
+        {
+          "if": {
+            "properties": { "qr_asset_path": { "type": "null" } },
+            "required": ["qr_asset_path"]
+          },
+          "then": {
+            "properties": { "qr_asset_path_reason": { "$ref": "#/$defs/reason" } }
+          },
+          "else": {
+            "properties": { "qr_asset_path_reason": { "type": "null" } }
+          }
+        }
+      ]
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+    },
+    "nullableReason": {
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/reason" }]
+    },
+    "imageAssetPath": {
+      "type": "string",
+      "maxLength": 300,
+      "pattern": "^assets/products/[A-Za-z0-9][A-Za-z0-9_-]*(?:/[A-Za-z0-9][A-Za-z0-9._-]*)*$"
+    },
+    "qrAssetPath": {
+      "type": "string",
+      "maxLength": 300,
+      "pattern": "^assets/qr/[A-Za-z0-9][A-Za-z0-9_-]*(?:/[A-Za-z0-9][A-Za-z0-9._-]*)*$"
+    }
+  }
+}

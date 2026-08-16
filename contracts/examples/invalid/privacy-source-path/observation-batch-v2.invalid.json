@@ -1,0 +1,11 @@
+{
+  "schema_version": "2.0", "batch_id": "batch-privacy-source-path", "batch_sequence": 0,
+  "session_id": "session-privacy", "video_id": "video-privacy",
+  "observations": [{
+    "schema_version": "2.0", "frame_id": "frame-privacy-source-path", "sequence": 0,
+    "captured_at_mono_ms": 1, "session_offset_ms": 0, "video_time_ms": 0, "playback_epoch": 0,
+    "gaze": null, "gaze_reason": "not_measured", "attention": null, "attention_reason": "gaze_unavailable",
+    "expression": null, "expression_reason": "not_measured", "derived": null, "derived_reason": "no_valid_modality"
+  }],
+  "source_path": "camera/session-privacy"
+}

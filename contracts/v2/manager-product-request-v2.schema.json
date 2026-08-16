@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcm-lookbook.example/contracts/v2/manager-product-request-v2.schema.json",
+  "title": "ManagerProductRequestV2",
+  "description": "고객이 완료된 중앙 AI Top 1 상품을 매니저에게 요청할 때 보내는 멱등 요청입니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "recommendation_id", "selected_product_id", "intent"],
+  "properties": {
+    "schema_version": { "const": "2.0" },
+    "request_id": { "$ref": "#/$defs/id" },
+    "recommendation_id": { "$ref": "#/$defs/id" },
+    "selected_product_id": { "$ref": "#/$defs/id" },
+    "intent": { "const": "view_recommended_product" }
+  },
+  "$defs": {
+    "id": {
+      "type": "string", "minLength": 1, "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    }
+  }
+}

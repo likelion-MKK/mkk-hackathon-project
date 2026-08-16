@@ -1,5 +1,7 @@
 # MCM AI Lookbook Kiosk 상세 설계 및 병렬 개발 계획
 
+> **Superseded (2026-08-16):** 이 문서는 당시 설계·일정의 역사적 스냅샷이다. 현재 구현 기준은 [`OVERALL_DESIGN.md`](../OVERALL_DESIGN.md), [`IMPLEMENTATION_PLAN.md`](../IMPLEMENTATION_PLAN.md), [`ADR-0006`](../adr/0006-central-recommendation-ai.md)이다. 새 작업의 권위 문서로 사용하지 않는다.
+
 - 문서 단계: 기능별 상세 설계 계획 v0.2
 - 기준 문서: `README.md`, `docs/OVERALL_DESIGN.md`
 - 추가 요구사항: 외부 GitHub·Hugging Face Eye Tracking/표정 탐지 모델을 비교한 뒤 별도 Vision 서버에서 실행하고, 시선 위치를 영상 속 상품과 실시간으로 연결한다.
@@ -7,7 +9,7 @@
 
 > 이 문서는 추천 알고리즘의 신호별 가중치를 확정하지 않는다. AI 모델 선택과 추천 알고리즘 연구가 진행되는 동안에도 FE·BE·AI가 멈추지 않고 병렬 개발할 수 있는 계약과 통합 순서를 정의한다.
 
-> 원격 추론은 [`ADR-0001`](adr/0001-remote-vision-inference.md)의 Proposed 방향이다. ADR 승인 전에는 실제 고객 frame을 원격 전송하지 않고 Fake·Replay와 실행 중 생성한 synthetic frame으로 transport를 검증한다.
+> 원격 추론은 [`ADR-0001`](../adr/0001-remote-vision-inference.md)의 Proposed 방향이다. ADR 승인 전에는 실제 고객 frame을 원격 전송하지 않고 Fake·Replay와 실행 중 생성한 synthetic frame으로 transport를 검증한다.
 
 ## 1. 상세 설계 목표
 
@@ -651,7 +653,7 @@ QR에는 원본 반응 데이터나 얼굴 관련 정보는 넣지 않는다.
 
 | 담당 | 하루 결과물 |
 | --- | --- |
-| 박형진 | [`Vision 서버 선정 계획`](benchmarks/VISION_SERVER_SELECTION_PLAN.md)의 공통 harness·network·동시 세션·비용표, Recommendation·Manager event 계약, ADR 리뷰 주관 |
+| 박형진 | [`Vision 서버 선정 계획`](../benchmarks/VISION_SERVER_SELECTION_PLAN.md)의 공통 harness·network·동시 세션·비용표, Recommendation·Manager event 계약, ADR 리뷰 주관 |
 | 양유상 | 목표 서버의 Eye 비교표, 선택·fallback ADR, capture-to-result·자원 smoke test |
 | 정은미 | 목표 서버의 Face 비교표, 선택·fallback ADR, capture-to-result·자원 smoke test |
 | 조윤혜 | 실제 생성 타입·RemoteVisionClient 연결, 전송 해상도·FPS 비교와 터치·오류 상태 정리 |
@@ -790,6 +792,6 @@ SHOW_GAZE_DEBUG=false|true
 6. Manager 시작 알림을 S02 AI 선택과 동의 완료 직후 전송하는 기준
 7. PostgreSQL 실행 환경과 Alembic migration 운영 방식
 8. 구매 전환 기록을 Manager 입력으로 시작할지 여부
-9. [`Vision 서버 선정 계획`](benchmarks/VISION_SERVER_SELECTION_PLAN.md)에 따른 목표 cloud·region·CPU/GPU·동시 Kiosk 수와 성능·비용·운영 Gate 및 ADR-0002 승인
+9. [`Vision 서버 선정 계획`](../benchmarks/VISION_SERVER_SELECTION_PLAN.md)에 따른 목표 cloud·region·CPU/GPU·동시 Kiosk 수와 성능·비용·운영 Gate 및 ADR-0002 승인
 10. 동의 화면에 표시할 저장 항목과 보유 기간 결정 일정
 11. D5까지 사용할 Eye·Face 후보 최소 3개씩의 조사 범위

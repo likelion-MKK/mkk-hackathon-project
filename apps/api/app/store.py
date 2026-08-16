@@ -66,6 +66,7 @@ class MemoryStore:
         self.repository_root = repository_root or Path(__file__).resolve().parents[3]
         self.catalog = self._load_catalog()
         self.manifest = self._load_manifest()
+        self.central_v2_manifest = self._load_central_v2_manifest()
         self.products = {product.product_id: product for product in self.catalog.products}
         self.sessions: dict[str, SessionRecord] = {}
         self.manager_events: list[ManagerEvent] = []
@@ -79,6 +80,16 @@ class MemoryStore:
 
     def _load_manifest(self) -> LookbookManifest:
         path = self.repository_root / "data" / "lookbooks" / "example" / "manifest.json"
+        return LookbookManifest.model_validate(json.loads(path.read_text(encoding="utf-8")))
+
+    def _load_central_v2_manifest(self) -> LookbookManifest:
+        path = (
+            self.repository_root
+            / "data"
+            / "lookbooks"
+            / "mcm-central-ai-replay-v2"
+            / "manifest.json"
+        )
         return LookbookManifest.model_validate(json.loads(path.read_text(encoding="utf-8")))
 
     def _new_recommendation(self, session_id: str) -> RecommendationResult:
@@ -125,6 +136,11 @@ class MemoryStore:
         return session
 
     def _require_lookbook(self, lookbook_id: str) -> LookbookManifest:
+        if lookbook_id in {
+            self.central_v2_manifest.video_id,
+            "mcm-central-ai-replay-v2",
+        }:
+            return self.central_v2_manifest
         supported_ids = {self.manifest.video_id, "example", "mcm-lookbook-example"}
         if lookbook_id not in supported_ids:
             raise DomainError(404, "lookbook_not_found", f"lookbook '{lookbook_id}' was not found")
@@ -147,8 +163,6 @@ class MemoryStore:
                 recommendation=self._new_recommendation(session_id),
             )
             self.sessions[session_id] = record
-            if manifest.video_id != self.manifest.video_id:  # defensive invariant
-                raise DomainError(500, "manifest_mismatch", "session manifest is inconsistent")
             return SessionCreated(
                 session_id=session_id,
                 display_code=record.display_code,

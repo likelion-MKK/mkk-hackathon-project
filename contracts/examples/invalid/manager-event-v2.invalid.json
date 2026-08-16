@@ -1,0 +1,14 @@
+{
+  "schema_version": "2.0",
+  "event_id": "manager-event-v2-invalid-001",
+  "sequence": 1,
+  "session_id": "session-demo-v2-001",
+  "kiosk_id": "kiosk-demo-01",
+  "event_type": "recommendation_ready",
+  "emitted_at": "2026-08-16T10:00:00+09:00",
+  "payload": {
+    "recommendation_id": "recommendation-demo-v2-001",
+    "selected_product_id": "mcm-toni-medium-disco-visetos",
+    "intent": "view_recommended_product"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "schema_version": "2.0",
+  "decision_request_id": "decision-request-invalid-001",
+  "input_variant": "C",
+  "session_id": "session-demo-v2-001",
+  "video_id": "lookbook-demo-v2",
+  "manifest_version": "demo-lookbook-v1",
+  "catalog_version": "mcm-demo-bags-v2-2026-08-16",
+  "feature_version": "central-evidence-v2-demo-1",
+  "signal_versions": {
+    "eye": null,
+    "eye_reason": null,
+    "face": null,
+    "face_reason": "face_unavailable",
+    "aoi_mapper_revision": "aoi-mapper-v1"
+  },
+  "data_quality": {
+    "expected_observation_count": 0,
+    "gaze_valid_ratio": 0,
+    "expression_valid_ratio": 0,
+    "matched_frame_ratio": 0,
+    "ambiguous_product_ratio": 0
+  },
+  "summary": [],
+  "evidence_windows": null,
+  "timeline": []
+}

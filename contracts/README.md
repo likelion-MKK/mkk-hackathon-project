@@ -1,6 +1,58 @@
-# Contract v1
+# Contract v1과 중앙 추천 AI v2
 
-이 디렉터리는 Kiosk, Eye, Face, AOI Mapper, Backend, 추천 엔진과 Manager 화면이 독립적으로 개발될 수 있도록 JSON 경계를 정의합니다. 모든 schema는 JSON Schema Draft 2020-12를 사용하며 `schema_version`은 `1.0`입니다.
+이 디렉터리는 Kiosk, Eye, Face, AOI Mapper, Backend, 추천 엔진과 Manager 화면이 독립적으로 개발될 수 있도록 JSON 경계를 정의합니다. 모든 schema는 JSON Schema Draft 2020-12를 사용합니다. 기존 `/api/v1`과 v1 fixture는 호환·replay 기준으로 보존하고, 신규 중앙 추천 경로는 `schema_version=2.0`의 별도 major contract를 사용합니다.
+
+## 현재 신규 경로: 중앙 추천 AI v2
+
+| Schema | 정상 fixture | 경계 |
+| --- | --- | --- |
+| `v2/frame-observation-v2.schema.json` | `examples/frame-observation-v2.valid.json` | 같은 frame의 시선·AOI·관찰 가능한 얼굴 동작·저수준 파생 신호 |
+| `v2/observation-batch-v2.schema.json` | `examples/observation-batch-v2.valid.json` | Kiosk에서 API로 보내는 최대 256개 observation envelope |
+| `v2/product-recommendation-profile-v2.schema.json` | `examples/product-recommendation-profile-v2.valid.json` | 중앙 AI가 선택할 수 있는 정확히 10개 상품과 controlled tag |
+| `v2/recommendation-evidence-v2.schema.json` | `examples/recommendation-evidence-v2.valid.json` | 결정적 feature extractor가 만드는 내부 A/B/C model payload |
+| `v2/recommendation-decision-v2.schema.json` | `examples/recommendation-decision-v2.valid.json` | 중앙 AI 출력 검증 후 공개하는 Top 1 terminal 결정 |
+| `v2/product-detail-v2.schema.json` | `examples/product-detail-v2.valid.json` | reviewed 단일 상품 표시 profile |
+| `v2/manager-product-request-v2.schema.json` | `examples/manager-product-request-v2.valid.json` | 명시적인 고객 Top 1 상품 요청 |
+| `v2/manager-event-v2.schema.json` | `examples/manager-event-v2.valid.json` | 요청된 Top 1만 전달하는 Manager polling event |
+
+Transport routing은 다음과 같습니다.
+
+- `POST /api/v2/sessions/{session_id}/observations`: `ObservationBatchV2`
+- `POST /api/v2/sessions/{session_id}/complete`: 추천 job 생성, HTTP 202의 pending receipt 반환
+- `GET /api/v2/sessions/{session_id}/recommendation`: 처리 중이면 HTTP 202 pending receipt, terminal이면 HTTP 200 `RecommendationDecisionV2`
+- `DELETE /api/v2/sessions/{session_id}`: 활성 파생 observation·집계·멱등 키 폐기
+- `GET /api/v2/products/{product_id}`: nullable source/asset reason을 포함한 reviewed 단일 상품 조회
+- `POST /api/v2/sessions/{session_id}/manager-product-requests`: 고객이 명시적으로 선택한 Top 1 요청만 생성
+- `GET /api/v2/manager/events`: `customer_product_request` v2 event만 polling
+
+`pending`은 model 결정이 아니므로 `RecommendationDecisionV2.status`에 넣지 않습니다. terminal status는 `completed|insufficient_data|failed`뿐이고, `completed`일 때 제공된 10개 catalog ID 중 정확히 하나만 `selected_product_id`로 반환합니다.
+
+### v2 저수준 신호와 연속성
+
+- 여기서 “로우 데이터”는 원본 frame이 아니라 frame에서 추출한 좌표·quality·관찰 가능한 action score와 저수준 변화량입니다. image/frame bytes, base64/data URI, 얼굴 embedding·landmark와 원본/소스 경로는 금지합니다.
+- `session_offset_ms`는 세션의 첫 accepted analysis frame을 `0`으로 한 상대 시간이고 세션 안에서 감소하지 않습니다. `captured_at_mono_ms`는 producer clock의 캡처 시각입니다.
+- 이동·지속·복귀 후보와 score 변화는 같은 session, video, `playback_epoch`, taxonomy와 시간순 frame만 이어 계산합니다. session/video/epoch 변경, out-of-order, invalid·missing modality 또는 설정된 gap이면 이전 상태를 reset하며 경계를 넘어 carry하지 않습니다.
+- reset 직후 이동·속도·복귀 후보·score 변화/변화율은 `0`이나 `false`로 채우지 않고 `null`과 `no_previous_observation` 또는 `continuity_reset` 같은 reason으로 표현합니다. `continuous_observation_ms=0`은 새 유효 구간의 실제 시작값입니다.
+- 얼굴 score 변화 map은 두 frame에 모두 존재하는 taxonomy label의 교집합만 계산합니다. 한쪽에 없는 label을 `0`으로 대체하지 않습니다. `return_candidate`와 `sustained_actions`도 확정 감정·성격·구매 의도가 아니라 세션 내 관찰 신호입니다.
+- Evidence summary도 같은 원칙을 유지합니다. 비교 가능한 interval이 없으면 movement·return count 또는 action change aggregate를 `null+reason`으로 두며, numeric `0`과 빈 sustained action 배열은 실제로 측정했으나 변화·후보가 없을 때만 사용합니다.
+
+### v2 결정 grounding과 고객 문구
+
+- Model input A는 summary+evidence windows+timeline, B는 timeline+summary, C는 summary+evidence windows입니다. 세 variant는 같은 feature/catalog/prompt version으로 평가합니다.
+- `reason_codes`, `exploration_tendency_code`, controlled catalog tag만 고객 문구 template의 입력으로 사용합니다. model이 만든 `reason.explanation`, `evidence.statement`, `style.summary`는 audit/debug 정보이며 고객에게 그대로 노출하지 않습니다.
+- `exploration_tendency_code`는 현재 세션의 상품 탐색 범위를 나타낼 뿐 사용자 유형이나 심리 진단이 아닙니다.
+- 각 decision evidence의 `product_id`는 선택 상품과 같아야 합니다. A/C의 typed `evidence_refs`는 같은 Evidence의 `{kind=window, ref_id=window_id}`만, B는 `{kind=frame, ref_id=timeline.frame_id}`만 참조합니다. Window의 `product_id` 또는 frame attention candidate도 선택 상품과 같아야 합니다.
+- Decision의 `version.input_variant`는 실제 사용한 Evidence A/B/C variant와 같아야 합니다.
+- Schema만으로 보장할 수 없는 `selected_product_id ∈ 제공 catalog`, 10개 `product_id` 유일성, evidence 참조 무결성, session offset 단조성은 consumer와 contract/eval test가 확인합니다.
+
+### v2 상품 source와 보존
+
+- `mcm-us-listing-names-v2-2026-08-16` seed는 공식 all-bags listing에서 확인된 상품명 10개를 사용하지만 추천 tag·요약은 팀 작성 demo 정보입니다. style code와 개별 상품 URL은 확인 전이므로 이름 기반 team ID를 사용합니다.
+- 미검증 개별 URL, 승인되지 않은 image/QR asset은 만들지 않고 각각 `null+reason`으로 둡니다. `approved_asset=false`인 record는 고객용 자산 catalog로 승격하지 않습니다.
+- ObservationBatch와 RecommendationEvidence는 활성 세션 메모리의 일시 데이터입니다. 추천 terminal/취소/TTL 시 frame-level 좌표·score·변화량·window/timeline·중복 제거 키를 폐기하고 DB·파일·로그·cache·queue·backup에 저장하지 않습니다.
+- DB에는 승인된 상품 profile, terminal RecommendationDecision의 최소 audit metadata와 향후 별도 동의·계약이 승인된 conversion outcome만 둡니다. 운영 로그에는 payload 대신 request ID, status, version과 count만 남깁니다.
+
+## Contract v1 호환 경로
 
 ## API 계약
 

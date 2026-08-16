@@ -1,0 +1,8 @@
+{
+  "schema_version": "2.0",
+  "batch_id": "observation-batch-v2-invalid-001",
+  "batch_sequence": 0,
+  "session_id": "session-demo-v2-001",
+  "video_id": "lookbook-demo-v2",
+  "observations": []
+}

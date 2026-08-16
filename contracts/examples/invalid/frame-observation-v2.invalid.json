@@ -1,0 +1,15 @@
+{
+  "schema_version": "2.0",
+  "frame_id": "frame-v2-invalid-001",
+  "sequence": 1,
+  "captured_at_mono_ms": 1000.0,
+  "video_time_ms": 1000,
+  "playback_epoch": 0,
+  "gaze": null,
+  "gaze_reason": null,
+  "attention": null,
+  "attention_reason": "gaze_unavailable",
+  "expression": null,
+  "expression_reason": "no_face",
+  "image_base64": "forbidden"
+}
