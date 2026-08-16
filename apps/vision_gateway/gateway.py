@@ -317,6 +317,8 @@ class InProcessVisionGateway:
             envelope, self._pending = self._pending, None
             self._in_flight = True
         frame: TransientFrame | None = None
+        frame_cleanup_deferred = False
+        adapter_completion: object | None = None
         try:
             frame = self._frame_factory(envelope.frame_id)
             gaze = self._eye_port.infer(frame, envelope)
@@ -326,6 +328,16 @@ class InProcessVisionGateway:
             timeout_count_before = worker.timeout_count
             error_count_before = worker.error_count
             face_observation = worker.process(frame, envelope)
+            frame_cleanup_deferred = face_observation.frame_cleanup_deferred
+            adapter_completion = face_observation.adapter_completion
+            if adapter_completion is not None:
+                # The legacy in-process harness is synchronous. Preserve that
+                # boundary while still keeping the frame alive until the
+                # timed-out adapter call has actually stopped using it.
+                try:
+                    adapter_completion.result()
+                except Exception:
+                    pass
             if self._restart_pending:
                 self._restart_pending = False
                 worker.start()
@@ -343,11 +355,19 @@ class InProcessVisionGateway:
                 ) or joined
             return joined or self._joiner.flush_nearest()
         finally:
-            if frame is not None:
+            if frame is not None and not frame_cleanup_deferred:
                 frame.close()
                 del frame
-            with self._lock:
-                self._in_flight = False
+            if frame_cleanup_deferred and adapter_completion is not None:
+                adapter_completion.add_done_callback(
+                    lambda _done: self._release_in_flight()
+                )
+            else:
+                self._release_in_flight()
+
+    def _release_in_flight(self) -> None:
+        with self._lock:
+            self._in_flight = False
 
     def process(self, envelope: FrameEnvelope) -> DerivedObservation:
         self.offer(envelope)

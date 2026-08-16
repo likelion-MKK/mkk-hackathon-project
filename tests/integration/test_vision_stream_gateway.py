@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import replace
 import threading
 from typing import Any
 
 from mcm_face import FakeFaceAdapter, FaceWorker
+import pytest
 from starlette.testclient import TestClient
 
 from apps.vision_gateway.server import LocalVisionTokenIssuer, VisionStreamApp
@@ -553,6 +555,8 @@ def test_late_worker_exception_still_closes_deferred_frame() -> None:
 def test_face_worker_internal_timeout_releases_gateway_frame_after_return() -> None:
     started = threading.Event()
     release = threading.Event()
+    worker_returned = threading.Event()
+    adapter_read_frame = threading.Event()
     frame_closed = threading.Event()
     worker_closed = threading.Event()
 
@@ -572,12 +576,18 @@ def test_face_worker_internal_timeout_releases_gateway_frame_after_return() -> N
         def infer(self, frame: Any, context: Any) -> Any:
             started.set()
             release.wait(timeout=2)
+            frame.assert_open()
+            adapter_read_frame.set()
             return self.delegate.infer(frame, context)
 
         def dispose(self) -> None:
             self.delegate.dispose()
 
     class EphemeralTestFrame:
+        def assert_open(self) -> None:
+            if frame_closed.is_set():
+                raise RuntimeError("adapter read a closed frame")
+
         def close(self) -> None:
             frame_closed.set()
 
@@ -589,7 +599,9 @@ def test_face_worker_internal_timeout_releases_gateway_frame_after_return() -> N
             self.delegate.start()
 
         def process(self, frame: Any, context: Any) -> Any:
-            return self.delegate.process(frame, context)
+            observation = self.delegate.process(frame, context)
+            worker_returned.set()
+            return observation
 
         def close(self) -> None:
             worker_closed.set()
@@ -624,11 +636,23 @@ def test_face_worker_internal_timeout_releases_gateway_frame_after_return() -> N
             assert websocket.receive_json()["reason"] == "inference_timeout"
             assert not frame_closed.is_set()
 
-            # FaceWorker returns its own invalid timeout before the adapter's
-            # blocked call is released. The Gateway must close the frame only
-            # after that worker call has returned to the Gateway boundary.
-            assert frame_closed.wait(timeout=1)
+            # FaceWorker may return its timeout observation while the adapter's
+            # ThreadPool task is still running. The frame remains valid until
+            # that underlying adapter task has actually finished reading it.
+            assert worker_returned.wait(timeout=1)
+            assert not frame_closed.is_set()
+            websocket.send_bytes(
+                encode_binary_frame(
+                    frame_metadata(frame_id="frame-0002", sequence=2),
+                    b"\xff\xd8\xff\xd9",
+                )
+            )
+            in_flight = websocket.receive_json()
+            assert in_flight["type"] == "drop"
+            assert in_flight["reason"] == "in_flight"
             release.set()
+            assert adapter_read_frame.wait(timeout=1)
+            assert frame_closed.wait(timeout=1)
             websocket.send_json(
                 {
                     "type": "control",
@@ -641,6 +665,48 @@ def test_face_worker_internal_timeout_releases_gateway_frame_after_return() -> N
             assert websocket.receive_json()["type"] == "close"
 
     assert worker_closed.wait(timeout=1)
+
+
+def test_hello_rejects_unknown_fields() -> None:
+    app, issuer = make_app(lambda _image_bytes, _metadata: object())
+    token = issuer.issue("session-local-001", "mcm-lookbook-example-v1")["stream_token"]
+    payload = hello(token)
+    payload["unexpected"] = True
+
+    with TestClient(app) as client:
+        with client.websocket_connect("/vision/v1/stream") as websocket:
+            websocket.send_json(payload)
+            error = websocket.receive_json()
+            assert error["type"] == "error"
+            assert error["code"] == "invalid_message"
+            assert websocket.receive_json()["type"] == "close"
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda payload: payload.update({"unexpected": True}),
+        lambda payload: payload["layout"].update({"unexpected": True}),
+        lambda payload: payload["layout"]["element_rect"].update({"unexpected": True}),
+        lambda payload: payload["camera_frame"].update({"unexpected": True}),
+    ],
+    ids=("frame", "layout", "rect", "camera-frame"),
+)
+def test_frame_metadata_rejects_unknown_fields(mutate: Any) -> None:
+    metadata = deepcopy(frame_metadata())
+    mutate(metadata)
+    app, issuer = make_app(lambda _image_bytes, _metadata: object())
+    token = issuer.issue("session-local-001", "mcm-lookbook-example-v1")["stream_token"]
+
+    with TestClient(app) as client:
+        with client.websocket_connect("/vision/v1/stream") as websocket:
+            websocket.send_json(hello(token))
+            assert websocket.receive_json()["type"] == "ready"
+            websocket.send_bytes(encode_binary_frame(metadata, b"\xff\xd8\xff\xd9"))
+            error = websocket.receive_json()
+            assert error["type"] == "error"
+            assert error["code"] == "invalid_message"
+            assert websocket.receive_json()["type"] == "close"
 
 
 def test_decoder_error_uses_contract_error_code() -> None:

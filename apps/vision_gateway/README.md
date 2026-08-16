@@ -13,8 +13,9 @@ the Backend token endpoint, browser `getUserMedia`, and EyeTrax fan-out remain
 separate follow-up work.
 
 수신 rate는 `max_fps`로 제한하고 decoder·inference deadline 초과는 terminal
-`drop`으로 반환한다. timeout된 decoder·worker가 늦게 끝나면 그 시점까지
-frame을 유지한 뒤 닫으며, worker close는 별도 bounded cleanup으로 처리한다.
+`drop`으로 반환한다. timeout된 decoder 또는 Face adapter의 실제 underlying 작업이
+늦게 끝나면 완료 시점까지 frame과 in-flight 상태를 유지한 뒤 닫으며, worker close는
+별도 bounded cleanup으로 처리한다.
 
 이 디렉터리는 D7 Replay E2E와 D8 개발 camera smoke, localhost Face-only
 Vision Stream을 위한 테스트 가능한 transport 경계다. 운영 인증·TLS와

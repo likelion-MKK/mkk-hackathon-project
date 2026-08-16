@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import re
 import secrets
 from collections import deque
 from dataclasses import dataclass, field
@@ -33,6 +34,18 @@ _CONTROL_ACTIONS = frozenset(
 _CONTROL_FIELDS = frozenset(
     {"type", "protocol_version", "request_id", "action", "payload"}
 )
+_HELLO_FIELDS = frozenset(
+    {
+        "type",
+        "protocol_version",
+        "session_id",
+        "video_id",
+        "stream_token",
+        "offered_frame_encodings",
+    }
+)
+_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+_MEDIA_TYPE_PATTERN = re.compile(r"^image/[a-z0-9][a-z0-9.+-]{0,63}$")
 
 
 def _close_frame(frame: Any) -> None:
@@ -40,6 +53,18 @@ def _close_frame(frame: Any) -> None:
     if callable(close):
         with contextlib.suppress(Exception):
             close()
+
+
+def _finish_worker_frame(
+    observation: Any,
+    frame: Any,
+    state: "_StreamState",
+) -> None:
+    adapter_completion = getattr(observation, "adapter_completion", None)
+    if adapter_completion is not None:
+        state.track_adapter_completion(adapter_completion)
+    if not getattr(observation, "frame_cleanup_deferred", False):
+        _close_frame(frame)
 
 
 def _consume_task(task: asyncio.Task[Any]) -> None:
@@ -432,7 +457,7 @@ class VisionStreamApp:
                 captured_frame = frame
                 state.defer_cleanup(
                     worker_task,
-                    lambda _result: _close_frame(captured_frame),
+                    lambda result: _finish_worker_frame(result, captured_frame, state),
                 )
                 frame_cleanup_deferred = True
                 worker_task = None
@@ -444,7 +469,7 @@ class VisionStreamApp:
                     captured_frame = frame
                     state.defer_cleanup(
                         worker_task,
-                        lambda _result: _close_frame(captured_frame),
+                        lambda result: _finish_worker_frame(result, captured_frame, state),
                     )
                     worker_task = None
                     frame_cleanup_deferred = True
@@ -454,6 +479,12 @@ class VisionStreamApp:
                     "error",
                     self._error("vision_unavailable", retryable=True, frame=context),
                 )
+            frame_cleanup_deferred = bool(
+                getattr(observation, "frame_cleanup_deferred", False)
+            )
+            adapter_completion = getattr(observation, "adapter_completion", None)
+            if adapter_completion is not None:
+                state.track_adapter_completion(adapter_completion)
             sample = observation.sample
             if not _same_frame_context(sample, context, session_id=session_id):
                 return _FrameOutcome(
@@ -523,13 +554,32 @@ class VisionStreamApp:
                 close_task.result()
 
     def _authenticate_hello(self, hello: Mapping[str, object]) -> VisionTokenClaims:
+        if set(hello) != _HELLO_FIELDS:
+            raise VisionStreamProtocolError("hello fields are invalid")
         if hello.get("type") != "hello" or hello.get("protocol_version") != "1.0":
             raise VisionStreamProtocolError("hello is invalid")
         session_id = hello.get("session_id")
         video_id = hello.get("video_id")
         token = hello.get("stream_token")
-        if not all(isinstance(value, str) and value for value in (session_id, video_id, token)):
+        if not all(
+            isinstance(value, str) and _ID_PATTERN.fullmatch(value)
+            for value in (session_id, video_id)
+        ):
+            raise VisionStreamProtocolError("hello identifiers are invalid")
+        if not isinstance(token, str) or not 32 <= len(token) <= 2048:
             raise VisionStreamProtocolError("hello credentials are invalid")
+        offered = hello.get("offered_frame_encodings")
+        if (
+            not isinstance(offered, list)
+            or not 1 <= len(offered) <= 8
+            or any(
+                not isinstance(encoding, str)
+                or _MEDIA_TYPE_PATTERN.fullmatch(encoding) is None
+                for encoding in offered
+            )
+            or len(set(offered)) != len(offered)
+        ):
+            raise VisionStreamProtocolError("offered frame encodings are invalid")
         claims = self.token_verifier.consume(token)
         if claims is None or claims.session_id != session_id or claims.video_id != video_id:
             raise VisionAuthorizationError("hello authorization failed")
@@ -689,7 +739,7 @@ class _StreamState:
     last_received_at: float | None = None
     frame_keys: set[tuple[int, str]] | None = None
     frame_order: deque[tuple[int, str]] | None = None
-    pending_tasks: set[asyncio.Task[Any]] = field(default_factory=set)
+    pending_tasks: set[asyncio.Future[Any]] = field(default_factory=set)
 
     def __post_init__(self) -> None:
         self.frame_keys = set()
@@ -725,12 +775,12 @@ class _StreamState:
 
     def defer_cleanup(
         self,
-        task: asyncio.Task[Any],
+        task: asyncio.Future[Any],
         cleanup: Callable[[Any], None],
     ) -> None:
         self.pending_tasks.add(task)
 
-        def on_done(done: asyncio.Task[Any]) -> None:
+        def on_done(done: asyncio.Future[Any]) -> None:
             self.pending_tasks.discard(done)
             try:
                 result = done.result()
@@ -741,7 +791,18 @@ class _StreamState:
 
         task.add_done_callback(on_done)
 
-    def pending_tasks_snapshot(self) -> tuple[asyncio.Task[Any], ...]:
+    def track_adapter_completion(self, completion: Any) -> None:
+        wrapped = asyncio.wrap_future(completion)
+        self.pending_tasks.add(wrapped)
+
+        def on_done(done: asyncio.Future[Any]) -> None:
+            self.pending_tasks.discard(done)
+            with contextlib.suppress(BaseException):
+                done.result()
+
+        wrapped.add_done_callback(on_done)
+
+    def pending_tasks_snapshot(self) -> tuple[asyncio.Future[Any], ...]:
         return tuple(self.pending_tasks)
 
     def accept(self, context: StreamFrameContext) -> None:

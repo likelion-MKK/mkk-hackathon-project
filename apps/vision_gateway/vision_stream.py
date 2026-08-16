@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import math
+import re
 import struct
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping
@@ -11,6 +13,38 @@ from typing import Any, Callable, Mapping
 MAGIC = b"MCM1"
 PREFIX = struct.Struct(">4sI")
 MAX_METADATA_BYTES = 65_535
+_FRAME_FIELDS = frozenset(
+    {
+        "type",
+        "protocol_version",
+        "session_id",
+        "video_id",
+        "frame_id",
+        "sequence",
+        "captured_at_mono_ms",
+        "video_time_ms",
+        "playback_epoch",
+        "layout",
+        "camera_frame",
+    }
+)
+_LAYOUT_FIELDS = frozenset(
+    {
+        "viewport_width_px",
+        "viewport_height_px",
+        "source_width_px",
+        "source_height_px",
+        "object_fit",
+        "element_rect",
+        "content_rect",
+    }
+)
+_RECT_FIELDS = frozenset({"x_px", "y_px", "width_px", "height_px"})
+_CAMERA_FRAME_FIELDS = frozenset(
+    {"encoding", "width_px", "height_px", "byte_length"}
+)
+_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+_MEDIA_TYPE_PATTERN = re.compile(r"^image/[a-z0-9][a-z0-9.+-]{0,63}$")
 
 
 class VisionStreamProtocolError(ValueError):
@@ -50,6 +84,8 @@ class FrameMetadata:
 
     @classmethod
     def from_payload(cls, payload: Mapping[str, object]) -> "FrameMetadata":
+        if set(payload) != _FRAME_FIELDS:
+            raise VisionStreamProtocolError("frame metadata fields are invalid")
         if payload.get("type") != "frame" or payload.get("protocol_version") != "1.0":
             raise VisionStreamProtocolError("unsupported frame message")
         _reject_embedded_media(payload)
@@ -69,8 +105,13 @@ class FrameMetadata:
         camera = payload.get("camera_frame")
         if not isinstance(camera, Mapping):
             raise VisionStreamProtocolError("camera_frame metadata is required")
+        if set(camera) != _CAMERA_FRAME_FIELDS:
+            raise VisionStreamProtocolError("camera_frame fields are invalid")
         encoding = camera.get("encoding")
-        if not isinstance(encoding, str) or not encoding.startswith("image/"):
+        if (
+            not isinstance(encoding, str)
+            or _MEDIA_TYPE_PATTERN.fullmatch(encoding) is None
+        ):
             raise VisionStreamProtocolError("camera frame encoding is invalid")
         width_px = _positive_int(camera, "width_px")
         height_px = _positive_int(camera, "height_px")
@@ -176,7 +217,7 @@ def default_frame_decoder(image_bytes: bytes, metadata: FrameMetadata) -> Decode
 
 def _identifier(payload: Mapping[str, object], name: str) -> str:
     value = payload.get(name)
-    if not isinstance(value, str) or not value:
+    if not isinstance(value, str) or _ID_PATTERN.fullmatch(value) is None:
         raise VisionStreamProtocolError(f"{name} is required")
     return value
 
@@ -197,7 +238,12 @@ def _positive_int(payload: Mapping[str, object], name: str) -> int:
 
 def _non_negative_number(payload: Mapping[str, object], name: str) -> float:
     value = payload.get(name)
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or value < 0
+    ):
         raise VisionStreamProtocolError(f"{name} must be a non-negative number")
     return float(value)
 
@@ -212,19 +258,30 @@ def _validate_layout(layout: Mapping[str, object]) -> None:
         "element_rect",
         "content_rect",
     )
-    if any(name not in layout for name in required) or layout.get("object_fit") != "contain":
+    if set(layout) != _LAYOUT_FIELDS or layout.get("object_fit") != "contain":
         raise VisionStreamProtocolError("lookbook layout is invalid")
     for name in required[:4]:
         value = layout.get(name)
-        if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or value <= 0
+        ):
             raise VisionStreamProtocolError("lookbook layout dimensions are invalid")
     for name in ("element_rect", "content_rect"):
         rect = layout.get(name)
         if not isinstance(rect, Mapping):
             raise VisionStreamProtocolError("lookbook layout rectangle is invalid")
+        if set(rect) != _RECT_FIELDS:
+            raise VisionStreamProtocolError("lookbook layout rectangle fields are invalid")
         for field in ("x_px", "y_px", "width_px", "height_px"):
             value = rect.get(field)
-            if isinstance(value, bool) or not isinstance(value, (int, float)):
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+            ):
                 raise VisionStreamProtocolError("lookbook layout rectangle is invalid")
             if field in ("width_px", "height_px") and value <= 0:
                 raise VisionStreamProtocolError("lookbook layout rectangle is invalid")
