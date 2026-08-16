@@ -1,0 +1,14 @@
+{
+  "type": "ready",
+  "protocol_version": "1.0",
+  "session_id": "session-example-001",
+  "video_id": "mcm-lookbook-example-v1",
+  "selected_frame_encoding": "image/jpeg",
+  "limits": {
+    "in_flight_limit": 1,
+    "max_frame_bytes": 524288,
+    "max_fps": 4,
+    "decode_timeout_ms": 250,
+    "inference_timeout_ms": 1000
+  }
+}

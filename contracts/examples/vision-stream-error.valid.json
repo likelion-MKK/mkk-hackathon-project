@@ -1,0 +1,7 @@
+{
+  "type": "error",
+  "protocol_version": "1.0",
+  "request_id": "control-0002",
+  "code": "vision_unavailable",
+  "retryable": true
+}

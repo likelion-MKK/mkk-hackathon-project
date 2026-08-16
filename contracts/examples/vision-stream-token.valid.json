@@ -1,0 +1,8 @@
+{
+  "protocol_version": "1.0",
+  "session_id": "session-example-001",
+  "video_id": "mcm-lookbook-example-v1",
+  "stream_token": "synthetic-one-time-token-000000000001",
+  "expires_at": "2026-08-16T11:00:30Z",
+  "websocket_path": "/vision/v1/stream"
+}

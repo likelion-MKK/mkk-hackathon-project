@@ -113,7 +113,7 @@ S04는 Top 1·관찰 근거·분석 불가 상태를 다루고, 매니저 요청
 1. [`ADR-0001`](adr/0001-remote-vision-inference.md)
 2. [`apps/vision_gateway/README.md`](../apps/vision_gateway/README.md)
 3. [`Vision 서버 선정 계획`](benchmarks/VISION_SERVER_SELECTION_PLAN.md)
-4. Eye·Face producer README와 stream 계약
+4. [`Vision Stream v1 계약`](../contracts/vision-stream-v1/README.md)과 Eye·Face producer README
 
 ADR-0001이 Proposed인 동안 실제 고객 frame 원격 전송은 승인된 운영 구현이 아니다. synthetic·Fake·Replay로 transport를 검증한다.
 

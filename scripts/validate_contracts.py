@@ -895,6 +895,63 @@ def validate_v2_cross_document_invariants(root: Path, issues: list[Issue]) -> No
                             )
 
 
+def validate_vision_stream_v1_invariants(root: Path, issues: list[Issue]) -> None:
+    """Validate executable relationships that JSON Schema cannot express."""
+
+    examples = root / "contracts" / "examples"
+    token_path = examples / "vision-stream-token.valid.json"
+    hello_path = examples / "vision-stream-hello.valid.json"
+    ready_path = examples / "vision-stream-ready.valid.json"
+    frame_path = examples / "vision-stream-frame-metadata.valid.json"
+    result_path = examples / "vision-stream-result.valid.json"
+    drop_path = examples / "vision-stream-drop.valid.json"
+
+    token = read_json(token_path, issues)
+    hello = read_json(hello_path, issues)
+    ready = read_json(ready_path, issues)
+    frame = read_json(frame_path, issues)
+    result = read_json(result_path, issues)
+    drop = read_json(drop_path, issues)
+
+    if isinstance(token, dict) and isinstance(hello, dict):
+        for field in ("session_id", "video_id", "stream_token"):
+            if token.get(field) != hello.get(field):
+                issues.append(Issue(hello_path, f"{field} differs from issued stream token"))
+
+    if isinstance(hello, dict) and isinstance(ready, dict):
+        offered = hello.get("offered_frame_encodings")
+        selected = ready.get("selected_frame_encoding")
+        if not isinstance(offered, list) or selected not in offered:
+            issues.append(Issue(ready_path, "selected encoding was not offered by the client"))
+        limits = ready.get("limits")
+        if not isinstance(limits, dict) or limits.get("in_flight_limit") != 1:
+            issues.append(Issue(ready_path, "Vision Stream v1 requires in_flight_limit=1"))
+
+    context_fields = (
+        "session_id",
+        "video_id",
+        "frame_id",
+        "sequence",
+        "captured_at_mono_ms",
+        "video_time_ms",
+        "playback_epoch",
+    )
+    if isinstance(frame, dict) and isinstance(result, dict):
+        expected = {field: frame.get(field) for field in context_fields}
+        for label, document in (
+            ("result", result),
+            ("gaze_sample", result.get("gaze_sample")),
+            ("expression_sample", result.get("expression_sample")),
+        ):
+            if not isinstance(document, dict) or {
+                field: document.get(field) for field in context_fields
+            } != expected:
+                issues.append(Issue(result_path, f"{label} does not preserve frame capture context"))
+
+    if isinstance(drop, dict) and drop.get("reason") != "inference_timeout":
+        issues.append(Issue(drop_path, "timeout fixture must use drop/inference_timeout"))
+
+
 def validate_openapi(root: Path, issues: list[Issue]) -> None:
     openapi_path = root / "contracts" / "openapi.yaml"
     try:
@@ -924,6 +981,7 @@ def validate_openapi(root: Path, issues: list[Issue]) -> None:
 
     required_paths = {
         "/api/v1/sessions",
+        "/api/v1/sessions/{session_id}/vision-stream-token",
         "/api/v1/lookbooks/{lookbook_id}/manifest",
         "/api/v1/sessions/{session_id}/reaction-batches",
         "/api/v1/sessions/{session_id}/complete",
@@ -1071,6 +1129,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     validate_cross_document_invariants(root, issues)
     validate_v2_cross_document_invariants(root, issues)
+    validate_vision_stream_v1_invariants(root, issues)
     validate_openapi(root, issues)
     validate_repository_artifacts(root, issues)
 
@@ -1083,7 +1142,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"{len(schemas)} schema file(s), {validated_count} example document(s), "
         f"{invalid_count} rejected negative example(s), "
         f"{guarded_count} event example guard check(s), event schemas, OpenAPI, "
-        "cross-document invariants and repository artifacts checked."
+        "cross-document and Vision Stream invariants, and repository artifacts checked."
     )
     return 0
 

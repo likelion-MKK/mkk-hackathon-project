@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcm-lookbook.example/contracts/vision-stream/v1/vision-stream-token.schema.json",
+  "title": "VisionStreamTokenV1",
+  "description": "Short-lived, one-time credential bound to one consented session and video.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol_version",
+    "session_id",
+    "video_id",
+    "stream_token",
+    "expires_at",
+    "websocket_path"
+  ],
+  "properties": {
+    "protocol_version": { "const": "1.0" },
+    "session_id": { "$ref": "#/$defs/id" },
+    "video_id": { "$ref": "#/$defs/id" },
+    "stream_token": { "type": "string", "minLength": 32, "maxLength": 2048 },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "websocket_path": { "const": "/vision/v1/stream" }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    }
+  }
+}
