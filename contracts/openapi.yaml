@@ -3,7 +3,7 @@ jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 
 info:
   title: MCM AI Lookbook Kiosk API
-  version: 0.1.0
+  version: 0.2.0
   summary: Kiosk, recommendation, product, conversion and manager API contract
   description: >-
     Contract-first scaffold for parallel FE, BE, Eye and Face development.
@@ -227,6 +227,167 @@ paths:
                 items:
                   $ref: "./events/manager-event.schema.json"
 
+  /api/v2/sessions/{session_id}/observations:
+    post:
+      tags: [Reactions]
+      operationId: appendObservationBatchV2
+      summary: Accept a batch of derived frame observations for the central recommender
+      description: >-
+        Accepts only privacy-minimized derived signals. Raw frames, image bytes,
+        base64/data URIs, embeddings, landmarks and original/source paths are forbidden.
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./v2/observation-batch-v2.schema.json"
+      responses:
+        "202":
+          description: Observation batch accepted or already processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ObservationBatchAcceptedV2"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          description: Observation batch exceeds the configured payload limit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v2/sessions/{session_id}/complete:
+    post:
+      tags: [Recommendations]
+      operationId: completeSessionAnalysisV2
+      summary: Freeze derived observations and enqueue a central Top 1 decision
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "202":
+          description: Central recommendation processing started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecommendationAcceptedV2"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v2/sessions/{session_id}/recommendation:
+    get:
+      tags: [Recommendations]
+      operationId: getSessionRecommendationV2
+      summary: Poll the pending receipt or terminal central Top 1 decision
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: Terminal central recommendation decision
+          content:
+            application/json:
+              schema:
+                $ref: "./v2/recommendation-decision-v2.schema.json"
+        "202":
+          description: Central recommendation is still pending
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecommendationAcceptedV2"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v2/sessions/{session_id}:
+    delete:
+      tags: [Sessions]
+      operationId: deleteSessionV2
+      summary: Cancel the session and discard all session-local derived evidence
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "204":
+          description: Session-local observations, evidence and de-duplication keys discarded
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v2/products/{product_id}:
+    get:
+      tags: [Products]
+      operationId: getProductV2
+      summary: Get one reviewed central recommendation product profile
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      responses:
+        "200":
+          description: Product profile with explicit nullable URL, image and QR provenance
+          content:
+            application/json:
+              schema:
+                $ref: "./v2/product-detail-v2.schema.json"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v2/sessions/{session_id}/manager-product-requests:
+    post:
+      tags: [Managers]
+      operationId: createManagerProductRequestV2
+      summary: Send an explicit customer request for the completed Top 1 product
+      description: >-
+        Backend verifies that recommendation_id belongs to the session and that
+        selected_product_id exactly matches its completed decision. No event is
+        emitted automatically when a session starts or a recommendation completes.
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./v2/manager-product-request-v2.schema.json"
+      responses:
+        "202":
+          description: Customer product request accepted or recognized as a duplicate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManagerProductRequestAccepted"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v2/manager/events:
+    get:
+      tags: [Managers]
+      operationId: listManagerEventsV2
+      summary: Poll explicit customer Top 1 product request events
+      parameters:
+        - name: after_sequence
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: Ordered customer product request events only
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "./v2/manager-event-v2.schema.json"
+
   /api/v1/health:
     get:
       tags: [System]
@@ -311,6 +472,28 @@ components:
       required: [session_id, status]
       properties:
         session_id:
+          $ref: "#/components/schemas/Identifier"
+        status:
+          const: pending
+
+    ObservationBatchAcceptedV2:
+      type: object
+      additionalProperties: false
+      required: [batch_id, status]
+      properties:
+        batch_id:
+          $ref: "#/components/schemas/Identifier"
+        status:
+          enum: [accepted, duplicate]
+
+    RecommendationAcceptedV2:
+      type: object
+      additionalProperties: false
+      required: [recommendation_id, decision_request_id, status]
+      properties:
+        recommendation_id:
+          $ref: "#/components/schemas/Identifier"
+        decision_request_id:
           $ref: "#/components/schemas/Identifier"
         status:
           const: pending

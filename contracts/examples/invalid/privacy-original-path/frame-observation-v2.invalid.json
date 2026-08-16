@@ -1,0 +1,7 @@
+{
+  "schema_version": "2.0", "frame_id": "frame-privacy-original-path", "sequence": 0,
+  "captured_at_mono_ms": 1, "session_offset_ms": 0, "video_time_ms": 0, "playback_epoch": 0,
+  "gaze": null, "gaze_reason": "not_measured", "attention": null, "attention_reason": "gaze_unavailable",
+  "expression": null, "expression_reason": "not_measured", "derived": null, "derived_reason": "no_valid_modality",
+  "original_path": "camera/frame-0001.jpg"
+}

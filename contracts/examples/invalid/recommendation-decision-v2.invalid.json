@@ -1,0 +1,31 @@
+{
+  "schema_version": "2.0",
+  "recommendation_id": "recommendation-invalid-v2-001",
+  "decision_request_id": "decision-request-invalid-001",
+  "status": "completed",
+  "selected_product_id": null,
+  "reason": {
+    "code": "grounded_product_match",
+    "explanation": "완료인데 상품과 근거가 없는 잘못된 예입니다."
+  },
+  "reason_codes": ["not_allowlisted"],
+  "evidence": [],
+  "style": null,
+  "exploration_tendency_code": "psychological_type",
+  "data_quality": {
+    "expected_observation_count": 0,
+    "gaze_valid_ratio": 0,
+    "expression_valid_ratio": 0,
+    "matched_frame_ratio": 0,
+    "ambiguous_product_ratio": 0
+  },
+  "version": {
+    "model_id": "placeholder",
+    "model_revision": "placeholder",
+    "prompt_version": "central-recommender-ko-v1",
+    "feature_version": "central-evidence-v2-demo-1",
+    "catalog_version": "mcm-us-listing-names-v2-2026-08-16",
+    "input_variant": "Z",
+    "deployment_mode": "self_hosted"
+  }
+}

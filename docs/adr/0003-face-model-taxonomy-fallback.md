@@ -5,8 +5,9 @@
 - 결정 소유자: 정은미(Face)
 - 공동 리뷰: 박형진(Vision Gateway·Contract), 양유상(Eye), 조윤혜(Kiosk)
 - 관련 결정: `D1-05 Eye·Face 모델 실행 위치`, ADR-0001
+- 후속 추천 결정: [`ADR-0006 중앙 판단 추천 AI와 파생 evidence 수명`](0006-central-recommendation-ai.md)
 - 관련 작업: Face D2 후보 inventory, D3 Replay 의미, D4 후보 benchmark
-- 관련 추천 경계: [Draft PR #33](https://github.com/likelion-MKK/mkk-hackathon-project/pull/33)
+- 관련 연구 경계: [PR #33](https://github.com/likelion-MKK/mkk-hackathon-project/pull/33) (2026-08-16 감사 시 Open·Ready, 이번 문서 변경에서 미수정)
 
 ## 1. Context
 
@@ -18,6 +19,10 @@ Face Worker는 하나의 frame과 `FaceFrameContext`를 받아 Contract v1의
 D2는 후보의 revision·license·checksum·실행 경계를 조사했고 D4는 동일한 synthetic
 입력으로 로컬 CPU 실행 가능성, 지연과 출력 안정성을 비교했다. D4에는 실제 얼굴
 정답 label이 없으므로 실제 정확도나 demographic 강건성의 근거로 사용할 수 없다.
+
+이 ADR은 Face 생산자 모델·taxonomy·invalid·lifecycle 결정만 관할한다. Eye-only 추천,
+Face 보조 weight와 downstream 보유 방식에 관한 이전 연구 계획은 [`ADR-0006`](0006-central-recommendation-ai.md)이
+production 방향을 대체한다.
 
 근거 문서:
 
@@ -109,11 +114,10 @@ quality·confidence 계산식과 threshold는 실제 labeled fixture 근거가 �
 - production에서 OpenVINO, HSEmotion, Fake 또는 Replay로 자동 전환하지 않는다.
 - 모델이 없거나 실패하면 명시적인 invalid 결과와 reason을 전달한다.
 - Face 결과가 없어도 Eye 처리를 막지 않으며 downstream은 유효 sample만 사용한다.
-- Face가 무효·미수신이어도 Eye/AOI 근거가 충분하면 Eye-only 추천을 계속한다. Face를
-  neutral, 0점 또는 무관심으로 채우거나 Face 부재만으로 `insufficient_data`로
-  바꾸지 않는다.
-- primary Eye/AOI 근거까지 부족할 때만 추천·화면 계층이 `insufficient_data` 흐름을
-  사용한다.
+- Face가 무효·미수신이어도 Eye 처리를 막지 않고 유효한 Eye/AOI와 Face coverage·reason을
+  중앙 evidence에 보존한다. Face를 neutral, 0점 또는 무관심으로 채우지 않는다.
+- 최종 추천 가능 여부는 [`ADR-0006`](0006-central-recommendation-ai.md)의 중앙 판단 경계가
+  전체 evidence 품질을 보고 결정하며 Face 생산자가 Eye-only 추천을 보장하지 않는다.
 - OpenVINO는 detector 결합, 동일 labeled fixture 품질, 전체 지연과 유지보수 검토가
   승인된 별도 ADR 없이는 fallback으로 추가하지 않는다.
 - HSEmotion은 안전한 순수 `state_dict`, ONNX 또는 공식 안전 loader가 고정 revision,
@@ -210,8 +214,9 @@ ADR을 Accepted로 바꾸고 production-ready로 표시하려면 다음을 모�
 - 동시 세션 수와 worker restart·network 단절 회복을 검증한다.
 - 동의된 비식별 fixture와 실제 Kiosk·목표 Vision 서버에서 valid coverage,
   multi-face 오검출, Face-off Eye-only fallback을 검증한다.
-- Face 보조 신호를 넣은 결과가 Eye/AOI-only 기준보다 유용한지 평가한 뒤에만
-  recommendation weight와 `algorithm_version`을 고정한다.
+- Face 관찰 신호를 포함한 중앙 evidence가 Eye/AOI-only 연구 baseline보다 유용한지
+  평가하고 model·prompt·evidence version을 기록한다. 고정 Face 보조 weight를
+  production 정책으로 승인하지 않는다.
 - ADR-0001 개인정보·WSS Gate와 ADR-0002 서버·운영 Gate가 승인된다.
 - proxy, Gateway, Worker, APM, 파일, DB, cache와 artifact에 frame이 남지 않음을
   확인한다.
@@ -227,6 +232,10 @@ rollback owner가 기록된 경우에만 그 revision으로 되돌린다.
 ADR이 Accepted되더라도 API Contract나 DB migration을 바로 변경하지 않는다. 다음
 책임을 작은 PR로 순서대로 분리한다.
 
+아래 3·4번은 작성 당시의 연구 handoff로 보존한다. production의 결합·수명·최종 판단은
+ADR-0006과 [`IMPLEMENTATION_PLAN.md`](../IMPLEMENTATION_PLAN.md)가 대체하며 fixed-weight
+방식은 replay 비교 baseline으로만 사용한다.
+
 1. **Face Adapter·정규화 PR:** selected 슬롯 안에 MediaPipe runtime, 고정 metadata,
    checksum-before-load, `output_face_blendshapes=true`, `num_faces=2`, strict output
    validation, taxonomy mapping, lifecycle와 derived retry cache를 구현한다.
@@ -238,7 +247,7 @@ ADR이 Accepted되더라도 API Contract나 DB migration을 바로 변경하지 
    대응하는 유효 Eye/AOI event가 정확히 한 상품을 가리킬 때만 valid Face 반응을 그
    상품에 집계한다. 후보가 0개·여러 개이거나 Eye/AOI가 무효이면 어느 상품에도
    분배하지 않으며 개별 raw sample은 영속화하지 않는다.
-4. **연구용 추천 엔진 PR:** Eye/AOI를 primary score로 유지하고 baseline 대비 변화,
+4. **역사적 연구용 추천 baseline PR:** Eye/AOI를 primary score로 유지하고 baseline 대비 변화,
    승인된 signal group, 시간창과 valid coverage로 만든 `face_response_score`를 더
    낮고 상한이 있는 보조 비중으로만 결합한다. Face만으로 순위를 정하거나 충분한
    Eye/AOI 근거를 뒤집지 않는다. 정확한 식·weight·표본 수·quality threshold는
@@ -258,4 +267,4 @@ Gateway, 카메라와 deployment는 각 책임의 별도 PR이다.
 - 목표 서버·network 포함 capture-to-result와 timeout 수치
 - 동시 세션, 장시간 안정성, worker restart 후 복구
 - 실제 labeled fixture와 consumer 유용성
-- Eye/AOI-only 대비 Face 보조 신호의 증분 유용성과 최종 recommendation weight
+- Eye/AOI-only 대비 Face 관찰 신호의 증분 유용성과 중앙 evidence·prompt 통합 품질

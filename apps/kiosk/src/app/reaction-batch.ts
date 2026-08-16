@@ -31,7 +31,8 @@ type BuildD1ReactionBatchOptions = {
   manifest: LookbookManifest;
   gazeSample?: GazeSample | null;
   gazeSamples?: readonly GazeSample[];
-  expressionSample: ExpressionSample | null;
+  expressionSample?: ExpressionSample | null;
+  expressionSamples?: readonly ExpressionSample[];
   videoLayout?: VideoLayout;
   videoLayoutsByFrameId?: ReadonlyMap<string, VideoLayout>;
 };
@@ -116,8 +117,8 @@ export function mapD1MockGazeToVideoPoint(gazeSample: GazeSample): VideoPointMap
     };
   }
 
-  // D1의 임시 룩북은 별도의 video layout이 없으므로 두 정규화 좌표계를 같게 둔다.
-  // 실제 영상 연결 시에는 캡처 시점의 layout으로 screen 좌표를 video 좌표로 변환해야 한다.
+  // Contract v1 Mock fixture에는 별도 video layout이 없어 두 정규화 좌표계를 같게 둔다.
+  // real v2 흐름은 캡처 시점 layout이 있을 때 mapGazeToVideoPoint를 사용한다.
   return {
     valid: true,
     outside_video: false,
@@ -290,6 +291,20 @@ function resolveGazeSamples({
   return gazeSample ? [gazeSample] : [];
 }
 
+function resolveExpressionSamples({
+  expressionSample,
+  expressionSamples,
+}: Pick<BuildD1ReactionBatchOptions, "expressionSample" | "expressionSamples">): readonly ExpressionSample[] {
+  if (expressionSamples) {
+    if (expressionSample) {
+      throw new Error("Provide expressionSample or expressionSamples, not both.");
+    }
+    return expressionSamples;
+  }
+
+  return expressionSample ? [expressionSample] : [];
+}
+
 function mapSampleToVideoPoint(
   gazeSample: GazeSample,
   options: Pick<BuildD1ReactionBatchOptions, "videoLayout" | "videoLayoutsByFrameId">,
@@ -301,17 +316,17 @@ function mapSampleToVideoPoint(
 function buildReactionEvents(options: BuildD1ReactionBatchOptions): Array<
   ExpressionSample | ProductAttentionEvent
 > {
-  const { manifest, expressionSample } = options;
+  const { manifest } = options;
   const samples = resolveGazeSamples(options);
+  const expressionSamples = resolveExpressionSamples(options);
   const events: Array<ExpressionSample | ProductAttentionEvent> = [];
 
-  if (expressionSample) {
-    events.push(expressionSample);
-  }
+  events.push(...expressionSamples);
 
   const firstAttentionSequence = Math.max(
-    expressionSample?.sequence ?? -1,
+    ...expressionSamples.map((sample) => sample.sequence),
     ...samples.map((sample) => sample.sequence),
+    -1,
   ) + 1;
 
   samples.forEach((sample, index) => {
@@ -366,6 +381,7 @@ export function buildD1ReactionBatch({
   gazeSample,
   gazeSamples,
   expressionSample,
+  expressionSamples,
   videoLayout,
   videoLayoutsByFrameId,
 }: BuildD1ReactionBatchOptions): ReactionBatch | null {
@@ -377,6 +393,7 @@ export function buildD1ReactionBatch({
     gazeSample,
     gazeSamples,
     expressionSample,
+    expressionSamples,
     videoLayout,
     videoLayoutsByFrameId,
   });

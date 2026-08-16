@@ -4,7 +4,8 @@
 
 - `eye/`: 양유상 소유. point-of-gaze, 품질, 좌표 변환과 AOI hit 후보까지 담당한다.
 - `face/`: 정은미 소유. 관찰 가능한 표정 점수, 품질과 taxonomy 정규화를 담당한다.
-- `recommendation/`: 박형진 소유. 파생 신호 집계와 Top 2 결과 경계를 담당한다.
+- `recommendation/`: 박형진 소유. 결정적 파생 신호 요약, self-hosted 중앙 AI 호출과
+  v2 Top 1 결과 검증 경계를 담당한다. 기존 Top 2 엔진은 replay 비교용 v1 baseline이다.
 
 서비스는 다른 영역의 내부 구현을 import하지 않으며, 모델 선정 전에는 Fake/Replay Adapter를 기본 통합 수단으로 사용한다.
 

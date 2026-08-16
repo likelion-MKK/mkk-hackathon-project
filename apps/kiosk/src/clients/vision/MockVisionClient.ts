@@ -93,10 +93,10 @@ export class MockVisionClient implements VisionClient {
       throw new Error("FrameContext does not match the active Vision session.");
     }
 
-    const gazeSequence = context.sequence * 2;
-    const expressionSequence = gazeSequence + 1;
-    const gazeSample = this.createGazeSampleFromFrame(context, gazeSequence);
-    const expressionSample = this.createExpressionSampleFromFrame(context, expressionSequence);
+    // Frame-derived modalities share the capture sequence so v2 fusion can preserve
+    // frame-drop gaps without inventing a new contiguous sequence.
+    const gazeSample = this.createGazeSampleFromFrame(context, context.sequence);
+    const expressionSample = this.createExpressionSampleFromFrame(context, context.sequence);
     this.gazeListeners.forEach((listener) => listener(gazeSample));
     this.expressionListeners.forEach((listener) => listener(expressionSample));
   }

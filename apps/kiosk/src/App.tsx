@@ -16,6 +16,10 @@ import screensaverLifestyleWideImage from "./assets/screensaver/mcm-lifestyle-wi
 import screensaverMilanStreetImage from "./assets/screensaver/mcm-milan-street.jpg";
 import { AsyncFlowController } from "./app/async-flow-controller.ts";
 import {
+  discardCentralSessionBestEffort,
+  submitCentralRecommendation,
+} from "./app/central-recommendation-flow.ts";
+import {
   CONSENT_IDLE_TIMEOUT_MS,
   CONSENT_VERSION,
   getConsentSecondsRemaining,
@@ -27,7 +31,18 @@ import {
   transitionKioskScreen,
   type KioskEvent,
 } from "./app/kiosk-machine.ts";
+import { buildManagerProductRequestV2 } from "./app/manager-product-request-v2.ts";
+import { buildObservationBatchesV2 } from "./app/observation-batch-v2.ts";
 import { buildD1ReactionBatches } from "./app/reaction-batch.ts";
+import {
+  pollRecommendation,
+  RecommendationPollingError,
+} from "./app/recommendation-polling.ts";
+import {
+  presentCentralRecommendation,
+  presentMockRecommendation,
+  type RecommendationPresentation,
+} from "./app/recommendation-presentation.ts";
 import type { FrameContext, VideoLayout } from "./app/video-context.ts";
 import type {
   ExpressionSample,
@@ -36,6 +51,9 @@ import type {
   LookbookManifest,
   Product,
   ProductCategory,
+  ProductRecommendationItemV2,
+  RecommendationAcceptedV2,
+  RecommendationDecisionV2,
   RecommendationResult,
   SessionCreated,
 } from "./app/kiosk-types.ts";
@@ -43,6 +61,8 @@ import {
   MOCK_LOOKBOOK_ID_BY_CATEGORY,
   MockApiClient,
 } from "./clients/api/MockApiClient.ts";
+import type { ApiClient } from "./clients/api/ApiClient.ts";
+import { HttpApiClient } from "./clients/api/HttpApiClient.ts";
 import { CameraAccessError, FrameSource } from "./camera/FrameSource.ts";
 import { FakeRemoteVisionClient } from "./clients/vision/FakeRemoteVisionClient.ts";
 import {
@@ -51,10 +71,20 @@ import {
 } from "./components/LookbookPlayer.tsx";
 import "./App.css";
 
-const apiClient = new MockApiClient({ sessionStartDelayMs: 450 });
+const useMockApi = import.meta.env.VITE_USE_MOCK_API?.trim().toLowerCase() === "true";
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() ?? "";
+const configuredLookbookId =
+  import.meta.env.VITE_LOOKBOOK_ID?.trim() || "mcm-central-ai-replay-v2";
+const mockApiClient = new MockApiClient({ sessionStartDelayMs: 450 });
+const httpApiClient = new HttpApiClient(apiBaseUrl);
+const apiClient: ApiClient = useMockApi ? mockApiClient : httpApiClient;
 const visionClient = new FakeRemoteVisionClient();
 const frameSource = new FrameSource();
 const temporaryLookbookVideoUrl = import.meta.env.VITE_LOOKBOOK_VIDEO_URL?.trim() ?? "";
+const configuredVisionMode = import.meta.env.VITE_VISION_MODE?.trim() || "replay";
+if (configuredVisionMode !== "replay") {
+  throw new Error("VITE_VISION_MODE currently supports only the approved replay boundary.");
+}
 const enableAoiDebugOverlay =
   import.meta.env.DEV || import.meta.env.VITE_KIOSK_DEBUG_AOI === "true";
 const MAX_CAPTURED_FRAME_LAYOUTS = 2_048;
@@ -95,7 +125,7 @@ type CategoryOption = {
   englishName: string;
 };
 
-const productCategories: CategoryOption[] = [
+const mockProductCategories: CategoryOption[] = [
   {
     name: "가방",
     label: "가방",
@@ -117,6 +147,10 @@ const productCategories: CategoryOption[] = [
     englishName: "VIEW ALL",
   },
 ];
+
+const productCategories: CategoryOption[] = useMockApi
+  ? mockProductCategories
+  : [mockProductCategories[0]];
 
 const screensaverStories = [
   {
@@ -181,19 +215,6 @@ function getLookbookPoster(category: ProductCategory | null): string {
   if (category === "의류") return apparelImage;
   if (category === "액세서리") return accessoryImage;
   return screensaverImageOne;
-}
-
-const mockProductImages: Record<string, string> = {
-  BAG001: bagImage,
-  BAG002: bagImage,
-  RTW001: apparelImage,
-  RTW002: apparelImage,
-  ACC001: accessoryImage,
-  ACC002: accessoryImage,
-};
-
-function getMockProductImage(product: Product): string {
-  return mockProductImages[product.product_id] ?? product.image_url;
 }
 
 function ArrowIcon() {
@@ -475,21 +496,21 @@ function CameraConsent({
           eyebrow: "SESSION TIMEOUT",
           title: "입력 시간이 지났어요",
           description:
-            "동의가 확인되지 않아 카메라와 Mock 세션을 시작하지 않았습니다.",
+            "동의가 확인되지 않아 카메라와 분석 세션을 시작하지 않았습니다.",
           retryLabel: "내용 다시 확인하기",
         },
         "session-timeout": {
-          eyebrow: "MOCK API TIMEOUT",
+          eyebrow: useMockApi ? "MOCK API TIMEOUT" : "API TIMEOUT",
           title: "세션 준비가 지연되고 있어요",
           description:
-            "열렸던 카메라는 종료했습니다. 잠시 후 Mock 세션 연결을 다시 시도해주세요.",
+            `열렸던 카메라는 종료했습니다. 잠시 후 ${useMockApi ? "Mock" : "Backend"} 세션 연결을 다시 시도해주세요.`,
           retryLabel: "다시 시도",
         },
         "session-error": {
-          eyebrow: "MOCK API ERROR",
+          eyebrow: useMockApi ? "MOCK API ERROR" : "API ERROR",
           title: "세션을 준비하지 못했어요",
           description:
-            "열렸던 카메라는 종료했습니다. Mock API 상태를 확인한 뒤 다시 시도해주세요.",
+            `열렸던 카메라는 종료했습니다. ${useMockApi ? "Mock API" : "Backend"} 상태를 확인한 뒤 다시 시도해주세요.`,
           retryLabel: "다시 시도",
         },
         "camera-denied": {
@@ -543,10 +564,10 @@ function CameraConsent({
             <div>
               <dt>02</dt>
               <dd>
-                <strong>원격 분석 서버로 일시 전송합니다</strong>
+                <strong>현재는 local/replay 분석 경계를 사용합니다</strong>
                 <span>
-                  프레임은 암호화된 연결로 별도 Vision 서버에 전송되어 시선·표정 분석에만
-                  사용됩니다.
+                  원본 프레임은 중앙 추천 서버로 보내지 않으며 정형화된 시선·표정 파생
+                  JSON만 Backend에 전달합니다.
                 </span>
               </dd>
             </div>
@@ -566,14 +587,15 @@ function CameraConsent({
                 <strong>개별 파생 신호는 저장하지 않습니다</strong>
                 <span>
                   시선·표정 관련 신호는 현재 세션에서 관심도를 집계하는 데만 사용하고 추천
-                  생성 후 폐기합니다. 추천 결과와 익명 세션 상태는 현재 세션에만 유지합니다.
+                  생성 후 폐기합니다. 최종 추천은 최소 운영 metadata만 Backend 정책에 따라
+                  처리합니다.
                 </span>
               </dd>
             </div>
           </dl>
 
           <div className="consent-meta">
-            <span>D03 LOCAL CAMERA · 원격 전송 없이 fake 경계로 확인합니다.</span>
+            <span>CENTRAL V2 · LOCAL IN-PROCESS REPLAY VISION</span>
             <span role="timer" aria-label={`자동 종료까지 ${secondsRemaining}초`}>
               AUTO CLOSE · {String(secondsRemaining).padStart(2, "0")}S
             </span>
@@ -604,7 +626,7 @@ function CameraConsent({
               disabled={isStarting || issue !== null}
               aria-busy={isStarting}
             >
-              {isStarting ? "카메라·Mock 세션 준비 중..." : "동의하고 계속"}
+              {isStarting ? "카메라·분석 세션 준비 중..." : "동의하고 계속"}
               {!isStarting && <ArrowIcon />}
             </button>
           </div>
@@ -723,142 +745,112 @@ function TimedPlaceholder({
   );
 }
 
-function createMockQrMatrix(seed: string): boolean[][] {
-  const size = 21;
-  const matrix = Array.from({ length: size }, () => Array<boolean>(size).fill(false));
-  const reserved = Array.from({ length: size }, () => Array<boolean>(size).fill(false));
+function ReportScreen({
+  recommendation,
+  product,
+  onHome,
+  onRequestManager,
+}: {
+  recommendation: RecommendationPresentation;
+  product: Product | ProductRecommendationItemV2;
+  onHome: () => void;
+  onRequestManager: () => Promise<void>;
+}) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const [requestState, setRequestState] = useState<"idle" | "sending" | "sent" | "failed">(
+    "idle",
+  );
 
-  const placeFinder = (startX: number, startY: number) => {
-    for (let y = -1; y <= 7; y += 1) {
-      for (let x = -1; x <= 7; x += 1) {
-        const targetX = startX + x;
-        const targetY = startY + y;
-        if (targetX < 0 || targetY < 0 || targetX >= size || targetY >= size) continue;
-
-        reserved[targetY][targetX] = true;
-        matrix[targetY][targetX] =
-          x >= 0 && x <= 6 && y >= 0 && y <= 6 &&
-          (x === 0 || x === 6 || y === 0 || y === 6 ||
-            (x >= 2 && x <= 4 && y >= 2 && y <= 4));
-      }
+  const requestManager = async () => {
+    if (requestState === "sending" || requestState === "sent") return;
+    setRequestState("sending");
+    try {
+      await onRequestManager();
+      setRequestState("sent");
+    } catch {
+      setRequestState("failed");
     }
   };
-
-  placeFinder(0, 0);
-  placeFinder(size - 7, 0);
-  placeFinder(0, size - 7);
-
-  let hash = Array.from(seed).reduce(
-    (value, character) => (value * 31 + character.charCodeAt(0)) >>> 0,
-    2166136261,
-  );
-
-  for (let y = 0; y < size; y += 1) {
-    for (let x = 0; x < size; x += 1) {
-      if (reserved[y][x]) continue;
-      hash = (hash * 1664525 + 1013904223) >>> 0;
-      matrix[y][x] = (hash & 1) === 1;
-    }
-  }
-
-  return matrix;
-}
-
-function MockQrPreview({ product }: { product: Product }) {
-  const matrix = createMockQrMatrix(product.product_id);
+  const isCentralProduct = "controlled_tags" in product;
+  const imageUrl = isCentralProduct
+    ? product.approved_asset && product.image_asset_path
+      ? `/${product.image_asset_path}`
+      : null
+    : product.image_url;
+  const productUrl = isCentralProduct
+    ? (product.official_product_url ?? product.official_listing_url)
+    : product.product_url;
 
   return (
-    <div className="result-qr" aria-label={`${product.display_name} Mock QR preview`}>
-      <div className="result-qr__matrix" aria-hidden="true">
-        {matrix.flatMap((row, rowIndex) =>
-          row.map((isFilled, columnIndex) => (
-            <span
-              className={isFilled ? "is-filled" : undefined}
-              key={`${rowIndex}-${columnIndex}`}
-            />
-          )),
-        )}
-      </div>
-      <span className="result-qr__label">MOCK QR / PRODUCT PAGE</span>
-    </div>
-  );
-}
-
-function ReportResult({
-  recommendation,
-  products,
-  category,
-  onHome,
-}: {
-  recommendation: RecommendationResult;
-  products: Product[];
-  category: ProductCategory | null;
-  onHome: () => void;
-}) {
-  const productById = new Map(products.map((product) => [product.product_id, product]));
-
-  return (
-    <main className="store-screen result-screen screen-enter" aria-labelledby="result-title">
-      <header className="result-header">
-        <button className="wordmark-button" type="button" onClick={onHome}>
-          <Wordmark light />
-          <span className="sr-only">처음 화면으로 이동</span>
-        </button>
-        <span className="result-header__meta">MCM AI LOOKBOOK / RESULT</span>
-        <span className="result-header__meta">{category ?? "COLLECTION"}</span>
-      </header>
-
-      <section className="result-intro">
-        <div>
-          <p className="result-kicker">YOUR EDIT</p>
-          <h1 id="result-title">
-            시선이 머문
-            <br />
-            <em>두 가지</em>
-          </h1>
+    <main className="store-screen report-screen">
+      <StoreChrome onHome={onHome} step="04" />
+      <section className="report-layout">
+        <div className="report-media">
+          <img
+            src={imageFailed || !imageUrl ? bagImage : imageUrl}
+            alt={product.display_name}
+            onError={() => setImageFailed(true)}
+          />
+          <span>TOP 1 · {product.product_id}</span>
         </div>
-        <div className="result-intro__aside">
-          <p>룩북을 감상하는 동안 오래 머문 장면을 바탕으로 고른 MCM 셀렉션입니다.</p>
-          <span className="result-mode">
-            {recommendation.engine_mode === "mock" ? "MOCK RESULT" : "AI RESULT"}
-          </span>
+        <div className="report-copy">
+          <p className="section-label">YOUR RECOMMENDATION</p>
+          <h1>말로 표현되지 않은 탐색 반응에서 발견한 추천</h1>
+          <p className="report-tendency">
+            이번 세션의 스타일 탐색 경향: {recommendation.tendency}
+          </p>
+          <h2>{product.display_name}</h2>
+          <p className="report-reason">{recommendation.reason}</p>
+          {recommendation.mode === "mock_v1" && (
+            <p className="report-disclaimer">개발 환경에서만 사용하는 v1 Mock fixture 결과입니다.</p>
+          )}
+          {recommendation.mode === "replay_v2" && (
+            <p className="report-disclaimer">
+              개발 검증용 replay 파생 신호 결과이며 실제 고객 분석 결과가 아닙니다.
+            </p>
+          )}
+          {isCentralProduct && !product.approved_asset && (
+            <p className="report-disclaimer">
+              검수된 상품 이미지와 개별 QR은 아직 연결되지 않아 기본 이미지를 표시합니다.
+            </p>
+          )}
+          <p className="report-disclaimer">
+            시선·표정 관련 신호는 이번 세션의 비언어적 관찰값이며 감정·성격·구매
+            의도를 확정하지 않습니다.
+          </p>
+          <div className="report-actions">
+            <a
+              className="store-button store-button--solid"
+              href={productUrl}
+              rel="noreferrer"
+              target="_blank"
+            >
+              {isCentralProduct && !product.official_product_url
+                ? "공식 가방 목록 보기"
+                : "상품 정보 보기"}
+            </a>
+            <button
+              className="store-button store-button--outline"
+              type="button"
+              disabled={requestState === "sending" || requestState === "sent"}
+              onClick={() => void requestManager()}
+            >
+              {requestState === "sending" && "요청 전송 중"}
+              {requestState === "sent" && "매니저 요청 완료"}
+              {(requestState === "idle" || requestState === "failed") && "직접 보고 싶어요"}
+            </button>
+          </div>
+          {requestState === "failed" && (
+            <p className="report-request-error" role="alert">
+              요청을 전송하지 못했습니다. 다시 시도해 주세요.
+            </p>
+          )}
+          <button className="back-link" type="button" onClick={onHome}>
+            ← 처음으로 돌아가기
+          </button>
+          <span className="sr-only">{recommendation.recommendation_id}</span>
         </div>
       </section>
-
-      <section className="result-products" aria-label="추천 상품">
-        {recommendation.items.map((item) => {
-          const product = productById.get(item.product_id);
-          if (!product) return null;
-
-          return (
-            <article className="result-card" key={product.product_id}>
-              <div className="result-card__visual">
-                <img src={getMockProductImage(product)} alt={`${product.display_name} 상품 이미지`} />
-                <span className="result-card__rank">0{item.rank}</span>
-              </div>
-              <div className="result-card__details">
-                <div>
-                  <span className="result-card__category">{product.category}</span>
-                  <h2>{product.display_name}</h2>
-                  <p>당신의 룩북 여정에서 가장 오래 시선이 머문 아이템</p>
-                </div>
-                <MockQrPreview product={product} />
-              </div>
-            </article>
-          );
-        })}
-      </section>
-
-      <footer className="result-footer">
-        <div>
-          <span className="result-footer__line" aria-hidden="true" />
-          <p>매장에서 더 자세히 보고 싶은 상품은 직원에게 말씀해주세요.</p>
-        </div>
-        <button className="result-restart" type="button" onClick={onHome}>
-          처음으로
-          <ArrowIcon />
-        </button>
-      </footer>
     </main>
   );
 }
@@ -880,8 +872,10 @@ function App() {
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory | null>(null);
   const [session, setSession] = useState<SessionCreated | null>(null);
   const [manifest, setManifest] = useState<LookbookManifest | null>(null);
-  const [recommendation, setRecommendation] = useState<RecommendationResult | null>(null);
-  const [recommendationProducts, setRecommendationProducts] = useState<Product[]>([]);
+  const [recommendation, setRecommendation] = useState<RecommendationPresentation | null>(null);
+  const [recommendedProduct, setRecommendedProduct] = useState<
+    Product | ProductRecommendationItemV2 | null
+  >(null);
   const [flowError, setFlowError] = useState<string | null>(null);
   const [consentIssue, setConsentIssue] = useState<ConsentIssue | null>(null);
   const [isStarting, setIsStarting] = useState(false);
@@ -891,8 +885,9 @@ function App() {
   const [flowController] = useState(() => new AsyncFlowController());
   const gazeSamples = useRef<GazeSample[]>([]);
   const videoLayoutsByFrameId = useRef<Map<string, VideoLayout>>(new Map());
-  const latestExpressionSample = useRef<ExpressionSample | null>(null);
+  const expressionSamples = useRef<ExpressionSample[]>([]);
   const sessionStartAbortController = useRef<AbortController | null>(null);
+  const recommendationAbortController = useRef<AbortController | null>(null);
 
   const abortSessionStart = useCallback(() => {
     sessionStartAbortController.current?.abort();
@@ -911,7 +906,7 @@ function App() {
       setLatestGazeLayout(layoutsByFrameId.get(sample.frame_id) ?? null);
     });
     const removeExpressionListener = visionClient.onExpressionSample((sample) => {
-      latestExpressionSample.current = sample;
+      expressionSamples.current.push(sample);
     });
 
     return () => {
@@ -919,6 +914,7 @@ function App() {
       removeExpressionListener();
       flowController.invalidateCurrentFlow();
       abortSessionStart();
+      recommendationAbortController.current?.abort();
       frameSource.stop();
       layoutsByFrameId.clear();
       void flowController.runSerialized(() => visionClient.stopSession());
@@ -934,16 +930,21 @@ function App() {
   const restart = useCallback(async () => {
     const generation = flowController.invalidateCurrentFlow();
     abortSessionStart();
+    recommendationAbortController.current?.abort();
+    recommendationAbortController.current = null;
     frameSource.stop();
-    if (session) apiClient.discardSession(session.session_id);
+    if (session && screen !== "report") {
+      if (useMockApi) void mockApiClient.discardSession(session.session_id);
+      else void discardCentralSessionBestEffort(httpApiClient, session.session_id);
+    }
     gazeSamples.current.length = 0;
     videoLayoutsByFrameId.current.clear();
-    latestExpressionSample.current = null;
+    expressionSamples.current.length = 0;
     setSelectedCategory(null);
     setSession(null);
     setManifest(null);
     setRecommendation(null);
-    setRecommendationProducts([]);
+    setRecommendedProduct(null);
     setFlowError(null);
     setConsentIssue(null);
     setIsStarting(false);
@@ -959,20 +960,22 @@ function App() {
         setFlowError("이전 Vision 세션을 종료하지 못했습니다.");
       }
     }
-  }, [abortSessionStart, flowController, send, session]);
+  }, [abortSessionStart, flowController, screen, send, session]);
 
   const cancelConsent = useCallback(async () => {
     const generation = flowController.invalidateCurrentFlow();
     abortSessionStart();
+    recommendationAbortController.current?.abort();
+    recommendationAbortController.current = null;
     frameSource.stop();
     gazeSamples.current.length = 0;
     videoLayoutsByFrameId.current.clear();
-    latestExpressionSample.current = null;
+    expressionSamples.current.length = 0;
     setSelectedCategory(null);
     setSession(null);
     setManifest(null);
     setRecommendation(null);
-    setRecommendationProducts([]);
+    setRecommendedProduct(null);
     setFlowError(null);
     setConsentIssue(null);
     setIsStarting(false);
@@ -996,7 +999,7 @@ function App() {
     frameSource.stop();
     gazeSamples.current.length = 0;
     videoLayoutsByFrameId.current.clear();
-    latestExpressionSample.current = null;
+    expressionSamples.current.length = 0;
     setIsStarting(false);
     setCameraState("idle");
     setLatestGazeSample(null);
@@ -1015,7 +1018,7 @@ function App() {
 
     gazeSamples.current.length = 0;
     videoLayoutsByFrameId.current.clear();
-    latestExpressionSample.current = null;
+    expressionSamples.current.length = 0;
     setLatestGazeSample(null);
     setLatestGazeLayout(null);
     const generation = flowController.invalidateCurrentFlow();
@@ -1025,6 +1028,7 @@ function App() {
     setFlowError(null);
     setConsentIssue(null);
     setCameraState("requesting");
+    let createdSessionId: string | null = null;
 
     try {
       await frameSource.open();
@@ -1034,7 +1038,9 @@ function App() {
       }
       setCameraState("ready");
 
-      const lookbookId = MOCK_LOOKBOOK_ID_BY_CATEGORY[selectedCategory];
+      const lookbookId = useMockApi
+        ? MOCK_LOOKBOOK_ID_BY_CATEGORY[selectedCategory]
+        : configuredLookbookId;
       const { createdSession, lookbookManifest } = await runSessionStartWithTimeout(
         async (signal) => {
           const lookbookManifest = await apiClient.getLookbookManifest(lookbookId, {
@@ -1050,6 +1056,7 @@ function App() {
             },
             { signal },
           );
+          createdSessionId = createdSession.session_id;
           signal.throwIfAborted();
 
           await flowController.runSerialized(() =>
@@ -1074,6 +1081,10 @@ function App() {
       send("AGREE");
     } catch (error: unknown) {
       frameSource.stop();
+      if (createdSessionId) {
+        if (useMockApi) void mockApiClient.discardSession(createdSessionId);
+        else void discardCentralSessionBestEffort(httpApiClient, createdSessionId);
+      }
       if (flowController.isCurrent(generation)) {
         const isCameraError = error instanceof CameraAccessError;
         setCameraState(
@@ -1124,18 +1135,21 @@ function App() {
       frameSource.stop();
       if (flowController.isCurrent(generation)) {
         setCameraState("error");
-        setFlowError("Mock 시선 보정을 완료하지 못했습니다.");
+        setFlowError("로컬 시선 보정을 완료하지 못했습니다.");
       }
     }
   }, [flowController, send]);
 
   const completeLookbook = useCallback(async () => {
     const generation = flowController.captureGeneration();
+    recommendationAbortController.current?.abort();
+    const abortController = new AbortController();
+    recommendationAbortController.current = abortController;
     frameSource.stop();
     setCameraState("idle");
 
     if (!session || !manifest) {
-      setFlowError("진행 중인 Mock 세션 정보를 찾지 못했습니다.");
+      setFlowError("진행 중인 세션 정보를 찾지 못했습니다.");
       return;
     }
 
@@ -1143,34 +1157,58 @@ function App() {
       await flowController.runSerialized(() => visionClient.stopSession());
       if (!flowController.isCurrent(generation)) return;
 
-      const expressionSample = latestExpressionSample.current;
-      const batches = buildD1ReactionBatches({
-        batchId: `batch-${session.session_id}-0001`,
-        batchSequence: 0,
-        sessionId: session.session_id,
-        manifest,
-        gazeSamples: gazeSamples.current,
-        expressionSample,
-        videoLayoutsByFrameId: videoLayoutsByFrameId.current,
-      });
-
-      for (const batch of batches) {
-        if (!flowController.isCurrent(generation)) return;
-        await apiClient.appendReactionBatch(session.session_id, batch);
+      if (useMockApi) {
+        const batches = buildD1ReactionBatches({
+          batchId: `batch-${session.session_id}-0001`,
+          batchSequence: 0,
+          sessionId: session.session_id,
+          manifest,
+          gazeSamples: gazeSamples.current,
+          expressionSamples: expressionSamples.current,
+          videoLayoutsByFrameId: videoLayoutsByFrameId.current,
+        });
+        for (const batch of batches) {
+          if (!flowController.isCurrent(generation)) return;
+          await mockApiClient.appendReactionBatch(session.session_id, batch);
+        }
+        await apiClient.completeSessionAnalysis(session.session_id, {
+          signal: abortController.signal,
+        });
+      } else {
+        const batches = buildObservationBatchesV2({
+          batchId: `observation-${session.session_id}-0001`,
+          batchSequence: 0,
+          sessionId: session.session_id,
+          manifest,
+          gazeSamples: gazeSamples.current,
+          expressionSamples: expressionSamples.current,
+          videoLayoutsByFrameId: videoLayoutsByFrameId.current,
+        });
+        await submitCentralRecommendation(
+          httpApiClient,
+          session.session_id,
+          batches,
+          abortController.signal,
+        );
       }
 
       if (!flowController.isCurrent(generation)) return;
-      await apiClient.completeSessionAnalysis(session.session_id);
       if (flowController.isCurrent(generation)) send("LOOKBOOK_FINISHED");
     } catch {
-      if (flowController.isCurrent(generation)) {
-        setFlowError("Mock 룩북 분석을 완료하지 못했습니다.");
+      if (!useMockApi) {
+        void discardCentralSessionBestEffort(httpApiClient, session.session_id);
+      }
+      if (flowController.isCurrent(generation) && !abortController.signal.aborted) {
+        setFlowError("룩북 분석을 완료하지 못했습니다.");
       }
     } finally {
+      if (recommendationAbortController.current === abortController) {
+        recommendationAbortController.current = null;
+      }
       if (flowController.isCurrent(generation)) {
         gazeSamples.current.length = 0;
         videoLayoutsByFrameId.current.clear();
-        latestExpressionSample.current = null;
+        expressionSamples.current.length = 0;
         setLatestGazeSample(null);
         setLatestGazeLayout(null);
       }
@@ -1233,32 +1271,77 @@ function App() {
     const generation = flowController.captureGeneration();
 
     if (!session) {
-      setFlowError("추천에 필요한 Mock 세션 정보를 찾지 못했습니다.");
+      setFlowError("추천에 필요한 세션 정보를 찾지 못했습니다.");
       return;
     }
 
+    recommendationAbortController.current?.abort();
+    const abortController = new AbortController();
+    recommendationAbortController.current = abortController;
+
     try {
       if (!flowController.isCurrent(generation)) return;
-      const result = await apiClient.getSessionRecommendation(session.session_id);
-      if (!flowController.isCurrent(generation)) return;
-
-      if (result.status !== "completed") {
-        throw new Error(result.reason ?? "recommendation_not_ready");
+      let presentation: RecommendationPresentation;
+      let product: Product | ProductRecommendationItemV2;
+      if (useMockApi) {
+        const result = await pollRecommendation<RecommendationResult>({
+          signal: abortController.signal,
+          load: (signal) =>
+            apiClient.getSessionRecommendation(session.session_id, { signal }),
+        });
+        if (result.status !== "completed") {
+          throw new Error("Mock fixture did not return a completed result.");
+        }
+        presentation = presentMockRecommendation(result);
+        product = await mockApiClient.getProduct(presentation.product_id);
+      } else {
+        type CentralPollResult =
+          | RecommendationDecisionV2
+          | (RecommendationAcceptedV2 & { reason: null });
+        const decision = await pollRecommendation<CentralPollResult>({
+          signal: abortController.signal,
+          load: async (signal) => {
+            const result = await httpApiClient.getCentralRecommendation(
+              session.session_id,
+              { signal },
+            );
+            return result.status === "pending" ? { ...result, reason: null } : result;
+          },
+        });
+        if (decision.status !== "completed") {
+          throw new Error("Central recommendation did not return a completed decision.");
+        }
+        if (!decision.selected_product_id) {
+          throw new Error("Completed central recommendation has no selected product.");
+        }
+        product = await httpApiClient.getCentralProduct(decision.selected_product_id);
+        presentation = {
+          ...presentCentralRecommendation(decision, product),
+          mode: "replay_v2",
+        };
       }
-
-      const products = await Promise.all(
-        result.items.map((item) => apiClient.getProduct(item.product_id)),
-      );
       if (!flowController.isCurrent(generation)) return;
 
       if (flowController.isCurrent(generation)) {
-        setRecommendationProducts(products);
-        setRecommendation(result);
+        setRecommendation(presentation);
+        setRecommendedProduct(product);
         send("RECOMMENDATION_READY");
       }
-    } catch {
+    } catch (error: unknown) {
+      if (abortController.signal.aborted) return;
+      if (!useMockApi) {
+        void discardCentralSessionBestEffort(httpApiClient, session.session_id);
+      }
       if (flowController.isCurrent(generation)) {
-        setFlowError("Mock 추천 결과를 불러오지 못했습니다.");
+        setFlowError(
+          error instanceof RecommendationPollingError
+            ? error.message
+            : "추천 결과를 불러오지 못했습니다.",
+        );
+      }
+    } finally {
+      if (recommendationAbortController.current === abortController) {
+        recommendationAbortController.current = null;
       }
     }
   }, [flowController, send, session]);
@@ -1309,7 +1392,7 @@ function App() {
     if (!session || !manifest) {
       return (
         <ErrorPlaceholder
-          message="룩북 재생에 필요한 Mock 세션 정보를 찾지 못했습니다."
+          message="룩북 재생에 필요한 세션 정보를 찾지 못했습니다."
           onHome={restart}
         />
       );
@@ -1341,20 +1424,36 @@ function App() {
   if (screen === "finalizing") {
     return (
       <TimedPlaceholder
-        message="Mock 추천 결과를 준비하고 있습니다."
+        message="시선과 표정 관련 관찰 신호를 바탕으로 추천을 준비하고 있습니다."
         onComplete={loadRecommendation}
         onHome={restart}
       />
     );
   }
 
-  if (screen === "report" && recommendation) {
+  if (screen === "report" && recommendation && recommendedProduct && session) {
     return (
-      <ReportResult
-        category={selectedCategory}
-        onHome={restart}
-        products={recommendationProducts}
+      <ReportScreen
         recommendation={recommendation}
+        product={recommendedProduct}
+        onHome={restart}
+        onRequestManager={() => {
+          const managerRequest = buildManagerProductRequestV2(
+            session.session_id,
+            recommendation.recommendation_id,
+            recommendation.product_id,
+          );
+          return (useMockApi
+            ? mockApiClient.requestManagerProduct(session.session_id, {
+                request_id: managerRequest.request_id,
+                recommendation_id: managerRequest.recommendation_id,
+              })
+            : httpApiClient.requestCentralManagerProduct(
+                session.session_id,
+                managerRequest,
+              )
+          ).then(() => undefined);
+        }}
       />
     );
   }

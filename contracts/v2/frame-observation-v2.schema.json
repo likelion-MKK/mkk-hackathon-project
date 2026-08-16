@@ -1,0 +1,351 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcm-lookbook.example/contracts/v2/frame-observation-v2.schema.json",
+  "x-event-schema": true,
+  "title": "FrameObservationV2",
+  "description": "원본 프레임 없이 동일 캡처 프레임의 유효한 시선, AOI와 관찰 가능한 얼굴 동작을 결합합니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "frame_id",
+    "sequence",
+    "captured_at_mono_ms",
+    "session_offset_ms",
+    "video_time_ms",
+    "playback_epoch",
+    "gaze",
+    "gaze_reason",
+    "attention",
+    "attention_reason",
+    "expression",
+    "expression_reason",
+    "derived",
+    "derived_reason"
+  ],
+  "properties": {
+    "schema_version": { "const": "2.0" },
+    "frame_id": { "$ref": "#/$defs/id" },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "captured_at_mono_ms": { "type": "number", "minimum": 0 },
+    "session_offset_ms": {
+      "type": "number",
+      "minimum": 0,
+      "description": "세션에서 처음 수락된 분석 frame을 0으로 한 상대 시간(ms)입니다. 세션 안에서 감소할 수 없습니다."
+    },
+    "video_time_ms": { "type": "integer", "minimum": 0 },
+    "playback_epoch": { "type": "integer", "minimum": 0 },
+    "gaze": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/gaze" }
+      ]
+    },
+    "gaze_reason": { "$ref": "#/$defs/nullableReason" },
+    "attention": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/attention" }
+      ]
+    },
+    "attention_reason": { "$ref": "#/$defs/nullableReason" },
+    "expression": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/expression" }
+      ]
+    },
+    "expression_reason": { "$ref": "#/$defs/nullableReason" },
+    "derived": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/derived" }
+      ]
+    },
+    "derived_reason": { "$ref": "#/$defs/nullableReason" }
+  },
+  "allOf": [
+    { "$ref": "#/$defs/gazePresence" },
+    { "$ref": "#/$defs/attentionPresence" },
+    { "$ref": "#/$defs/expressionPresence" },
+    { "$ref": "#/$defs/derivedPresence" }
+  ],
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "revision": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+    },
+    "nullableReason": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/reason" }
+      ]
+    },
+    "normalized": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "gaze": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "screen_x_norm",
+        "screen_y_norm",
+        "confidence",
+        "producer_id",
+        "model_revision",
+        "calibration_id"
+      ],
+      "properties": {
+        "screen_x_norm": { "$ref": "#/$defs/normalized" },
+        "screen_y_norm": { "$ref": "#/$defs/normalized" },
+        "confidence": { "$ref": "#/$defs/normalized" },
+        "producer_id": { "$ref": "#/$defs/id" },
+        "model_revision": { "$ref": "#/$defs/revision" },
+        "calibration_id": { "$ref": "#/$defs/id" }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["exposure_id", "product_id", "priority"],
+      "properties": {
+        "exposure_id": { "$ref": "#/$defs/id" },
+        "product_id": { "$ref": "#/$defs/id" },
+        "priority": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "attention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outside_video",
+        "confidence",
+        "producer_id",
+        "model_revision",
+        "manifest_version",
+        "candidates"
+      ],
+      "properties": {
+        "outside_video": { "type": "boolean" },
+        "video_x_norm": { "$ref": "#/$defs/normalized" },
+        "video_y_norm": { "$ref": "#/$defs/normalized" },
+        "confidence": { "$ref": "#/$defs/normalized" },
+        "producer_id": { "$ref": "#/$defs/id" },
+        "model_revision": { "$ref": "#/$defs/revision" },
+        "manifest_version": { "$ref": "#/$defs/revision" },
+        "candidates": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/candidate" }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "outside_video": { "const": true } },
+            "required": ["outside_video"]
+          },
+          "then": {
+            "properties": {
+              "video_x_norm": false,
+              "video_y_norm": false,
+              "candidates": { "maxItems": 0 }
+            }
+          },
+          "else": {
+            "required": ["video_x_norm", "video_y_norm"]
+          }
+        }
+      ]
+    },
+    "expression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scores",
+        "quality",
+        "confidence",
+        "producer_id",
+        "model_revision",
+        "taxonomy_version"
+      ],
+      "properties": {
+        "scores": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": { "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+          "additionalProperties": { "$ref": "#/$defs/normalized" }
+        },
+        "quality": { "$ref": "#/$defs/normalized" },
+        "confidence": { "$ref": "#/$defs/normalized" },
+        "producer_id": { "$ref": "#/$defs/id" },
+        "model_revision": { "$ref": "#/$defs/revision" },
+        "taxonomy_version": { "$ref": "#/$defs/revision" }
+      }
+    },
+    "gazeDerived": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "movement",
+        "movement_reason",
+        "continuous_observation_ms",
+        "return_candidate",
+        "return_candidate_reason"
+      ],
+      "properties": {
+        "movement": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/gazeMovement" }]
+        },
+        "movement_reason": { "$ref": "#/$defs/nullableReason" },
+        "continuous_observation_ms": { "type": "number", "minimum": 0 },
+        "return_candidate": { "oneOf": [{ "type": "null" }, { "type": "boolean" }] },
+        "return_candidate_reason": { "$ref": "#/$defs/nullableReason" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "movement": { "type": "null" } }, "required": ["movement"] },
+          "then": { "properties": { "movement_reason": { "$ref": "#/$defs/reason" } } },
+          "else": { "properties": { "movement_reason": { "type": "null" } } }
+        },
+        {
+          "if": { "properties": { "return_candidate": { "type": "null" } }, "required": ["return_candidate"] },
+          "then": { "properties": { "return_candidate_reason": { "$ref": "#/$defs/reason" } } },
+          "else": { "properties": { "return_candidate_reason": { "type": "null" } } }
+        }
+      ]
+    },
+    "gazeMovement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["distance_norm", "speed_norm_per_s"],
+      "properties": {
+        "distance_norm": { "type": "number", "minimum": 0 },
+        "speed_norm_per_s": { "type": "number", "minimum": 0 }
+      }
+    },
+    "sustainedAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["signal", "duration_ms"],
+      "properties": {
+        "signal": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+        "duration_ms": { "type": "number", "minimum": 0 }
+      }
+    },
+    "expressionDerived": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["score_changes", "score_change_rates_per_s", "change_reason", "sustained_actions"],
+      "properties": {
+        "score_changes": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "minProperties": 1,
+              "propertyNames": { "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+              "additionalProperties": { "type": "number", "minimum": -1, "maximum": 1 }
+            }
+          ]
+        },
+        "score_change_rates_per_s": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "minProperties": 1,
+              "propertyNames": { "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+              "additionalProperties": { "type": "number", "minimum": -1000, "maximum": 1000 }
+            }
+          ]
+        },
+        "change_reason": { "$ref": "#/$defs/nullableReason" },
+        "sustained_actions": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/sustainedAction" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "score_changes": { "type": "null" } }, "required": ["score_changes"] },
+          "then": {
+            "properties": {
+              "score_change_rates_per_s": { "type": "null" },
+              "change_reason": { "$ref": "#/$defs/reason" }
+            }
+          },
+          "else": {
+            "properties": {
+              "score_change_rates_per_s": { "type": "object", "minProperties": 1 },
+              "change_reason": { "type": "null" }
+            }
+          }
+        }
+      ]
+    },
+    "derived": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gaze", "gaze_reason", "expression", "expression_reason"],
+      "properties": {
+        "gaze": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/gazeDerived" }]
+        },
+        "gaze_reason": { "$ref": "#/$defs/nullableReason" },
+        "expression": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/expressionDerived" }]
+        },
+        "expression_reason": { "$ref": "#/$defs/nullableReason" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "gaze": { "type": "null" } }, "required": ["gaze"] },
+          "then": { "properties": { "gaze_reason": { "$ref": "#/$defs/reason" } } },
+          "else": { "properties": { "gaze_reason": { "type": "null" } } }
+        },
+        {
+          "if": { "properties": { "expression": { "type": "null" } }, "required": ["expression"] },
+          "then": { "properties": { "expression_reason": { "$ref": "#/$defs/reason" } } },
+          "else": { "properties": { "expression_reason": { "type": "null" } } }
+        }
+      ]
+    },
+    "gazePresence": {
+      "if": { "properties": { "gaze": { "type": "null" } }, "required": ["gaze"] },
+      "then": { "properties": { "gaze_reason": { "$ref": "#/$defs/reason" } } },
+      "else": { "properties": { "gaze_reason": { "type": "null" } } }
+    },
+    "attentionPresence": {
+      "if": { "properties": { "attention": { "type": "null" } }, "required": ["attention"] },
+      "then": { "properties": { "attention_reason": { "$ref": "#/$defs/reason" } } },
+      "else": { "properties": { "attention_reason": { "type": "null" } } }
+    },
+    "expressionPresence": {
+      "if": { "properties": { "expression": { "type": "null" } }, "required": ["expression"] },
+      "then": { "properties": { "expression_reason": { "$ref": "#/$defs/reason" } } },
+      "else": { "properties": { "expression_reason": { "type": "null" } } }
+    },
+    "derivedPresence": {
+      "if": { "properties": { "derived": { "type": "null" } }, "required": ["derived"] },
+      "then": { "properties": { "derived_reason": { "$ref": "#/$defs/reason" } } },
+      "else": { "properties": { "derived_reason": { "type": "null" } } }
+    }
+  }
+}

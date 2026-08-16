@@ -1,6 +1,8 @@
 import type {
   ApiHealth,
   LookbookManifest,
+  ManagerProductRequest,
+  ManagerProductRequestAccepted,
   Product,
   ProductCategory,
   ReactionBatch,
@@ -150,6 +152,7 @@ type MockSession = {
   request: SessionCreate;
   analysisCompleted: boolean;
   acceptedBatchIds: Set<string>;
+  managerRequestIds: Set<string>;
 };
 
 export type MockApiClientOptions = {
@@ -205,6 +208,7 @@ export class MockApiClient implements ApiClient {
       request: { ...request },
       analysisCompleted: false,
       acceptedBatchIds: new Set<string>(),
+      managerRequestIds: new Set<string>(),
     });
 
     return {
@@ -310,6 +314,22 @@ export class MockApiClient implements ApiClient {
 
   discardSession(sessionId: string): void {
     this.sessions.delete(sessionId);
+  }
+
+  async requestManagerProduct(
+    sessionId: string,
+    request: ManagerProductRequest,
+  ): Promise<ManagerProductRequestAccepted> {
+    const session = this.requireSession(sessionId);
+    if (!session.analysisCompleted) {
+      throw new Error("Manager requests require a completed recommendation.");
+    }
+    const duplicate = session.managerRequestIds.has(request.request_id);
+    session.managerRequestIds.add(request.request_id);
+    return {
+      request_id: request.request_id,
+      status: duplicate ? "duplicate" : "accepted",
+    };
   }
 
   async health(): Promise<ApiHealth> {

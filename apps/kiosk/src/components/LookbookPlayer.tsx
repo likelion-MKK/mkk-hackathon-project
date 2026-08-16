@@ -27,7 +27,7 @@ export type CameraDisplayState =
   | "denied"
   | "error";
 
-const D3_FAKE_FRAME_SAMPLE_INTERVAL_MS = 250;
+export const ANALYSIS_SAMPLE_INTERVAL_MS = 250;
 
 type LookbookPlayerProps = {
   cameraState: CameraDisplayState;
@@ -216,7 +216,7 @@ export function LookbookPlayer({
     captureCurrentFrame();
     const captureTimer = window.setInterval(
       captureCurrentFrame,
-      D3_FAKE_FRAME_SAMPLE_INTERVAL_MS,
+      ANALYSIS_SAMPLE_INTERVAL_MS,
     );
 
     return () => {
@@ -334,11 +334,11 @@ export function LookbookPlayer({
             : "VALID / NO AOI HIT";
   const mediaMessage =
     mediaState === "missing"
-      ? "임시 룩북 영상 파일을 연결해주세요."
+      ? "룩북 영상 파일을 연결해주세요."
       : mediaState === "error"
-        ? "임시 룩북 영상을 불러오지 못했습니다."
+        ? "룩북 영상을 불러오지 못했습니다."
         : mediaState === "loading"
-          ? "임시 룩북 영상을 준비하고 있습니다."
+          ? "룩북 영상을 준비하고 있습니다."
           : null;
 
   return (
@@ -435,7 +435,7 @@ export function LookbookPlayer({
 
         <span className={`lookbook-camera-status is-${cameraState}`} role="status">
           {cameraState === "ready"
-            ? "CAMERA ACTIVE · LOCAL FAKE"
+            ? "CAMERA ACTIVE · IN-PROCESS REPLAY"
             : cameraState === "requesting"
               ? "CAMERA CONNECTING"
               : "CAMERA OFF"}
@@ -454,7 +454,7 @@ export function LookbookPlayer({
             <span>
               {mediaMessage
                 ? "개발 환경의 VITE_LOOKBOOK_VIDEO_URL을 확인해주세요."
-                : "원격 전송 없이 현재 브라우저의 카메라와 fake 경계만 사용합니다."}
+                : "승인 전 local/in-process 분석 경계에서만 frame을 일시 처리합니다."}
             </span>
             {!mediaMessage &&
               cameraState !== "requesting" &&
