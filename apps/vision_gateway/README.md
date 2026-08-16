@@ -1,8 +1,30 @@
-# D7 In-process Vision Gateway Harness
+# Vision Gateway: D7 harness + local Vision Stream v1
 
-이 디렉터리는 D7 Replay E2E와 D8 개발 camera smoke를 위한 테스트 가능한 transport
-경계다. 실제 WebSocket, Vision Stream v1, 운영 인증·TLS 구현이 아니며
-production-ready로 사용하지 않는다.
+## Current local Face-only implementation
+
+`server.py` now provides a localhost ASGI WebSocket at `/vision/v1/stream`.
+It validates a one-time in-memory token, receives the v1 binary frame envelope,
+and returns only a derived `ExpressionSample`. Until EyeTrax is connected,
+`gaze_sample` is explicitly `null` with `gaze_reason=eye_not_connected`.
+
+The D7 in-process harness bounds its wait for a timed-out adapter completion.
+If that bound is exceeded, `dispatch_next()` returns the fail-closed observation
+while retaining `in_flight` and the frame until the adapter completion callback;
+it does not wait indefinitely for a blocking adapter.
+
+Tests inject `LocalVisionTokenIssuer` and `FakeFaceAdapter`. A real MediaPipe
+worker can be injected with `selected_face_worker_factory(model_path)`. TLS,
+the Backend token endpoint, browser `getUserMedia`, and EyeTrax fan-out remain
+separate follow-up work.
+
+수신 rate는 `max_fps`로 제한하고 decoder·inference deadline 초과는 terminal
+`drop`으로 반환한다. timeout된 decoder 또는 Face adapter의 실제 underlying 작업이
+늦게 끝나면 완료 시점까지 frame과 in-flight 상태를 유지한 뒤 닫으며, worker close는
+별도 bounded cleanup으로 처리한다.
+
+이 디렉터리는 D7 Replay E2E와 D8 개발 camera smoke, localhost Face-only
+Vision Stream을 위한 테스트 가능한 transport 경계다. 운영 인증·TLS와
+원격 고객 frame 전송을 포함하지 않으므로 production-ready로 사용하지 않는다.
 
 ## 데이터 흐름
 
@@ -50,5 +72,7 @@ D8의 opt-in 실제 개발 camera 경로와 quality·diagnostics 의미는
 ## D8 경계
 
 [`Vision Stream v1 계약`](../../contracts/vision-stream-v1/README.md)은 정의됐지만,
-binary WSS serialization, auth/origin/limit 구현, TLS 배포, Kiosk-to-server
-capture-to-result 측정, 실제 Eye Worker process와 현장 live 검증은 D9 이후 별도 작업이다.
+이 브랜치에서 개발용 binary WebSocket serialization, one-time in-memory auth,
+frame limit, in-flight/drop, cleanup 경계를 구현한다. Production TLS/WSS 배포,
+Backend token endpoint, Kiosk-to-server getUserMedia 연결, EyeTrax fan-out과
+현장 live 검증은 별도 작업이다.

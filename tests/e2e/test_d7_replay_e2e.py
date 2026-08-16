@@ -4,8 +4,9 @@ import copy
 import gc
 import json
 import logging
+import threading
 from pathlib import Path
-from time import sleep
+from time import monotonic, sleep
 import weakref
 
 import pytest
@@ -189,6 +190,47 @@ def test_worker_deadline_timeout_is_fail_closed_while_eye_continues() -> None:
     assert first.gaze.valid is True
     assert runner.gateway.timeout_count >= 1
     assert recommendation["status"] == "completed"
+
+
+def test_d7_adapter_completion_wait_is_bounded() -> None:
+    started = threading.Event()
+    release = threading.Event()
+
+    class BlockingAdapter(FakeFaceAdapter[object]):
+        def infer(self, frame: object, context: FaceFrameContext):
+            started.set()
+            release.wait(timeout=2)
+            return super().infer(frame, context)
+
+    gateway = InProcessVisionGateway(
+        face_worker_factory=lambda: FaceWorker(BlockingAdapter(), timeout_ms=1),
+        adapter_completion_timeout_ms=20,
+    )
+    gateway.connect(VisionHandshake("session-0001", "mcm-lookbook-example-v1"))
+
+    started_at = monotonic()
+    observation = gateway.process(
+        FrameEnvelope(
+            session_id="session-0001",
+            video_id="mcm-lookbook-example-v1",
+            frame_id="frame-d7-bounded",
+            sequence=0,
+            captured_at_mono_ms=0,
+            video_time_ms=0,
+            playback_epoch=0,
+        )
+    )
+    elapsed = monotonic() - started_at
+
+    assert started.is_set()
+    assert observation.face.reason == "timeout"
+    assert elapsed < 0.5
+    assert gateway.public_state()["in_flight"] is True
+
+    release.set()
+    sleep(0.05)
+    assert gateway.public_state()["in_flight"] is False
+    gateway.close()
 
 
 def test_model_unavailable_is_fail_closed_while_eye_continues(tmp_path: Path) -> None:
