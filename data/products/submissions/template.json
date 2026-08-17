@@ -1,0 +1,73 @@
+{
+  "submission_version": "1.0",
+  "product_id": "replace-with-existing-product-id",
+  "research": {
+    "brand": "MCM",
+    "display_name": "",
+    "category": "bag",
+    "collection_or_line": null,
+    "official_product_url": "",
+    "official_listing_url": "",
+    "color": {
+      "official_name": null,
+      "normalized_family": null,
+      "not_verified_reason": ""
+    },
+    "material": {
+      "official_name": null,
+      "normalized_family": null,
+      "not_verified_reason": ""
+    },
+    "dimensions_mm": {
+      "width": null,
+      "height": null,
+      "depth": null,
+      "not_verified_reason": ""
+    },
+    "weight_g": {
+      "value": null,
+      "not_verified_reason": ""
+    },
+    "carrying_methods": [],
+    "closure": null,
+    "capacity_and_pockets": [],
+    "visual_features": [],
+    "recommended_use_cases": [],
+    "care_notes": null,
+    "availability": {
+      "status": null,
+      "checked_at": null,
+      "not_verified_reason": ""
+    }
+  },
+  "recommendation_profile": {
+    "controlled_tags": [],
+    "recommendation_summary": "",
+    "style": {
+      "silhouette": "",
+      "visual_tone": "",
+      "use_cases": []
+    }
+  },
+  "sources": [
+    {
+      "source_id": "official-product-page",
+      "kind": "official_product_page",
+      "url": "",
+      "accessed_on": "YYYY-MM-DD",
+      "supports": []
+    }
+  ],
+  "asset_review": {
+    "image_source_url": null,
+    "usage_approval_reference": null,
+    "approved_asset": false,
+    "note": ""
+  },
+  "review": {
+    "researcher": "",
+    "checked_at": "YYYY-MM-DD",
+    "reviewer": null,
+    "review_status": "draft"
+  }
+}
