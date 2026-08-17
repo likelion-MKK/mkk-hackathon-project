@@ -1,0 +1,349 @@
+{
+  "registry_version": "central-recommender-model-candidates-v2",
+  "selection_status": "benchmark_gated_not_selected",
+  "selected_model": null,
+  "synthetic_only": true,
+  "generation": {
+    "context_tokens": 4096,
+    "maximum_input_tokens": 3584,
+    "maximum_output_tokens": 512,
+    "thinking_enabled": false,
+    "temperature": 0,
+    "top_p": 1,
+    "seed": 42,
+    "retry_count": 0
+  },
+  "runtime_pins": {
+    "llama_cpp": {
+      "version": "b10173",
+      "commit": "e9fa0781f1c25fc4fe8c86be1edc6970661ad6f0",
+      "license": "MIT",
+      "source_url": "https://github.com/ggml-org/llama.cpp/tree/e9fa0781f1c25fc4fe8c86be1edc6970661ad6f0",
+      "build_flags": [
+        "CMAKE_BUILD_TYPE=Release",
+        "GGML_NATIVE=OFF",
+        "GGML_OPENMP=ON",
+        "GGML_CUDA=ON"
+      ]
+    },
+    "vllm": {
+      "version": "0.27.1",
+      "commit": "6e448d0ea9bf3d88d898b65449ca6dc2aec170ac",
+      "license": "Apache-2.0",
+      "source_url": "https://github.com/vllm-project/vllm/tree/6e448d0ea9bf3d88d898b65449ca6dc2aec170ac"
+    },
+    "onnxruntime_genai": {
+      "version": "0.14.0",
+      "commit": "b7a6ec307bea84e3b64aa33d59bcad817122d9af",
+      "license": "MIT",
+      "source_url": "https://github.com/microsoft/onnxruntime-genai/tree/b7a6ec307bea84e3b64aa33d59bcad817122d9af"
+    }
+  },
+  "profiles": {
+    "colab-gpu": {
+      "purpose": "google_colab_gpu_selection_benchmark",
+      "provider": "google_colab",
+      "hardware_is_not_guaranteed": true,
+      "require_nvidia_gpu": true,
+      "require_gpu_inventory": true,
+      "require_runtime_pid_monitoring": true,
+      "require_peak_vram_measurement": true,
+      "oom_count_max": 0,
+      "process_restart_count_max": 0,
+      "customer_data_allowed": false,
+      "public_server_allowed": false
+    }
+  },
+  "candidates": [
+    {
+      "candidate_id": "qwen35-9b-colab-ref",
+      "role": "google_colab_gpu_candidate",
+      "execution_lane": "colab-gpu",
+      "selection_eligible": true,
+      "model_id": "Qwen/Qwen3.5-9B",
+      "revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+      "source_url": "https://huggingface.co/Qwen/Qwen3.5-9B/tree/c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+      "source_is_official": true,
+      "license": {
+        "code": "Apache-2.0",
+        "weights": "Apache-2.0",
+        "url": "https://huggingface.co/Qwen/Qwen3.5-9B/blob/c202236235762e1c871ad0ccb60c8ee5ba337b9a/LICENSE",
+        "requires_user_approval": false,
+        "approval_status": "reviewed_for_benchmark"
+      },
+      "artifact": {
+        "format": "safetensors",
+        "quantization": "BF16",
+        "download_include": ["*.json", "*.safetensors", "LICENSE", "README.md"],
+        "files": [
+          {"path": "*.safetensors", "hub_sha256": null, "sha256": null}
+        ],
+        "manifest_sha256": null,
+        "checksum_status": "not_collected_model_not_downloaded"
+      },
+      "runtime": {
+        "adapter": "openai_compatible",
+        "name": "vllm",
+        "version": "0.27.1",
+        "commit": "6e448d0ea9bf3d88d898b65449ca6dc2aec170ac"
+      },
+      "conversion": null,
+      "execution_status": "not_run",
+      "failure_reason": "resource_not_inventoried"
+    },
+    {
+      "candidate_id": "mistral-small-31-24b-colab-ref",
+      "role": "google_colab_gpu_candidate_high_resource",
+      "execution_lane": "colab-gpu",
+      "selection_eligible": true,
+      "model_id": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+      "revision": "68faf511d618ef198fef186659617cfd2eb8e33a",
+      "source_url": "https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/tree/68faf511d618ef198fef186659617cfd2eb8e33a",
+      "source_is_official": true,
+      "license": {
+        "code": "Apache-2.0",
+        "weights": "Apache-2.0",
+        "url": "https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/blob/68faf511d618ef198fef186659617cfd2eb8e33a/LICENSE",
+        "requires_user_approval": false,
+        "approval_status": "reviewed_for_benchmark"
+      },
+      "artifact": {
+        "format": "safetensors",
+        "quantization": "BF16",
+        "download_include": ["*.json", "*.safetensors", "LICENSE", "README.md"],
+        "files": [
+          {"path": "*.safetensors", "hub_sha256": null, "sha256": null}
+        ],
+        "manifest_sha256": null,
+        "checksum_status": "not_collected_model_not_downloaded"
+      },
+      "runtime": {
+        "adapter": "openai_compatible",
+        "name": "vllm",
+        "version": "0.27.1",
+        "commit": "6e448d0ea9bf3d88d898b65449ca6dc2aec170ac"
+      },
+      "conversion": null,
+      "reported_bf16_fp16_vram_bytes_approx": 59055800320,
+      "execution_status": "not_run",
+      "failure_reason": "resource_not_inventoried"
+    },
+    {
+      "candidate_id": "hyperclovax-seed-05b-q4km",
+      "role": "google_colab_gpu_candidate_small",
+      "execution_lane": "colab-gpu",
+      "selection_eligible": true,
+      "model_id": "naver-hyperclovax/HyperCLOVAX-SEED-Text-Instruct-0.5B",
+      "revision": "4d88cd03638f3d0d88fd341be8ef625b60630fb8",
+      "source_url": "https://huggingface.co/naver-hyperclovax/HyperCLOVAX-SEED-Text-Instruct-0.5B/tree/4d88cd03638f3d0d88fd341be8ef625b60630fb8",
+      "source_is_official": true,
+      "license": {
+        "code": "hyperclovax-seed",
+        "weights": "hyperclovax-seed",
+        "name": "HyperCLOVA X SEED Model License Agreement",
+        "url": "https://huggingface.co/naver-hyperclovax/HyperCLOVAX-SEED-Text-Instruct-0.5B/blob/4d88cd03638f3d0d88fd341be8ef625b60630fb8/LICENSE",
+        "requires_user_approval": true,
+        "approval_status": "pending_user_approval"
+      },
+      "artifact": {
+        "format": "gguf",
+        "quantization": "Q4_K_M",
+        "download_include": ["config.json", "model.safetensors", "special_tokens_map.json", "tokenizer.json", "tokenizer_config.json", "LICENSE", "README.md"],
+        "files": [
+          {"path": "model.safetensors", "hub_sha256": "f40f63fa6a118eb9b59e8910c3ab5a6e6499805966284bb2cd41e197719d156b", "sha256": null},
+          {"path": "hyperclovax-seed-05b-q4_k_m.gguf", "hub_sha256": null, "sha256": null, "generated": true}
+        ],
+        "manifest_sha256": null,
+        "checksum_status": "not_collected_model_not_downloaded"
+      },
+      "runtime": {
+        "adapter": "openai_compatible",
+        "name": "llama_cpp",
+        "version": "b10173",
+        "commit": "e9fa0781f1c25fc4fe8c86be1edc6970661ad6f0",
+        "build_flags": ["CMAKE_BUILD_TYPE=Release", "GGML_NATIVE=OFF", "GGML_OPENMP=ON", "GGML_CUDA=ON"]
+      },
+      "conversion": {
+        "community_quantization_allowed": false,
+        "source_revision": "4d88cd03638f3d0d88fd341be8ef625b60630fb8",
+        "runtime_commit": "e9fa0781f1c25fc4fe8c86be1edc6970661ad6f0",
+        "commands": [
+          ["python", "convert_hf_to_gguf.py", "<source_dir>", "--outfile", "<f16_gguf>", "--outtype", "f16"],
+          ["llama-quantize", "<f16_gguf>", "<final_gguf>", "Q4_K_M"]
+        ]
+      },
+      "execution_status": "blocked",
+      "failure_reason": "license_approval_required"
+    },
+    {
+      "candidate_id": "qwen3-06b-q8",
+      "role": "google_colab_gpu_candidate_small",
+      "execution_lane": "colab-gpu",
+      "selection_eligible": true,
+      "model_id": "Qwen/Qwen3-0.6B-GGUF",
+      "revision": "23749fefcc72300e3a2ad315e1317431b06b590a",
+      "source_url": "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/tree/23749fefcc72300e3a2ad315e1317431b06b590a",
+      "source_is_official": true,
+      "license": {
+        "code": "Apache-2.0",
+        "weights": "Apache-2.0",
+        "url": "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/blob/23749fefcc72300e3a2ad315e1317431b06b590a/LICENSE",
+        "requires_user_approval": false,
+        "approval_status": "reviewed_for_benchmark"
+      },
+      "artifact": {
+        "format": "gguf",
+        "quantization": "Q8_0",
+        "download_include": ["Qwen3-0.6B-Q8_0.gguf", "LICENSE", "README.md", "params"],
+        "files": [
+          {"path": "LICENSE", "hub_sha256": null, "sha256": "5de36594c10839788a8c589443a8ef9d8b8d17c65a1b5807206ae037fc36c6bd"},
+          {"path": "Qwen3-0.6B-Q8_0.gguf", "hub_sha256": "9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031", "sha256": "9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031"},
+          {"path": "README.md", "hub_sha256": null, "sha256": "44adabae2153c3a7bb741b86fbffd48736bc95118831935fdfc4d3cc1854f2f5"},
+          {"path": "params", "hub_sha256": null, "sha256": "52610851456960402dc4ce4966dbea0eb83bb1d72c3eeeaefaafe09b4690ad9c"
+          }
+        ],
+        "manifest_sha256": "64217f47ee2f7d5d2d619ddcbeebd7142b9b2a6d85857551a54abf99b4bd148d",
+        "checksum_status": "verified"
+      },
+      "runtime": {
+        "adapter": "openai_compatible",
+        "name": "llama_cpp",
+        "version": "b10173",
+        "commit": "e9fa0781f1c25fc4fe8c86be1edc6970661ad6f0",
+        "build_flags": ["CMAKE_BUILD_TYPE=Release", "GGML_NATIVE=OFF", "GGML_OPENMP=ON", "GGML_CUDA=ON"]
+      },
+      "conversion": null,
+      "execution_status": "blocked",
+      "failure_reason": "runtime_missing"
+    },
+    {
+      "candidate_id": "qwen3-17b-q8",
+      "role": "google_colab_gpu_candidate_small",
+      "execution_lane": "colab-gpu",
+      "selection_eligible": true,
+      "model_id": "Qwen/Qwen3-1.7B-GGUF",
+      "revision": "90862c4b9d2787eaed51d12237eafdfe7c5f6077",
+      "source_url": "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF/tree/90862c4b9d2787eaed51d12237eafdfe7c5f6077",
+      "source_is_official": true,
+      "license": {
+        "code": "Apache-2.0",
+        "weights": "Apache-2.0",
+        "url": "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF/blob/90862c4b9d2787eaed51d12237eafdfe7c5f6077/LICENSE",
+        "requires_user_approval": false,
+        "approval_status": "reviewed_for_benchmark"
+      },
+      "artifact": {
+        "format": "gguf",
+        "quantization": "Q8_0",
+        "download_include": ["Qwen3-1.7B-Q8_0.gguf", "LICENSE", "README.md", "params"],
+        "files": [
+          {"path": "LICENSE", "hub_sha256": null, "sha256": "5de36594c10839788a8c589443a8ef9d8b8d17c65a1b5807206ae037fc36c6bd"},
+          {"path": "Qwen3-1.7B-Q8_0.gguf", "hub_sha256": "061b54daade076b5d3362dac252678d17da8c68f07560be70818cace6590cb1a", "sha256": "061b54daade076b5d3362dac252678d17da8c68f07560be70818cace6590cb1a"},
+          {"path": "README.md", "hub_sha256": null, "sha256": "60706b0c6aa38e0d1e73a7b21f98e50cad82ee1eaea636fd1f3a49617bccdb0d"},
+          {"path": "params", "hub_sha256": null, "sha256": "52610851456960402dc4ce4966dbea0eb83bb1d72c3eeeaefaafe09b4690ad9c"
+          }
+        ],
+        "manifest_sha256": "ddc070e86f5732cfb3e729329b289c8cc7799939898f55644c3b5472642bab93",
+        "checksum_status": "verified"
+      },
+      "runtime": {
+        "adapter": "openai_compatible",
+        "name": "llama_cpp",
+        "version": "b10173",
+        "commit": "e9fa0781f1c25fc4fe8c86be1edc6970661ad6f0",
+        "build_flags": ["CMAKE_BUILD_TYPE=Release", "GGML_NATIVE=OFF", "GGML_OPENMP=ON", "GGML_CUDA=ON"]
+      },
+      "conversion": null,
+      "execution_status": "blocked",
+      "failure_reason": "runtime_missing"
+    },
+    {
+      "candidate_id": "kanana-15-21b-q4km",
+      "role": "google_colab_gpu_candidate_small",
+      "execution_lane": "colab-gpu",
+      "selection_eligible": true,
+      "model_id": "kakaocorp/kanana-1.5-2.1b-instruct-2505",
+      "revision": "7df4bc35ccd610e451809d7106e1c3cf82bfd44c",
+      "source_url": "https://huggingface.co/kakaocorp/kanana-1.5-2.1b-instruct-2505/tree/7df4bc35ccd610e451809d7106e1c3cf82bfd44c",
+      "source_is_official": true,
+      "license": {
+        "code": "Apache-2.0",
+        "weights": "Apache-2.0",
+        "url": "https://huggingface.co/kakaocorp/kanana-1.5-2.1b-instruct-2505/blob/7df4bc35ccd610e451809d7106e1c3cf82bfd44c/LICENSE",
+        "requires_user_approval": false,
+        "approval_status": "reviewed_for_benchmark"
+      },
+      "artifact": {
+        "format": "gguf",
+        "quantization": "Q4_K_M",
+        "download_include": ["config.json", "generation_config.json", "model.safetensors", "special_tokens_map.json", "tokenizer.json", "tokenizer_config.json", "LICENSE", "README.md"],
+        "files": [
+          {"path": "model.safetensors", "hub_sha256": "9a9d12e01656388e49114191ab235b8bec3b2214264341732798c698f0dd039f", "sha256": null},
+          {"path": "kanana-15-21b-q4_k_m.gguf", "hub_sha256": null, "sha256": null, "generated": true}
+        ],
+        "manifest_sha256": null,
+        "checksum_status": "not_collected_model_not_downloaded"
+      },
+      "runtime": {
+        "adapter": "openai_compatible",
+        "name": "llama_cpp",
+        "version": "b10173",
+        "commit": "e9fa0781f1c25fc4fe8c86be1edc6970661ad6f0",
+        "build_flags": ["CMAKE_BUILD_TYPE=Release", "GGML_NATIVE=OFF", "GGML_OPENMP=ON", "GGML_CUDA=ON"]
+      },
+      "conversion": {
+        "community_quantization_allowed": false,
+        "source_revision": "7df4bc35ccd610e451809d7106e1c3cf82bfd44c",
+        "runtime_commit": "e9fa0781f1c25fc4fe8c86be1edc6970661ad6f0",
+        "commands": [
+          ["python", "convert_hf_to_gguf.py", "<source_dir>", "--outfile", "<f16_gguf>", "--outtype", "f16"],
+          ["llama-quantize", "<f16_gguf>", "<final_gguf>", "Q4_K_M"]
+        ]
+      },
+      "execution_status": "not_run",
+      "failure_reason": "artifact_not_prepared"
+    },
+    {
+      "candidate_id": "phi4-mini-onnx-cpu-int4",
+      "role": "google_colab_gpu_candidate_small",
+      "execution_lane": "colab-gpu",
+      "selection_eligible": true,
+      "model_id": "microsoft/Phi-4-mini-instruct-onnx",
+      "revision": "fc04c8f93df696602fd9f300a30d1bf2e3081347",
+      "source_url": "https://huggingface.co/microsoft/Phi-4-mini-instruct-onnx/tree/fc04c8f93df696602fd9f300a30d1bf2e3081347/cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4",
+      "source_is_official": true,
+      "license": {
+        "code": "MIT",
+        "weights": "MIT",
+        "url": "https://huggingface.co/microsoft/Phi-4-mini-instruct-onnx/blob/fc04c8f93df696602fd9f300a30d1bf2e3081347/LICENSE",
+        "requires_user_approval": false,
+        "approval_status": "reviewed_for_benchmark"
+      },
+      "artifact": {
+        "format": "onnx",
+        "quantization": "INT4_RTN_BLOCK32_ACC4_CPU",
+        "download_include": ["cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/*", "LICENSE", "README.md"],
+        "files": [
+          {"path": "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/model.onnx", "hub_sha256": "701aa5d185b6a782bc27104a990dd5b634fa507840b7c42f7ee6f1fb812d0b83", "sha256": null},
+          {"path": "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/model.onnx.data", "hub_sha256": "cb0267fa60befa1a4ade8c98b6d32a3d67f51abbd307c7f793f132e8d9092131", "sha256": null},
+          {"path": "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/genai_config.json", "hub_sha256": "0fcfa1e663f2bc867f8dc62fae65dd0924f0a4d68b43d1234df742dd19171470", "sha256": null},
+          {"path": "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/tokenizer.json", "hub_sha256": "382cc235b56c725945e149cc25f191da667c836655efd0857b004320e90e91ea", "sha256": null}
+        ],
+        "manifest_sha256": null,
+        "checksum_status": "not_collected_model_not_downloaded"
+      },
+      "runtime": {
+        "adapter": "onnxruntime_genai",
+        "name": "onnxruntime_genai",
+        "version": "0.14.0",
+        "commit": "b7a6ec307bea84e3b64aa33d59bcad817122d9af"
+      },
+      "conversion": null,
+      "execution_status": "not_run",
+      "failure_reason": "artifact_not_prepared"
+    }
+  ],
+  "selection_gate": "Only automatically eligible candidate+variant combinations proceed to blinded human review; no model is selected before ADR-0007 review approval.",
+  "fallback_policy": "If no Google Colab GPU candidate passes every hard gate, selected_model remains null. Do not substitute an external API or a rules-based recommender automatically.",
+  "claim_boundary": "Registry records immutable candidate identity and verified local checksums only for the two Qwen artifacts prepared in the current benchmark run. Weight files remain in Git-ignored artifacts; no candidate has been benchmarked or selected."
+}

@@ -1,0 +1,36 @@
+{
+  "status_version": "openai-luna-max-status-v3",
+  "configuration": {
+    "model_id": "gpt-5.6-luna",
+    "reasoning_effort": "max",
+    "input_variant": "C",
+    "tested_prompt_version": "central-recommender-ko-v4",
+    "optimized_prompt_version": "central-recommender-ko-v5"
+  },
+  "v4_live_diagnostic": {
+    "artifact": "artifacts/recommendation/openai-luna-max/diagnostic-full-v4-no-timeout.json",
+    "live_call_count": 27,
+    "quality_passed": true,
+    "replay_stability_3_of_3": true,
+    "exact_replay_stability": true,
+    "no_call_gate_3_of_3": true,
+    "failed_rows": 0,
+    "p95_latency_ms": 73581.757,
+    "maximum_latency_ms": 111855.914,
+    "spent_usd_conservative": 0.2061576
+  },
+  "quality_conclusion": "Luna max understood variant C, selected the expected Top 1 from exactly ten products, grounded required gaze and observable-action evidence, resisted injections and forbidden inferences, and was stable across three repeats.",
+  "latency_conclusion": "Quality passed but the diagnostic p95 and maximum latency failed the production 8-second p95 and 10-second per-call gates.",
+  "corrective_action": "One allowed optimization removes prompt duplication and fields unused by the model while preserving model, max reasoning, variant C, strict schema, validation and safety gates.",
+  "v5_offline_validation": {
+    "status": "passed",
+    "maximum_estimated_input_tokens": 2201,
+    "v4_maximum_estimated_input_tokens": 3645,
+    "input_reduction_ratio": 0.3962,
+    "prompt_sha256": "dad48302f5d16badccf52f1d265859373bd81ca59b9afaf0fe97820135ed14b4"
+  },
+  "live_benchmark": "v5_single_optimization_rerun_required",
+  "production_status": "quality_passed_latency_retry_pending",
+  "production_approved": false,
+  "selected_product_model": null
+}

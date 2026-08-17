@@ -1,0 +1,55 @@
+{
+  "status_version": "openai-luna-max-status-v4",
+  "evaluated_configuration": {
+    "model_id": "gpt-5.6-luna",
+    "reasoning_effort": "max",
+    "input_variant": "C",
+    "quality_prompt_version": "central-recommender-ko-v4",
+    "optimized_prompt_version": "central-recommender-ko-v5"
+  },
+  "quality_result": {
+    "artifact": "artifacts/recommendation/openai-luna-max/diagnostic-full-v4-no-timeout.json",
+    "live_calls": 27,
+    "passed_calls": 27,
+    "expected_top1_and_grounding_passed": true,
+    "replay_stability_3_of_3": true,
+    "exact_replay_stability": true,
+    "catalog_order_stability": true,
+    "return_candidate_ablation_passed": true,
+    "preflight_no_call_3_of_3": true,
+    "forbidden_assertion_or_injection_count": 0,
+    "p95_latency_ms": 73581.757,
+    "maximum_latency_ms": 111855.914,
+    "recorded_usage_cost_usd": 0.2061576
+  },
+  "single_optimized_attempt": {
+    "artifact": "artifacts/recommendation/openai-luna-max/diagnostic-full-v5-optimized-no-timeout.json",
+    "prompt_sha256": "dad48302f5d16badccf52f1d265859373bd81ca59b9afaf0fe97820135ed14b4",
+    "maximum_estimated_input_tokens": 2201,
+    "baseline_maximum_estimated_input_tokens": 3645,
+    "input_reduction_ratio": 0.3962,
+    "provider_attempts": 27,
+    "completed_and_passed": 11,
+    "provider_http_429_fail_closed": 16,
+    "automatic_retries": 0,
+    "completed_call_p95_latency_ms": 63232.054,
+    "completed_call_maximum_latency_ms": 63232.054,
+    "recorded_completed_usage_cost_usd": 0.0491616,
+    "conservative_budget_charge_usd": 2.5259616
+  },
+  "completion": {
+    "json_and_recommendation_quality": "passed_on_v4_full_27_calls",
+    "latency_gate": "failed_after_single_optimization",
+    "rate_limit_stability": "failed_closed_on_429",
+    "production_gate": "failed",
+    "production_approved": false
+  },
+  "decision": {
+    "evaluated_choice": "gpt-5.6-luna+max+variant-C",
+    "status": "selected_not_deployable",
+    "selected_product_model": null,
+    "reason": "Quality passed, but max reasoning remained far above the 8-second p95 and 10-second per-call gates after the one allowed prompt/input optimization; the optimized run also encountered 16 provider 429 responses and correctly did not retry."
+  },
+  "contract_db_impact": "none",
+  "next_step": "Do not connect this configuration to production. A different reasoning effort/model/SLO or the self-hosted direction requires a new user decision and follow-up ADR review."
+}

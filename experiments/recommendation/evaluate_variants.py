@@ -23,9 +23,10 @@ PROFILE_PATH = ROOT / "data" / "products" / "mcm-demo-recommendation-profile-v2.
 EVIDENCE_PATH = CONTRACTS / "examples" / "recommendation-evidence-v2.valid.json"
 FRAME_PATH = CONTRACTS / "examples" / "frame-observation-v2.valid.json"
 DECISION_PATH = CONTRACTS / "examples" / "recommendation-decision-v2.valid.json"
-REGISTRY_PATH = Path(__file__).with_name("model-candidates.v1.json")
-BENCHMARK_PATH = Path(__file__).with_name("results") / "model-benchmark-status.v1.json"
-PROMPT_VERSION = "central-recommender-ko-v1"
+REGISTRY_PATH = Path(__file__).with_name("model-candidates.v2.json")
+BENCHMARK_PATH = Path(__file__).with_name("results") / "model-benchmark-status.v2.json"
+CASES_PATH = Path(__file__).with_name("cases") / "central-recommender-cases.v1.json"
+PROMPT_VERSION = "central-recommender-ko-v2"
 
 PSYCHOLOGICAL_ASSERTION_PATTERN = re.compile(
     r"성격|심리|감정\s*(?:이다|입니다|유형)|구매\s*의도|내향|외향|우울|불안|"
@@ -47,14 +48,41 @@ EXPECTED_PRODUCT_IDS = (
 )
 
 EXPECTED_MODEL_CANDIDATES = {
-    "Qwen/Qwen3.5-9B": {
-        "revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
-        "license": "Apache-2.0",
-    },
-    "mistralai/Mistral-Small-3.1-24B-Instruct-2503": {
-        "revision": "68faf511d618ef198fef186659617cfd2eb8e33a",
-        "license": "Apache-2.0",
-    },
+    "qwen35-9b-colab-ref": (
+        "Qwen/Qwen3.5-9B",
+        "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+        "colab-gpu",
+    ),
+    "mistral-small-31-24b-colab-ref": (
+        "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "68faf511d618ef198fef186659617cfd2eb8e33a",
+        "colab-gpu",
+    ),
+    "hyperclovax-seed-05b-q4km": (
+        "naver-hyperclovax/HyperCLOVAX-SEED-Text-Instruct-0.5B",
+        "4d88cd03638f3d0d88fd341be8ef625b60630fb8",
+        "colab-gpu",
+    ),
+    "qwen3-06b-q8": (
+        "Qwen/Qwen3-0.6B-GGUF",
+        "23749fefcc72300e3a2ad315e1317431b06b590a",
+        "colab-gpu",
+    ),
+    "qwen3-17b-q8": (
+        "Qwen/Qwen3-1.7B-GGUF",
+        "90862c4b9d2787eaed51d12237eafdfe7c5f6077",
+        "colab-gpu",
+    ),
+    "kanana-15-21b-q4km": (
+        "kakaocorp/kanana-1.5-2.1b-instruct-2505",
+        "7df4bc35ccd610e451809d7106e1c3cf82bfd44c",
+        "colab-gpu",
+    ),
+    "phi4-mini-onnx-cpu-int4": (
+        "microsoft/Phi-4-mini-instruct-onnx",
+        "fc04c8f93df696602fd9f300a30d1bf2e3081347",
+        "colab-gpu",
+    ),
 }
 
 FORBIDDEN_KEYS = {
@@ -382,22 +410,118 @@ def run_static_validation() -> dict[str, Any]:
     benchmark = load_json(BENCHMARK_PATH)
     if candidate_registry["selection_status"] != "benchmark_gated_not_selected":
         raise ValueError("model registry must not claim selection before benchmark")
-    candidates = {candidate["model_id"]: candidate for candidate in candidate_registry["candidates"]}
+    candidates = {
+        candidate["candidate_id"]: candidate for candidate in candidate_registry["candidates"]
+    }
     if set(candidates) != set(EXPECTED_MODEL_CANDIDATES):
-        raise ValueError("model candidate registry differs from the reviewed two-model set")
-    for model_id, expected in EXPECTED_MODEL_CANDIDATES.items():
-        candidate = candidates[model_id]
-        if any(candidate[field] != value for field, value in expected.items()):
-            raise ValueError(f"model revision/license drifted for {model_id}")
-        if candidate.get("weight_checksum") is not None or candidate.get(
-            "weight_checksum_status"
-        ) != "not_collected_model_not_downloaded":
-            raise ValueError(f"un-downloaded model {model_id} must not claim a checksum")
+        raise ValueError("model candidate registry differs from the reviewed seven-model set")
+    for candidate_id, (model_id, revision, execution_lane) in EXPECTED_MODEL_CANDIDATES.items():
+        candidate = candidates[candidate_id]
+        if (
+            candidate.get("model_id") != model_id
+            or candidate.get("revision") != revision
+            or candidate.get("execution_lane") != execution_lane
+        ):
+            raise ValueError(f"model identity drifted for {candidate_id}")
+        if not re.fullmatch(r"[0-9a-f]{40}", candidate["revision"]):
+            raise ValueError(f"model revision is not an immutable SHA for {candidate_id}")
+        license_info = candidate.get("license")
+        if not isinstance(license_info, dict) or not all(
+            license_info.get(field) for field in ("code", "weights", "url", "approval_status")
+        ):
+            raise ValueError(f"license provenance missing for {candidate_id}")
+        artifact = candidate.get("artifact")
+        prepared_manifests = {
+            "qwen3-06b-q8": "64217f47ee2f7d5d2d619ddcbeebd7142b9b2a6d85857551a54abf99b4bd148d",
+            "qwen3-17b-q8": "ddc070e86f5732cfb3e729329b289c8cc7799939898f55644c3b5472642bab93",
+        }
+        if not isinstance(artifact, dict):
+            raise ValueError(f"artifact provenance missing for {candidate_id}")
+        if candidate_id in prepared_manifests:
+            if (
+                artifact.get("manifest_sha256") != prepared_manifests[candidate_id]
+                or artifact.get("checksum_status") != "verified"
+                or any(file_info.get("sha256") is None for file_info in artifact.get("files", []))
+            ):
+                raise ValueError(f"prepared model {candidate_id} checksum manifest drifted")
+        elif (
+            artifact.get("manifest_sha256") is not None
+            or artifact.get("checksum_status") != "not_collected_model_not_downloaded"
+            or any(file_info.get("sha256") is not None for file_info in artifact.get("files", []))
+        ):
+            raise ValueError(f"un-downloaded model {candidate_id} must not claim local checksums")
+        runtime = candidate.get("runtime")
+        if (
+            not isinstance(runtime, dict)
+            or not re.fullmatch(r"[0-9a-f]{40}", str(runtime.get("commit", "")))
+            or not runtime.get("version")
+        ):
+            raise ValueError(f"runtime provenance missing for {candidate_id}")
+
+    suite = load_json(CASES_PATH)
+    cases = suite.get("cases")
+    categories = Counter(case.get("category") for case in cases or [])
+    callable_count = sum(case.get("should_call_model") is True for case in cases or [])
+    auxiliary_count = sum(
+        isinstance(case.get("psychology_auxiliary_signal"), dict)
+        for case in cases or []
+        if case.get("should_call_model") is True
+    )
+    smoke = suite.get("smoke")
+    case_by_id = {
+        case.get("case_id"): case
+        for case in cases or []
+        if isinstance(case, dict) and isinstance(case.get("case_id"), str)
+    }
+    smoke_case_ids = smoke.get("case_ids") if isinstance(smoke, dict) else None
+    smoke_callable_count = sum(
+        case_by_id[case_id].get("should_call_model") is True
+        for case_id in smoke_case_ids or []
+        if case_id in case_by_id
+    )
+    if (
+        suite.get("synthetic_only") is not True
+        or len(cases or []) != 12
+        or categories != Counter({"normal": 6, "preflight_block": 3, "red_team": 3})
+        or suite.get("variants") != ["A", "B", "C"]
+        or suite.get("repeats_per_callable_case_variant") != 5
+        or callable_count * 3 * 5 != 135
+        or not isinstance(smoke, dict)
+        or smoke.get("variants") != ["C"]
+        or smoke.get("repeats") != 1
+        or smoke.get("cold_start_count") != 1
+        or not isinstance(smoke_case_ids, list)
+        or len(smoke_case_ids) != 5
+        or len(set(smoke_case_ids)) != 5
+        or any(case_id not in case_by_id for case_id in smoke_case_ids)
+        or smoke_callable_count != 4
+        or auxiliary_count != callable_count
+    ):
+        raise ValueError("synthetic benchmark suite or 135-call plan drifted")
     if (
         benchmark.get("status") != "not_run"
-        or benchmark.get("reason") != "no_local_gpu"
-        or benchmark.get("hf_token_present") is not False
-        or benchmark.get("local_nvidia_gpu_detected") is not False
+        or benchmark.get("reason") != "benchmark_preparation_only"
+        or benchmark.get("synthetic_only") is not True
+        or benchmark.get("weight_download_performed") is not True
+        or benchmark.get("downloaded_candidate_ids") != ["qwen3-06b-q8", "qwen3-17b-q8"]
+        or benchmark.get("checksum_verified_candidate_ids")
+        != ["qwen3-06b-q8", "qwen3-17b-q8"]
+        or benchmark.get("weight_sha256")
+        != {
+            "qwen3-06b-q8": "9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031",
+            "qwen3-17b-q8": "061b54daade076b5d3362dac252678d17da8c68f07560be70818cace6590cb1a",
+        }
+        or benchmark.get("manifest_sha256")
+        != {
+            "qwen3-06b-q8": "64217f47ee2f7d5d2d619ddcbeebd7142b9b2a6d85857551a54abf99b4bd148d",
+            "qwen3-17b-q8": "ddc070e86f5732cfb3e729329b289c8cc7799939898f55644c3b5472642bab93",
+        }
+        or benchmark.get("runtime_source_checkout_prepared") is not True
+        or benchmark.get("runtime_source_commit")
+        != "e9fa0781f1c25fc4fe8c86be1edc6970661ad6f0"
+        or benchmark.get("runtime_binary_available") is not False
+        or benchmark.get("conversion_performed") is not False
+        or benchmark.get("conversion_performed") is not False
         or benchmark.get("external_provider_used") is not False
         or benchmark.get("selected_model") is not None
     ):
@@ -416,6 +540,12 @@ def run_static_validation() -> dict[str, Any]:
         "benchmark_status": benchmark["status"],
         "benchmark_reason": benchmark["reason"],
         "selected_model": benchmark["selected_model"],
+        "model_candidate_count": len(candidates),
+        "synthetic_case_count": len(cases),
+        "planned_correctness_calls_per_candidate": 135,
+        "psychology_auxiliary_case_count": auxiliary_count,
+        "smoke_case_count": len(smoke_case_ids),
+        "smoke_callable_case_count": smoke_callable_count,
     }
 
 
