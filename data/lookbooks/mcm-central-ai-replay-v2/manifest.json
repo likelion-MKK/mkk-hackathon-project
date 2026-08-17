@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "video_id": "mcm-central-ai-replay-v2",
-  "manifest_version": "mcm-central-ai-replay-v2-2026-08-16",
+  "manifest_version": "mcm-central-ai-replay-v2-2026-08-18",
   "coordinate_space": "video_normalized",
   "exposures": [
     {
@@ -10,21 +10,15 @@
       "start_ms": 0,
       "end_ms": 6000,
       "priority": 0,
-      "shape": {
-        "type": "polygon",
-        "points": [[0, 0], [1, 0], [1, 1], [0, 1]]
-      }
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] }
     },
     {
-      "exposure_id": "replay-scene-02-diamant",
-      "product_id": "mcm-diamant-3d-small-calfskin",
+      "exposure_id": "replay-scene-02-pina-vanity",
+      "product_id": "mcm-pina-vanity-case-studded-calfskin",
       "start_ms": 6000,
       "end_ms": 12000,
       "priority": 0,
-      "shape": {
-        "type": "polygon",
-        "points": [[0, 0], [1, 0], [1, 1], [0, 1]]
-      }
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] }
     },
     {
       "exposure_id": "replay-scene-03-milla",
@@ -32,10 +26,7 @@
       "start_ms": 12000,
       "end_ms": 18000,
       "priority": 0,
-      "shape": {
-        "type": "polygon",
-        "points": [[0, 0], [1, 0], [1, 1], [0, 1]]
-      }
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] }
     },
     {
       "exposure_id": "replay-scene-04-ella",
@@ -43,21 +34,15 @@
       "start_ms": 18000,
       "end_ms": 24000,
       "priority": 0,
-      "shape": {
-        "type": "polygon",
-        "points": [[0, 0], [1, 0], [1, 1], [0, 1]]
-      }
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] }
     },
     {
-      "exposure_id": "replay-scene-05-aren-crossbody",
-      "product_id": "mcm-aren-nova-small-monogram-econyl",
+      "exposure_id": "replay-scene-05-aren-east-west",
+      "product_id": "mcm-aren-east-west-shoulder-visetos",
       "start_ms": 24000,
       "end_ms": 30000,
       "priority": 0,
-      "shape": {
-        "type": "polygon",
-        "points": [[0, 0], [1, 0], [1, 1], [0, 1]]
-      }
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] }
     },
     {
       "exposure_id": "replay-scene-06-ottomar",
@@ -65,10 +50,7 @@
       "start_ms": 30000,
       "end_ms": 36000,
       "priority": 0,
-      "shape": {
-        "type": "polygon",
-        "points": [[0, 0], [1, 0], [1, 1], [0, 1]]
-      }
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] }
     },
     {
       "exposure_id": "replay-scene-07-aren-backpack",
@@ -76,21 +58,15 @@
       "start_ms": 36000,
       "end_ms": 42000,
       "priority": 0,
-      "shape": {
-        "type": "polygon",
-        "points": [[0, 0], [1, 0], [1, 1], [0, 1]]
-      }
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] }
     },
     {
-      "exposure_id": "replay-scene-08-aren-triangle",
-      "product_id": "mcm-aren-triangle-mini-visetos",
+      "exposure_id": "replay-scene-08-pina-studded-tote",
+      "product_id": "mcm-pina-studded-tote-visetos",
       "start_ms": 42000,
       "end_ms": 48000,
       "priority": 0,
-      "shape": {
-        "type": "polygon",
-        "points": [[0, 0], [1, 0], [1, 1], [0, 1]]
-      }
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] }
     },
     {
       "exposure_id": "replay-scene-09-pina",
@@ -98,21 +74,15 @@
       "start_ms": 48000,
       "end_ms": 54000,
       "priority": 0,
-      "shape": {
-        "type": "polygon",
-        "points": [[0, 0], [1, 0], [1, 1], [0, 1]]
-      }
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] }
     },
     {
-      "exposure_id": "replay-scene-10-tracy",
-      "product_id": "mcm-tracy-large-hobo-visetos",
+      "exposure_id": "replay-scene-10-stark-backpack",
+      "product_id": "mcm-stark-side-studs-backpack-gold-crystal-visetos",
       "start_ms": 54000,
       "end_ms": 60000,
       "priority": 0,
-      "shape": {
-        "type": "polygon",
-        "points": [[0, 0], [1, 0], [1, 1], [0, 1]]
-      }
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] }
     }
   ]
 }

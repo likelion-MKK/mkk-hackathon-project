@@ -24,7 +24,7 @@
     "model_revision": "placeholder",
     "prompt_version": "central-recommender-ko-v1",
     "feature_version": "central-evidence-v2-demo-1",
-    "catalog_version": "mcm-us-listing-names-v2-2026-08-16",
+    "catalog_version": "mcm-us-pdp-verified-v3-2026-08-18",
     "input_variant": "Z",
     "deployment_mode": "self_hosted"
   }

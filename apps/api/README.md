@@ -40,9 +40,11 @@ Supabase 연결은 역할별로 분리한다.
 - migration·catalog seed·backup/restore의 `MIGRATION_DATABASE_URL`: direct PostgreSQL 전용
 - direct URL은 Docker Compose, Vite 또는 브라우저 환경에 주입하지 않는다.
 
-기존 `0001`, `0002`는 수정하지 않는다. `0003_api_db_operations.sql`은 내부 job 상태
+기존 `0001`, `0002`, `0003`은 수정하지 않는다. `0003_api_db_operations.sql`은 내부 job 상태
 `pending|running|completed|failed|cancelled|insufficient_data`, 원자적 claim, active-session
-unique index, migration marker와 cleanup index를 추가한다. observation/timeline 테이블은
+unique index, migration marker와 cleanup index를 추가한다. `0004_catalog_pdp_source_status.sql`은
+공식 PDP identity가 검증됐지만 자산 승인은 대기 중인
+`official_product_page_verified_assets_pending` catalog 상태를 CHECK 제약에 추가한다. observation/timeline 테이블은
 의도적으로 없으며 이전 revision이 저장했을 수 있는 자유형 explanation/evidence/style/
 data_quality도 정확히 `recommendation_job_v2`에서 비운다.
 
@@ -112,7 +114,7 @@ explanation/input/output은 저장하지 않는다. cancel 뒤 늦은 결과는 
 ## Health, cleanup과 단일 worker
 
 - `GET /healthz`: DB와 분리된 process liveness
-- `GET /readyz`: DB, `0003` migration, canonical catalog 10개와 job intake readiness
+- `GET /readyz`: DB, `0004` migration, canonical catalog 10개와 job intake readiness
 - `GET /api/v1/health`: 호환용 deprecated combined view
 
 Compose와 Dockerfile은 API `--workers 1`, 중앙 job concurrency 2로 고정한다. DB claim은

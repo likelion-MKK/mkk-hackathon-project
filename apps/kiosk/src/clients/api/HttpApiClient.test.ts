@@ -81,26 +81,28 @@ test("HTTP API client uses v2 observation, completion, polling, and cleanup rout
     ),
     new Response(
       JSON.stringify({
-        product_id: "mcm-diamant-3d-small-calfskin",
-        display_name: "Small Diamant 3D Shoulder Bag in Calfskin",
+        product_id: "mcm-pina-vanity-case-studded-calfskin",
+        display_name: "Pina Vanity Case in Studded Calfskin",
         category: "bag",
-        controlled_tags: ["compact", "leather", "structured"],
-        recommendation_summary: "팀 검수 요약",
+        controlled_tags: ["compact", "evening", "leather", "shoulder", "structured"],
+        recommendation_summary:
+          "컴팩트한 스터드 장식 가죽 베니티 케이스와 구조적인 숄더 스타일 방향을 비교하기 위한 팀 작성 추천 profile입니다.",
         style: {
           silhouette: "boxy",
           visual_tone: "refined",
-          use_cases: ["evening"],
+          use_cases: ["evening", "weekend"],
         },
         approved_asset: false,
-        source_status: "official_listing_name_verified_assets_pending",
-        official_product_url: null,
-        official_product_url_reason: "individual_product_url_unverified",
+        source_status: "official_product_page_verified_assets_pending",
+        official_product_url:
+          "https://us.mcmworldwide.com/en_US/bags/shoulder-crossbody-bags/pina-vanity-case-in-studded-calfskin/MWRGATA01BK001.html",
+        official_product_url_reason: null,
         official_listing_url: "https://us.mcmworldwide.com/en_US/women/bags/all-bags",
         image_asset_path: null,
         image_asset_path_reason: "asset_license_review_pending",
         qr_asset_path: null,
-        qr_asset_path_reason: "official_product_url_unverified",
-        source_note: "공식 listing에서 이름만 확인",
+        qr_asset_path_reason: "qr_asset_generation_pending",
+        source_note: "공식 MCM PDP URL과 SKU identity 확인, 자산과 PDP 본문 상세는 미검증",
       }),
       { status: 200, headers: { "Content-Type": "application/json" } },
     ),
@@ -147,12 +149,12 @@ test("HTTP API client uses v2 observation, completion, polling, and cleanup rout
     });
     await client.completeCentralRecommendation("session-v2-001");
     await client.getCentralRecommendation("session-v2-001");
-    await client.getCentralProduct("mcm-diamant-3d-small-calfskin");
+    await client.getCentralProduct("mcm-pina-vanity-case-studded-calfskin");
     await client.requestCentralManagerProduct("session-v2-001", {
       schema_version: "2.0",
       request_id: "manager-request-v2-001",
       recommendation_id: "recommendation-v2-001",
-      selected_product_id: "mcm-diamant-3d-small-calfskin",
+      selected_product_id: "mcm-pina-vanity-case-studded-calfskin",
       intent: "view_recommended_product",
     });
     await client.discardSession("session-v2-001");
@@ -163,7 +165,7 @@ test("HTTP API client uses v2 observation, completion, polling, and cleanup rout
         "http://localhost:8000/api/v2/sessions/session-v2-001/observations",
         "http://localhost:8000/api/v2/sessions/session-v2-001/complete",
         "http://localhost:8000/api/v2/sessions/session-v2-001/recommendation",
-        "http://localhost:8000/api/v2/products/mcm-diamant-3d-small-calfskin",
+        "http://localhost:8000/api/v2/products/mcm-pina-vanity-case-studded-calfskin",
         "http://localhost:8000/api/v2/sessions/session-v2-001/manager-product-requests",
         "http://localhost:8000/api/v2/sessions/session-v2-001",
       ],
@@ -176,7 +178,7 @@ test("HTTP API client uses v2 observation, completion, polling, and cleanup rout
       schema_version: "2.0",
       request_id: "manager-request-v2-001",
       recommendation_id: "recommendation-v2-001",
-      selected_product_id: "mcm-diamant-3d-small-calfskin",
+      selected_product_id: "mcm-pina-vanity-case-studded-calfskin",
       intent: "view_recommended_product",
     });
   } finally {

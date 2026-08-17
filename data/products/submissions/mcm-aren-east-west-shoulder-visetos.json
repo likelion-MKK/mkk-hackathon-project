@@ -1,0 +1,73 @@
+{
+  "submission_version": "1.0",
+  "product_id": "mcm-aren-east-west-shoulder-visetos",
+  "research": {
+    "brand": "MCM",
+    "display_name": "Aren East-West Shoulder Bag in Visetos",
+    "category": "bag",
+    "collection_or_line": "Aren",
+    "official_product_url": "https://us.mcmworldwide.com/en_US/bags/shoulder-crossbody-bags/aren-east-west-shoulder-bag-in-visetos/MWSGATA01I8001.html",
+    "official_listing_url": "https://us.mcmworldwide.com/en_US/women/bags/all-bags",
+    "color": {
+      "official_name": null,
+      "normalized_family": null,
+      "not_verified_reason": "공식 PDP 본문을 HTTP 403으로 확인하지 못해 색상명을 검증하지 못함"
+    },
+    "material": {
+      "official_name": "Visetos",
+      "normalized_family": "monogram_canvas",
+      "not_verified_reason": "상품명에서 Visetos 계열만 확인했으며 세부 구성과 트리밍은 미검증"
+    },
+    "dimensions_mm": {
+      "width": null,
+      "height": null,
+      "depth": null,
+      "not_verified_reason": "공식 PDP 본문을 HTTP 403으로 확인하지 못해 치수를 검증하지 못함"
+    },
+    "weight_g": {
+      "value": null,
+      "not_verified_reason": "공식 PDP 본문을 HTTP 403으로 확인하지 못해 무게를 검증하지 못함"
+    },
+    "carrying_methods": ["상품명에서 확인한 숄더백 유형"],
+    "closure": null,
+    "capacity_and_pockets": ["공식 PDP 본문을 HTTP 403으로 확인하지 못해 수납 구성을 검증하지 못함"],
+    "visual_features": ["상품명에서 확인한 East-West 숄더백 유형", "상품명에서 확인한 Visetos 계열"],
+    "recommended_use_cases": ["일상 및 주말용 컴팩트 숄더 스타일이라는 팀 작성 해석"],
+    "care_notes": null,
+    "availability": {
+      "status": null,
+      "checked_at": null,
+      "not_verified_reason": "공식 PDP 본문을 HTTP 403으로 확인하지 못해 현재 판매 상태를 검증하지 못함"
+    }
+  },
+  "recommendation_profile": {
+    "controlled_tags": ["compact", "daily", "monogram", "shoulder", "structured"],
+    "recommendation_summary": "가로형 모노그램 숄더백과 컴팩트한 데일리 스타일 방향을 비교하기 위한 팀 작성 추천 profile입니다.",
+    "style": {
+      "silhouette": "boxy",
+      "visual_tone": "classic",
+      "use_cases": ["daily", "weekend"]
+    }
+  },
+  "sources": [
+    {
+      "source_id": "official-product-page",
+      "kind": "official_product_page",
+      "url": "https://us.mcmworldwide.com/en_US/bags/shoulder-crossbody-bags/aren-east-west-shoulder-bag-in-visetos/MWSGATA01I8001.html",
+      "accessed_on": "2026-08-18",
+      "supports": ["research.display_name", "research.material", "official_product_url SKU MWSGATA01I8001 identity"]
+    }
+  ],
+  "asset_review": {
+    "image_source_url": null,
+    "usage_approval_reference": null,
+    "approved_asset": false,
+    "note": "공식 PDP 본문은 HTTP 403으로 확인하지 못했으며 이미지 자산과 라이선스는 승인되지 않음"
+  },
+  "review": {
+    "researcher": "박형진",
+    "checked_at": "2026-08-18",
+    "reviewer": null,
+    "review_status": "draft"
+  }
+}

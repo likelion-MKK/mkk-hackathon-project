@@ -22,7 +22,7 @@ from apps.api.app.v2_models import (
 )
 
 
-REQUIRED_MIGRATION_ID = "0003_api_db_operations"
+REQUIRED_MIGRATION_ID = "0004_catalog_pdp_source_status"
 TERMINAL_JOB_STATUSES = (
     "completed",
     "failed",

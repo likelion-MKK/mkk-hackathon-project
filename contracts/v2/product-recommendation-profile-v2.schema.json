@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://mcm-lookbook.example/contracts/v2/product-recommendation-profile-v2.schema.json",
   "title": "ProductRecommendationProfileV2",
-  "description": "중앙 추천 AI가 선택할 수 있는 정확히 10개의 MCM 공식 listing 확인 상품과 팀 작성 추천 profile입니다.",
+  "description": "중앙 추천 AI가 선택할 수 있는 정확히 10개의 공식 MCM PDP identity 확인 상품과 팀 작성 추천 profile입니다.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "catalog_version", "products"],
@@ -124,6 +124,7 @@
           "enum": [
             "demo_placeholder",
             "official_listing_name_verified_assets_pending",
+            "official_product_page_verified_assets_pending",
             "team_approved_catalog_record"
           ]
         },
@@ -163,6 +164,23 @@
             "properties": {
               "approved_asset": { "const": false },
               "official_product_url": { "type": "null" },
+              "image_asset_path": { "type": "null" },
+              "qr_asset_path": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source_status": { "const": "official_product_page_verified_assets_pending" }
+            },
+            "required": ["source_status"]
+          },
+          "then": {
+            "properties": {
+              "approved_asset": { "const": false },
+              "official_product_url": { "type": "string", "format": "uri" },
+              "official_product_url_reason": { "type": "null" },
               "image_asset_path": { "type": "null" },
               "qr_asset_path": { "type": "null" }
             }

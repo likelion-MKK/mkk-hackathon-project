@@ -35,14 +35,14 @@ from apps.api.app.v2_postgres import (
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 PRODUCT_1 = "mcm-toni-medium-disco-visetos"
-PRODUCT_2 = "mcm-diamant-3d-small-calfskin"
+PRODUCT_2 = "mcm-pina-vanity-case-studded-calfskin"
 VIDEO_ID = "mcm-central-ai-replay-v2"
-MANIFEST_VERSION = "mcm-central-ai-replay-v2-2026-08-16"
+MANIFEST_VERSION = "mcm-central-ai-replay-v2-2026-08-18"
 ACTUAL_VIDEO_ID = "mcm-lookbook-v2"
 ACTUAL_MANIFEST_VERSION = "mcm-lookbook-v2-2026-08-18"
 EXPOSURES = {
     PRODUCT_1: "replay-scene-01-toni",
-    PRODUCT_2: "replay-scene-02-diamant",
+    PRODUCT_2: "replay-scene-02-pina-vanity",
 }
 CATALOG = load_canonical_catalog(
     REPOSITORY_ROOT / "data" / "products" / "mcm-demo-recommendation-profile-v2.json"
@@ -321,7 +321,7 @@ def test_different_product_aoi_overlap_is_not_attributed() -> None:
     metadata_payload["metadata_revision"] = "ambiguous-products-test-v1"
     metadata_payload["exposures"].append(
         {
-            "aoi_id": "overlap-diamant",
+            "aoi_id": "overlap-pina-vanity",
             "parent_aoi_id": None,
             "specificity_rank": 0,
             "start_ms": 0,
@@ -941,8 +941,11 @@ def test_v2_manifest_and_product_routes_use_canonical_ids(
     assert manifest.status_code == product.status_code == 200
     assert manifest.json()["exposures"][0]["product_id"] == PRODUCT_1
     assert product.json()["product_id"] == PRODUCT_1
-    assert product.json()["official_product_url"] is None
-    assert product.json()["official_product_url_reason"]
+    assert product.json()["source_status"] == "official_product_page_verified_assets_pending"
+    assert product.json()["official_product_url"].endswith("/MWPGAMT01CO001.html")
+    assert product.json()["official_product_url_reason"] is None
+    assert product.json()["image_asset_path"] is None
+    assert product.json()["qr_asset_path"] is None
 
 
 def test_backend_rejects_client_supplied_product_candidates(

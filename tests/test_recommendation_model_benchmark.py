@@ -493,7 +493,7 @@ class RecommendationModelBenchmarkTests(unittest.TestCase):
             all(row["hard_gate_passed"] for row in good["automatic_hard_gate"]["combinations"])
         )
         unstable_run = passing_run(candidate)
-        unstable_run["results"][0]["selected_product_id"] = "mcm-diamant-3d-small-calfskin"
+        unstable_run["results"][0]["selected_product_id"] = "mcm-pina-vanity-case-studded-calfskin"
         unstable = benchmark.score_run(unstable_run, registry)
         variant_a = unstable["automatic_hard_gate"]["combinations"][0]
         self.assertFalse(variant_a["checks"]["replay_stability_5_of_5"])

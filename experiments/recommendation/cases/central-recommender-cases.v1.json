@@ -39,7 +39,7 @@
       "signal_profile": "face_observable_dominant",
       "should_call_model": true,
       "expected_status": "completed",
-      "expected_product_id": "mcm-diamant-3d-small-calfskin",
+      "expected_product_id": "mcm-pina-vanity-case-studded-calfskin",
       "psychology_auxiliary_signal": {
         "signal_id": "observable_action_change",
         "interpretation": "bounded_action_observation",
@@ -87,7 +87,7 @@
       "signal_profile": "close_fixed_winner",
       "should_call_model": true,
       "expected_status": "completed",
-      "expected_product_id": "mcm-aren-nova-small-monogram-econyl",
+      "expected_product_id": "mcm-aren-east-west-shoulder-visetos",
       "psychology_auxiliary_signal": {
         "signal_id": "relative_visual_attention",
         "interpretation": "bounded_attention",
@@ -166,7 +166,7 @@
       "signal_profile": "gaze_dominant",
       "should_call_model": true,
       "expected_status": "completed",
-      "expected_product_id": "mcm-aren-triangle-mini-visetos",
+      "expected_product_id": "mcm-pina-studded-tote-visetos",
       "psychology_auxiliary_signal": {
         "signal_id": "relative_visual_attention",
         "interpretation": "bounded_attention",

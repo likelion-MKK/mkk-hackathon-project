@@ -1,8 +1,8 @@
 {
   "schema_version": "2.0",
   "video_id": "mcm-central-ai-replay-v2",
-  "manifest_version": "mcm-central-ai-replay-v2-2026-08-16",
-  "metadata_revision": "mcm-central-ai-replay-aoi-v2-2026-08-18",
+  "manifest_version": "mcm-central-ai-replay-v2-2026-08-18",
+  "metadata_revision": "mcm-central-ai-replay-aoi-v3-2026-08-18",
   "approval_status": "approved",
   "coordinate_space": "video_normalized",
   "component_taxonomy_version": "mcm-component-v1",
@@ -28,13 +28,13 @@
       "observed_visual_tag_ids": ["monogram", "shopper"]
     },
     {
-      "aoi_id": "replay-scene-02-diamant",
+      "aoi_id": "replay-scene-02-pina-vanity",
       "parent_aoi_id": null,
       "specificity_rank": 0,
       "start_ms": 6000,
       "end_ms": 12000,
       "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] },
-      "product_id": "mcm-diamant-3d-small-calfskin",
+      "product_id": "mcm-pina-vanity-case-studded-calfskin",
       "component_code": "whole_product",
       "observed_visual_tag_ids": ["leather", "shoulder"]
     },
@@ -61,15 +61,15 @@
       "observed_visual_tag_ids": ["boston", "monogram"]
     },
     {
-      "aoi_id": "replay-scene-05-aren-crossbody",
+      "aoi_id": "replay-scene-05-aren-east-west",
       "parent_aoi_id": null,
       "specificity_rank": 0,
       "start_ms": 24000,
       "end_ms": 30000,
       "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] },
-      "product_id": "mcm-aren-nova-small-monogram-econyl",
+      "product_id": "mcm-aren-east-west-shoulder-visetos",
       "component_code": "whole_product",
-      "observed_visual_tag_ids": ["crossbody", "monogram"]
+      "observed_visual_tag_ids": ["monogram", "shoulder"]
     },
     {
       "aoi_id": "replay-scene-06-ottomar",
@@ -94,15 +94,15 @@
       "observed_visual_tag_ids": ["backpack", "monogram"]
     },
     {
-      "aoi_id": "replay-scene-08-aren-triangle",
+      "aoi_id": "replay-scene-08-pina-studded-tote",
       "parent_aoi_id": null,
       "specificity_rank": 0,
       "start_ms": 42000,
       "end_ms": 48000,
       "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] },
-      "product_id": "mcm-aren-triangle-mini-visetos",
+      "product_id": "mcm-pina-studded-tote-visetos",
       "component_code": "whole_product",
-      "observed_visual_tag_ids": ["crossbody", "triangle"]
+      "observed_visual_tag_ids": ["monogram", "tote"]
     },
     {
       "aoi_id": "replay-scene-09-pina",
@@ -116,15 +116,15 @@
       "observed_visual_tag_ids": ["crossbody", "tambourine"]
     },
     {
-      "aoi_id": "replay-scene-10-tracy",
+      "aoi_id": "replay-scene-10-stark-backpack",
       "parent_aoi_id": null,
       "specificity_rank": 0,
       "start_ms": 54000,
       "end_ms": 60000,
       "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] },
-      "product_id": "mcm-tracy-large-hobo-visetos",
+      "product_id": "mcm-stark-side-studs-backpack-gold-crystal-visetos",
       "component_code": "whole_product",
-      "observed_visual_tag_ids": ["hobo", "shoulder"]
+      "observed_visual_tag_ids": ["backpack", "monogram"]
     }
   ]
 }

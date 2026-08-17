@@ -474,6 +474,7 @@ class ProductRecommendationItemV2(ContractModel):
     source_status: Literal[
         "demo_placeholder",
         "official_listing_name_verified_assets_pending",
+        "official_product_page_verified_assets_pending",
         "team_approved_catalog_record",
     ]
     official_product_url: str | None = Field(max_length=500)
@@ -527,12 +528,18 @@ class ProductRecommendationItemV2(ContractModel):
         return value
 
     @model_validator(mode="after")
-    def placeholder_is_not_approved(self) -> Self:
+    def pending_records_are_consistent(self) -> Self:
         if self.source_status in {
             "demo_placeholder",
             "official_listing_name_verified_assets_pending",
+            "official_product_page_verified_assets_pending",
         } and self.approved_asset:
             raise ValueError("pending catalog records cannot use approved assets")
+        if self.source_status == "official_product_page_verified_assets_pending":
+            if self.official_product_url is None:
+                raise ValueError("verified product-page records require official_product_url")
+            if self.image_asset_path is not None or self.qr_asset_path is not None:
+                raise ValueError("pending product-page records cannot use image or QR assets")
         for value_name, reason_name in (
             ("official_product_url", "official_product_url_reason"),
             ("image_asset_path", "image_asset_path_reason"),
