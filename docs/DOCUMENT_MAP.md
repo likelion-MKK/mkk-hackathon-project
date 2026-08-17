@@ -2,7 +2,7 @@
 
 - 상태: **Current canonical map**
 - 갱신일: 2026-08-16
-- 기준선: `dev` commit `9d5881b`
+- 기준선: `dev` commit `a6eb3d78f47ce38da9d0b2be9b0794479986e280`
 
 이 문서는 새 요구사항을 만들지 않는다. 현재 제품 방향, 승인 결정, 구현 계약, 작업 규칙과 역사 자료의 위치를 구분해 연결한다.
 
@@ -27,9 +27,11 @@ README.md
 | [`OVERALL_DESIGN.md`](OVERALL_DESIGN.md) | canonical 구성요소·데이터 흐름·수명·고객 문구 | 전체 구조·경계 변경 |
 | [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) | 현재 Contract와 목표의 차이, owner·PR 순서·완료 Gate | 구현·스프린트·인계 |
 | [`ADR-0006`](adr/0006-central-recommendation-ai.md) | derived-only self-hosted 중앙 판단, 1회 호출, 가방 10개·Top 1, evidence 폐기 | 추천·DB·프롬프트·결과 UI |
+| [`ADR-0007`](adr/0007-central-recommendation-model-selection.md) | 중앙 추천 model·artifact·runtime·variant 선정용 Proposed benchmark 결정 초안 | 후보 provenance·실행·사람 검토·선택 승인 |
+| [`ADR-0008`](adr/0008-openai-luna-central-recommendation.md) | Luna Max·max·variant C·prompt v4 선택과 hosted provider 통합 Gate | OpenAI 중앙 추천 선택·timeout·latency·실패 경계 |
 | [`CONTRIBUTING.md`](../CONTRIBUTING.md) | `dev` 기반 branch·PR·Contract First | 작업 시작·PR 준비 |
 | [`contracts/README.md`](../contracts/README.md) | 현재 구현 인터페이스, 좌표·시간·invalid 규칙 | producer·consumer·API 변경 |
-| [`Recommendation A/B/C 평가`](../experiments/recommendation/README.md) | prompt, model 후보 revision, variant payload·평가 gate와 미실행 상태 | 중앙 모델·input variant 평가 |
+| [`중앙 추천 self-hosted benchmark`](../experiments/recommendation/README.md) | Google Colab GPU 7개 후보, A/B/C·12개 합성 case, 심리학적 보조 신호 grounding, smoke/full provenance·자원·안전 Gate | 중앙 model·runtime·input variant 평가 |
 | [`ADR 목록`](adr/README.md) | ADR 상태·관할과 번호 | 기술 결정 확인·변경 |
 | [`2026-08-16 dev 문서·브랜치 감사`](audits/2026-08-16-dev-document-branch-audit.md) | 기준 commit, PR 상태, 문서 정리 범위와 남은 차이 | 이번 방향 전환 근거 확인 |
 
@@ -43,16 +45,19 @@ README.md
 | [`ADR-0003 Face 모델·taxonomy·fallback`](adr/0003-face-model-taxonomy-fallback.md) | Proposed | Face 관찰 신호 생산자, invalid·fallback·lifecycle | 이전 추천 weight 문구는 ADR-0006이 대체 |
 | [`ADR-0004 EyeTrax MVP 선택`](adr/0004-eyetrax-mvp-selection.md) | Accepted (해커톤 MVP) | Eye 모델·보정·좌표 생산자와 재평가 Gate | dwell·revisit·최종 Top 1은 ADR-0006 경계 |
 | [`ADR-0006 중앙 판단 추천 AI`](adr/0006-central-recommendation-ai.md) | Accepted (방향·경계) | evidence 결합·수명, 중앙 AI, 상품 10개, 결과·설명, Deferred feedback | 현재 추천 architecture의 권위 결정 |
+| [`ADR-0007 중앙 추천 모델 선정`](adr/0007-central-recommendation-model-selection.md) | Proposed | 후보 revision·license·checksum, self-hosted runtime, 합성 benchmark·블라인드 검토와 최종 선택 | 실제 결과와 세 명의 리뷰 전에는 model 미선정 |
+| [`ADR-0008 OpenAI Luna 중앙 추천 모델 선택`](adr/0008-openai-luna-central-recommendation.md) | Proposed — selected pending integration reviews | Luna Max·max·variant C·prompt v4, latency 기록 전용, hosted provider 경계 | Accepted 전에는 ADR-0006 self-hosted 원칙이 우선 |
 
 ## 4. 작업별 최소 읽기 묶음
 
 ### 중앙 판단 모델·프롬프트 — 양유상
 
 1. [`ADR-0006`](adr/0006-central-recommendation-ai.md)
-2. [`IMPLEMENTATION_PLAN`](IMPLEMENTATION_PLAN.md)의 W0·W4
-3. [`services/recommendation/README.md`](../services/recommendation/README.md)
-4. [`contracts/README.md`](../contracts/README.md)
-5. 후보를 실제 평가할 때만 관련 model card·benchmark 문서
+2. 모델·runtime을 평가하면 [`ADR-0007`](adr/0007-central-recommendation-model-selection.md), OpenAI 선택은 [`ADR-0008`](adr/0008-openai-luna-central-recommendation.md)과 [`benchmark README`](../experiments/recommendation/README.md)
+3. [`IMPLEMENTATION_PLAN`](IMPLEMENTATION_PLAN.md)의 W0·W4
+4. [`services/recommendation/README.md`](../services/recommendation/README.md)
+5. [`contracts/README.md`](../contracts/README.md)
+6. 후보를 실제 평가할 때만 관련 model card·license·runtime 문서
 
 완료 기준은 정확한 model revision·license·checksum, self-hosted 재현, strict output·안전 eval과 versioned system prompt다. 모델 선택 자체는 이 문서 최신화 PR의 완료 조건이 아니다.
 

@@ -1,0 +1,2 @@
+-r requirements-contracts.txt
+tiktoken==0.12.0

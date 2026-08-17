@@ -1,0 +1,69 @@
+{
+  "report_version": "central-recommender-model-comparison-v2",
+  "status": "not_run",
+  "reason": "benchmark_and_reviews_not_completed",
+  "synthetic_only": true,
+  "execution_provider": "google_colab",
+  "execution_profile": "colab-gpu",
+  "source_runs": [],
+  "automatic_hard_gate": {
+    "combinations": [],
+    "eligible_combinations": [],
+    "quality_reference_combinations": []
+  },
+  "human_review": {
+    "status": "not_started",
+    "blinded_combinations": [],
+    "reviewers": {
+      "양유상": null,
+      "조윤혜": null,
+      "박형진": null
+    }
+  },
+  "ranking_order": [
+    "korean_human_review_score",
+    "warm_p95_ms",
+    "peak_rss_bytes",
+    "artifact_size_bytes"
+  ],
+  "complete_tie_variant_preference": "C",
+  "psychology_auxiliary_signal_policy": {
+    "contract_changed": false,
+    "interpretations": [
+      "relative_visual_attention",
+      "observable_action_change",
+      "attention_and_observable_action"
+    ],
+    "weight_policy": "supporting_factor_not_decisive",
+    "grounding_gate": "required_reason_codes_and_evidence_codes"
+  },
+  "smoke_policy": {
+    "case_count": 5,
+    "callable_case_count": 4,
+    "variant": "C",
+    "repeats": 1,
+    "selection_eligible": false
+  },
+  "preparation": {
+    "status": "partial",
+    "downloaded_candidate_ids": ["qwen3-06b-q8", "qwen3-17b-q8"],
+    "weight_sha256": {
+      "qwen3-06b-q8": "9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031",
+      "qwen3-17b-q8": "061b54daade076b5d3362dac252678d17da8c68f07560be70818cace6590cb1a"
+    },
+    "manifest_sha256": {
+      "qwen3-06b-q8": "64217f47ee2f7d5d2d619ddcbeebd7142b9b2a6d85857551a54abf99b4bd148d",
+      "qwen3-17b-q8": "ddc070e86f5732cfb3e729329b289c8cc7799939898f55644c3b5472642bab93"
+    },
+    "runtime_source_commit": "e9fa0781f1c25fc4fe8c86be1edc6970661ad6f0",
+    "runtime_binary_available": false,
+    "benchmark_executed": false
+  },
+  "selected_model": null,
+  "selected_revision": null,
+  "selected_artifact_sha256": null,
+  "selected_runtime": null,
+  "selected_variant": null,
+  "fallback": null,
+  "note": "실제 score 결과와 세 명의 리뷰 전에는 이 template에 수치나 선택값을 채우지 않습니다."
+}

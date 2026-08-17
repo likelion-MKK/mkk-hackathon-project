@@ -1,0 +1,45 @@
+{
+  "status_version": "openai-luna-max-status-v5",
+  "user_decision_date": "2026-08-17",
+  "selected_configuration": {
+    "model_id": "gpt-5.6-luna",
+    "reasoning_effort": "max",
+    "reasoning_context": "current_turn",
+    "input_variant": "C",
+    "prompt_version": "central-recommender-ko-v4",
+    "prompt_sha256": "bc1186d1e3f1e908e8a865ae8f89c35f7e6c3172ccd010018101141d5a350149",
+    "config_version": "openai-luna-max-production-candidate-v2",
+    "config_sha256": "a9f41effe76dd9c8b14ade564e2fa6eaf15bb7be5e02183cef5a5e32ff93e04c",
+    "timeout_seconds": null,
+    "maximum_output_tokens": null,
+    "maximum_output_text_tokens": null,
+    "maximum_output_text_bytes": 16384,
+    "maximum_input_tokens": 6000,
+    "retries": 0,
+    "latency_gate_enforced": false
+  },
+  "selection_basis": {
+    "artifact": "artifacts/recommendation/openai-luna-max/diagnostic-full-v4-no-timeout.json",
+    "live_calls": 27,
+    "passed_calls": 27,
+    "quality_passed": true,
+    "replay_stability_3_of_3": true,
+    "exact_replay_stability": true,
+    "preflight_no_call_3_of_3": true,
+    "forbidden_assertion_or_injection_count": 0,
+    "p95_latency_ms_record_only": 73581.757,
+    "maximum_latency_ms_record_only": 111855.914
+  },
+  "discarded_optimization": {
+    "prompt_version": "central-recommender-ko-v5",
+    "reason": "Not selected because only 11 of 27 calls completed; 16 provider HTTP 429 responses failed closed. The v4 configuration is the fully validated configuration."
+  },
+  "decision": {
+    "status": "selected_pending_adr_and_integration",
+    "latency_policy": "record_only_not_a_completion_gate",
+    "production_approved": false,
+    "reason": "The user explicitly accepted long inference time. All non-latency quality and safety gates passed on the fully validated v4 run."
+  },
+  "contract_db_impact": "none_in_this_change",
+  "next_owner": "Park Hyeong-jin after ADR/provider-boundary review"
+}

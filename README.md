@@ -33,6 +33,8 @@
 
 시선·표정 신호는 실제 감정, 성격이나 구매 의도를 확정하지 않는다. 고객 문구는 이 세션에서 관찰된 행동과 상품 장면만 설명한다.
 
+benchmark에서는 기존 파생값을 상대적 시각적 주의·관찰 가능한 action 변화라는 심리학적 보조 신호로 제한해 평가할 수 있지만, 이는 supporting factor이며 새 심리 필드나 진단값을 만들지 않는다.
+
 - 사용 가능: “룩북에서 A 가방이 나온 구간을 비교적 오래 보고 다시 확인한 반응이 관찰되어 추천합니다.”
 - 사용 금지: “고객님은 충동형입니다”, “행복한 감정이므로 이 상품을 좋아합니다.”
 
@@ -61,7 +63,7 @@
 
 ## 현재 상태와 구현 경계
 
-문서 기준선은 `dev`의 `9d5881b`이고, 이 작업 브랜치에는 중앙 추천 v2 vertical
+문서 기준선은 `dev`의 `a6eb3d78f47ce38da9d0b2be9b0794479986e280`이고, 이 작업 브랜치에는 중앙 추천 v2 vertical
 slice가 구현되어 있다.
 
 - v1을 깨뜨리지 않는 frame observation·evidence·Top 1·Manager v2 계약과 privacy
@@ -70,7 +72,7 @@ slice가 구현되어 있다.
 - bounded session buffer, frame fusion, 비동기 1회 호출, strict output 검증과
   성공·실패·취소·TTL cleanup
 - Kiosk의 real HTTP v2 흐름과 code+DB tag 기반 고객 문구, Manager REST polling
-- versioned Korean prompt, Qwen/Mistral 후보 registry와 A/B/C 평가 harness
+- versioned Korean prompt, Google Colab GPU 7개 후보 registry, A/B/C·12개 합성 case의 self-hosted benchmark CLI
 
 다만 production 준비가 끝났다는 뜻은 아니다. 실제 self-hosted 모델은 아직 선택·실행하지
 않았고, live PostgreSQL·실제 Browser E2E·승인된 Vision producer도 검증 전이다. 공식
@@ -104,6 +106,9 @@ Kiosk는 기본적으로 `http://localhost:5173`, Manager는 `http://localhost:5
 - [전체 설계](docs/OVERALL_DESIGN.md)
 - [구현 계획](docs/IMPLEMENTATION_PLAN.md)
 - [ADR-0006 중앙 판단 추천 AI](docs/adr/0006-central-recommendation-ai.md)
+- [ADR-0007 중앙 추천 모델 선정 초안](docs/adr/0007-central-recommendation-model-selection.md)
+- [ADR-0008 OpenAI Luna 중앙 추천 모델 선택](docs/adr/0008-openai-luna-central-recommendation.md)
+- [중앙 추천 self-hosted benchmark](experiments/recommendation/README.md)
 - [2026-08-16 dev 문서·브랜치 감사](docs/audits/2026-08-16-dev-document-branch-audit.md)
 - [AI Agent 작업 규칙](AGENTS.md)
 - [개발 및 PR 운영 규칙](CONTRIBUTING.md)

@@ -95,7 +95,7 @@ MODEL_WEIGHT_SUFFIXES = {
     ".safetensors",
     ".tflite",
 }
-IGNORED_ARTIFACT_DIRECTORIES = {".git", ".venv", "node_modules", "__pycache__"}
+IGNORED_ARTIFACT_DIRECTORIES = {".git", ".venv", "node_modules", "__pycache__", "artifacts"}
 
 
 @dataclass(frozen=True)
