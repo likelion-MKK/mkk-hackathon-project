@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcm-lookbook.example/contracts/v2/lookbook-aoi-metadata-v2.schema.json",
+  "title": "LookbookAoiMetadataV2",
+  "description": "Backend가 검수된 영상 AOI를 상품·부위·controlled visual tag로 연결할 때만 사용하는 metadata입니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "video_id",
+    "manifest_version",
+    "metadata_revision",
+    "approval_status",
+    "coordinate_space",
+    "component_taxonomy_version",
+    "media_identity",
+    "exposures"
+  ],
+  "properties": {
+    "schema_version": { "const": "2.0" },
+    "video_id": { "$ref": "#/$defs/id" },
+    "manifest_version": { "$ref": "#/$defs/version" },
+    "metadata_revision": { "$ref": "#/$defs/version" },
+    "approval_status": { "enum": ["pending_review", "approved"] },
+    "coordinate_space": { "const": "video_normalized" },
+    "component_taxonomy_version": { "$ref": "#/$defs/version" },
+    "media_identity": { "$ref": "#/$defs/mediaIdentity" },
+    "exposures": {
+      "type": "array",
+      "maxItems": 512,
+      "items": { "$ref": "#/$defs/exposure" }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "approval_status": { "const": "pending_review" } },
+        "required": ["approval_status"]
+      },
+      "then": { "properties": { "exposures": { "maxItems": 0 } } },
+      "else": { "properties": { "exposures": { "minItems": 1 } } }
+    }
+  ],
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "version": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "mediaIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_kind",
+        "sha256",
+        "byte_length",
+        "duration_ms",
+        "width_px",
+        "height_px",
+        "fps"
+      ],
+      "properties": {
+        "source_kind": { "enum": ["video_file", "synthetic_fixture"] },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "byte_length": { "type": "integer", "minimum": 1 },
+        "duration_ms": { "type": "integer", "minimum": 1 },
+        "width_px": { "type": "integer", "minimum": 1 },
+        "height_px": { "type": "integer", "minimum": 1 },
+        "fps": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "normalized": { "type": "number", "minimum": 0, "maximum": 1 },
+    "point": {
+      "type": "array",
+      "prefixItems": [
+        { "$ref": "#/$defs/normalized" },
+        { "$ref": "#/$defs/normalized" }
+      ],
+      "items": false,
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "shape": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "points"],
+      "properties": {
+        "type": { "const": "polygon" },
+        "points": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/point" }
+        }
+      }
+    },
+    "componentCode": {
+      "enum": [
+        "whole_product",
+        "body",
+        "handle",
+        "strap",
+        "closure",
+        "hardware",
+        "pocket",
+        "trim",
+        "logo"
+      ]
+    },
+    "visualTag": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+    },
+    "exposure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "aoi_id",
+        "parent_aoi_id",
+        "specificity_rank",
+        "start_ms",
+        "end_ms",
+        "shape",
+        "product_id",
+        "component_code",
+        "observed_visual_tag_ids"
+      ],
+      "properties": {
+        "aoi_id": { "$ref": "#/$defs/id" },
+        "parent_aoi_id": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/id" }]
+        },
+        "specificity_rank": { "type": "integer", "minimum": 0, "maximum": 32 },
+        "start_ms": { "type": "integer", "minimum": 0 },
+        "end_ms": { "type": "integer", "minimum": 1 },
+        "shape": { "$ref": "#/$defs/shape" },
+        "product_id": { "$ref": "#/$defs/id" },
+        "component_code": { "$ref": "#/$defs/componentCode" },
+        "observed_visual_tag_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/visualTag" }
+        }
+      }
+    }
+  }
+}

@@ -67,6 +67,7 @@ class MemoryStore:
         self.catalog = self._load_catalog()
         self.manifest = self._load_manifest()
         self.central_v2_manifest = self._load_central_v2_manifest()
+        self.actual_v2_manifest = self._load_actual_v2_manifest()
         self.products = {product.product_id: product for product in self.catalog.products}
         self.sessions: dict[str, SessionRecord] = {}
         self.manager_events: list[ManagerEvent] = []
@@ -88,6 +89,16 @@ class MemoryStore:
             / "data"
             / "lookbooks"
             / "mcm-central-ai-replay-v2"
+            / "manifest.json"
+        )
+        return LookbookManifest.model_validate(json.loads(path.read_text(encoding="utf-8")))
+
+    def _load_actual_v2_manifest(self) -> LookbookManifest:
+        path = (
+            self.repository_root
+            / "data"
+            / "lookbooks"
+            / "mcm-lookbook-v2"
             / "manifest.json"
         )
         return LookbookManifest.model_validate(json.loads(path.read_text(encoding="utf-8")))
@@ -136,6 +147,8 @@ class MemoryStore:
         return session
 
     def _require_lookbook(self, lookbook_id: str) -> LookbookManifest:
+        if lookbook_id in {self.actual_v2_manifest.video_id, "mcm-lookbook-v2"}:
+            return self.actual_v2_manifest
         if lookbook_id in {
             self.central_v2_manifest.video_id,
             "mcm-central-ai-replay-v2",
@@ -173,6 +186,15 @@ class MemoryStore:
     def get_manifest(self, lookbook_id: str) -> LookbookManifest:
         with self._lock:
             return self._require_lookbook(lookbook_id)
+
+    def get_active_session_video_id(self, session_id: str) -> str:
+        """Return the bound video for a consented, not-yet-completed session."""
+
+        with self._lock:
+            session = self._require_session(session_id)
+            if session.completed:
+                raise DomainError(409, "session_completed", "completed sessions cannot open Vision Stream")
+            return self._require_lookbook(session.lookbook_id).video_id
 
     def get_product(self, product_id: str) -> Product:
         with self._lock:

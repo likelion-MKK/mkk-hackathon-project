@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import replace
+import asyncio
 import threading
 from typing import Any
 
@@ -10,6 +11,7 @@ import pytest
 from starlette.testclient import TestClient
 
 from apps.vision_gateway.server import LocalVisionTokenIssuer, VisionStreamApp
+from apps.vision_gateway.eye_client import EyeInferenceResult
 from apps.vision_gateway.vision_stream import (
     VisionStreamProtocolError,
     encode_binary_frame,
@@ -324,6 +326,130 @@ def test_long_request_id_keeps_generated_calibration_id_within_contract() -> Non
             assert result["calibration_id"].startswith("calibration-unavailable-")
 
 
+def test_calibration_keeps_accepting_bounded_frames_until_eye_finishes() -> None:
+    started = threading.Event()
+    release = threading.Event()
+
+    class DelayedEyeWorker:
+        async def start_calibration(self, **_: object) -> tuple[bool, str | None]:
+            started.set()
+            await asyncio.to_thread(release.wait, 2)
+            return True, None
+
+        async def infer(self, _frame: object) -> EyeInferenceResult:
+            return EyeInferenceResult(None, "calibration_in_progress")
+
+        async def close(self) -> None:
+            release.set()
+
+    app, issuer = make_app(
+        lambda _image_bytes, _metadata: object(),
+        eye_worker=DelayedEyeWorker(),
+    )
+    token = issuer.issue("session-local-001", "mcm-lookbook-example-v1")["stream_token"]
+
+    with TestClient(app) as client:
+        with client.websocket_connect("/vision/v1/stream") as websocket:
+            websocket.send_json(hello(token))
+            assert websocket.receive_json()["type"] == "ready"
+            websocket.send_json(
+                {
+                    "type": "control",
+                    "protocol_version": "1.0",
+                    "request_id": "calibration-stream",
+                    "action": "start_calibration",
+                    "payload": {
+                        "pattern_id": "dense5-validation-v1",
+                        "points": [[0.1, 0.1], [0.5, 0.5], [0.9, 0.9]],
+                    },
+                }
+            )
+            assert started.wait(timeout=1)
+            websocket.send_bytes(
+                encode_binary_frame(frame_metadata(), b"\xff\xd8\xff\xd9")
+            )
+            frame_result = websocket.receive_json()
+            assert frame_result["type"] == "result"
+            assert frame_result["gaze_sample"] is None
+            assert frame_result["expression_sample"] is None
+            assert frame_result["expression_reason"] == "calibration_in_progress"
+
+            release.set()
+            calibration_result = websocket.receive_json()
+            assert calibration_result["valid"] is True
+            assert calibration_result["calibration_id"] == "calibration-calibration-stream"
+
+            websocket.send_json(
+                {
+                    "type": "control",
+                    "protocol_version": "1.0",
+                    "request_id": "calibration-stream-inference",
+                    "action": "start_inference",
+                }
+            )
+            assert websocket.receive_json()["valid"] is True
+
+
+def test_stop_session_cancels_in_progress_calibration() -> None:
+    started = threading.Event()
+    cancelled = threading.Event()
+
+    class CancellableEyeWorker:
+        async def start_calibration(self, **_: object) -> tuple[bool, str | None]:
+            started.set()
+            try:
+                await asyncio.sleep(60)
+            except asyncio.CancelledError:
+                cancelled.set()
+                raise
+            return True, None
+
+        async def infer(self, _frame: object) -> EyeInferenceResult:
+            return EyeInferenceResult(None, "calibration_in_progress")
+
+        async def close(self) -> None:
+            return None
+
+    app, issuer = make_app(
+        lambda _image_bytes, _metadata: object(),
+        eye_worker=CancellableEyeWorker(),
+    )
+    token = issuer.issue("session-local-001", "mcm-lookbook-example-v1")["stream_token"]
+
+    with TestClient(app) as client:
+        with client.websocket_connect("/vision/v1/stream") as websocket:
+            websocket.send_json(hello(token))
+            assert websocket.receive_json()["type"] == "ready"
+            websocket.send_json(
+                {
+                    "type": "control",
+                    "protocol_version": "1.0",
+                    "request_id": "calibration-cancel",
+                    "action": "start_calibration",
+                    "payload": {
+                        "pattern_id": "dense5-validation-v1",
+                        "points": [[0.1, 0.1], [0.5, 0.5], [0.9, 0.9]],
+                    },
+                }
+            )
+            assert started.wait(timeout=1)
+            websocket.send_json(
+                {
+                    "type": "control",
+                    "protocol_version": "1.0",
+                    "request_id": "calibration-cancel-stop",
+                    "action": "stop_session",
+                }
+            )
+            stop_result = websocket.receive_json()
+            assert stop_result["type"] == "control_result"
+            assert stop_result["request_id"] == "calibration-cancel-stop"
+            assert stop_result["valid"] is True
+            assert websocket.receive_json()["type"] == "close"
+
+    assert cancelled.wait(timeout=1)
+
+
 def test_oversized_frame_closes_with_contract_code_and_reason() -> None:
     app, issuer = make_app(
         lambda _image_bytes, _metadata: object(),
@@ -495,7 +621,22 @@ def test_decoder_timeout_closes_a_late_decoded_frame() -> None:
             assert websocket.receive_json()["type"] == "close"
 
 
-def test_worker_result_must_preserve_all_frame_context_fields() -> None:
+@pytest.mark.parametrize(
+    ("field_name", "replacement_value"),
+    [
+        ("session_id", "session-other-001"),
+        ("video_id", "wrong-video-id"),
+        ("frame_id", "frame-other-001"),
+        ("sequence", 2),
+        ("captured_at_mono_ms", 251.0),
+        ("video_time_ms", 251),
+        ("playback_epoch", 1),
+    ],
+)
+def test_face_worker_result_must_preserve_each_frame_context_field(
+    field_name: str,
+    replacement_value: object,
+) -> None:
     class ContextMismatchWorker:
         def __init__(self) -> None:
             self.delegate = FaceWorker(FakeFaceAdapter())
@@ -506,12 +647,7 @@ def test_worker_result_must_preserve_all_frame_context_fields() -> None:
         def process(self, frame: Any, context: Any) -> Any:
             observation = self.delegate.process(frame, context)
             mismatched = replace(
-                observation.sample,
-                video_id="wrong-video-id",
-                sequence=context.sequence + 1,
-                captured_at_mono_ms=context.captured_at_mono_ms + 1,
-                video_time_ms=context.video_time_ms + 1,
-                playback_epoch=context.playback_epoch + 1,
+                observation.sample, **{field_name: replacement_value}
             )
             return replace(observation, sample=mismatched)
 
@@ -549,6 +685,92 @@ def test_worker_result_must_preserve_all_frame_context_fields() -> None:
                     "type": "control",
                     "protocol_version": "1.0",
                     "request_id": "context-stop",
+                    "action": "stop_session",
+                }
+            )
+            assert websocket.receive_json()["type"] == "control_result"
+            assert websocket.receive_json()["type"] == "close"
+
+
+@pytest.mark.parametrize(
+    ("field_name", "replacement_value"),
+    [
+        ("session_id", "session-other-001"),
+        ("video_id", "wrong-video-id"),
+        ("frame_id", "frame-other-001"),
+        ("sequence", 2),
+        ("captured_at_mono_ms", 251.0),
+        ("video_time_ms", 251),
+        ("playback_epoch", 1),
+    ],
+)
+def test_eye_worker_result_must_preserve_each_frame_context_field(
+    field_name: str,
+    replacement_value: object,
+) -> None:
+    class ContextMismatchEyeWorker:
+        async def start_calibration(self, **_: object) -> tuple[bool, str | None]:
+            return True, None
+
+        async def infer(self, frame: Any) -> EyeInferenceResult:
+            context = frame.metadata.context
+            sample: dict[str, object] = {
+                "schema_version": "1.0",
+                "session_id": context.session_id,
+                "event_id": f"gaze-{context.frame_id}",
+                "sequence": context.sequence,
+                "frame_id": context.frame_id,
+                "captured_at_mono_ms": context.captured_at_mono_ms,
+                "video_id": context.video_id,
+                "video_time_ms": context.video_time_ms,
+                "playback_epoch": context.playback_epoch,
+                "producer_id": "eye-context-test",
+                "model_revision": "eye-context-v1",
+                "calibration_id": "calibration-context-v1",
+                "valid": True,
+                "confidence": 0.9,
+                "reason": None,
+                "screen_x_norm": 0.25,
+                "screen_y_norm": 0.5,
+            }
+            sample[field_name] = replacement_value
+            return EyeInferenceResult(sample, None)
+
+        async def close(self) -> None:
+            return None
+
+    app, issuer = make_app(
+        lambda _image_bytes, _metadata: object(),
+        eye_worker=ContextMismatchEyeWorker(),
+    )
+    token = issuer.issue("session-local-001", "mcm-lookbook-example-v1")["stream_token"]
+
+    with TestClient(app) as client:
+        with client.websocket_connect("/vision/v1/stream") as websocket:
+            websocket.send_json(hello(token))
+            assert websocket.receive_json()["type"] == "ready"
+            websocket.send_json(
+                {
+                    "type": "control",
+                    "protocol_version": "1.0",
+                    "request_id": "eye-context-start",
+                    "action": "start_inference",
+                }
+            )
+            assert websocket.receive_json()["valid"] is True
+            websocket.send_bytes(
+                encode_binary_frame(frame_metadata(), b"\xff\xd8\xff\xd9")
+            )
+            result = websocket.receive_json()
+            assert result["type"] == "result"
+            assert result["gaze_sample"] is None
+            assert result["gaze_reason"] == "gaze_context_mismatch"
+            assert result["expression_sample"]["frame_id"] == "frame-0001"
+            websocket.send_json(
+                {
+                    "type": "control",
+                    "protocol_version": "1.0",
+                    "request_id": "eye-context-stop",
                     "action": "stop_session",
                 }
             )

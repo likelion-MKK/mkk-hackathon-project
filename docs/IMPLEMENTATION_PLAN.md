@@ -1,8 +1,8 @@
 # 중앙 판단 추천 AI 구현 계획
 
 - 상태: **Vertical slice implemented; production gates open**
-- 작성일: 2026-08-16
-- 기준선: `dev` commit `9d5881b`
+- 작성일: 2026-08-18
+- 기준선: `dev` commit `77ae806192db56ef2472439a0359380e7025fae2`
 - 결정 기준: [`ADR-0006`](adr/0006-central-recommendation-ai.md)
 - 구조 기준: [`OVERALL_DESIGN.md`](OVERALL_DESIGN.md)
 
@@ -13,20 +13,20 @@
 
 | Workstream | 상태 | 확인된 결과 | 남은 Gate |
 | --- | --- | --- | --- |
-| W0 문서·결정 | 완료 | canonical 문서, ADR-0006, archive와 branch 감사 | 구현 변경 시 정합성 유지 |
-| W1 v2 계약 | 완료 | 18 schema, v1/v2 example, privacy negative fixture와 OpenAPI | 공동 리뷰·PR 승인 |
-| W2 fusion·evidence | vertical slice 완료 | 동일 frame join, gap/seek reset, 결측·다중 AOI, 이동·표정 변화·지속 집계 | 실제 Eye·Face producer와 승인 Vision E2E |
-| W3 10개 catalog | 코드 완료 | 동일 10 ID JSON, migration, seed/readiness adapter, 60초 replay manifest | live PostgreSQL 및 개별 URL·자산·QR·tag 검수 |
-| W4 모델·prompt | harness 완료 | Korean prompt, Qwen/Mistral pinned revision 후보, A/B/C scorer | GPU server 실행, weight checksum, 모델·variant 승인 |
-| W5 Frontend 연결 | vertical slice 완료 | Kiosk v2 HTTP Top 1·template·cleanup, Manager v2 REST polling | 승인 영상·상품 자산의 실제 Browser E2E |
-| W6 통합 검증 | 자동화 일부 완료 | Contract/API/Kiosk/Manager unit·replay·build | Node 24, live PostgreSQL, 실모델, 로그/APM·browser 잔존 감사 |
+| W0 문서·결정 | 완료 | ADR-0008 Accepted, Luna hosted migration과 deployment baseline 기록 | 실제 secret·domain/TLS 운영 Gate |
+| W1 v2 계약 | 완료 | 22 schema, v1/v2 example, AOI metadata, privacy negative fixture와 OpenAPI | 공동 리뷰·PR 승인 |
+| W2 Vision·fusion·evidence | **3-A 완료 / 전체 미완료** | capture-time context, exact Eye·Face join, video 좌표, Backend 승인 AOI 경계, synthetic 계층·중첩 집계 | 실제 영상 AOI 검수(5번) 후 3-B 및 실기기 HTTPS/WSS E2E |
+| W3 API·DB 운영화 | 로컬 구현 완료 | pooler/direct 분리, 0003 migration, 비덮어쓰기 10개 seed/readiness, atomic job lifecycle, restart/orphan/24h retention, backup/restore 절차 | live Supabase migration·backup/restore 및 개별 URL·자산·QR·tag 검수 |
+| W4 모델·prompt | 구현 완료 | Luna Max, variant C, prompt v4, strict Responses adapter, no retry/timeout | 실제 key canary와 비용·rate-limit 운영 검증 |
+| W5 Frontend 연결 | 구현 완료 | Kiosk v2 HTTP Top 1·template·cleanup, indefinite terminal polling, Vision token route, actual 33.5초 media identity | actual AOI·상품 자산·domain/TLS Browser E2E |
+| W6 통합 검증 | 자동화 일부 완료 | Contract/API/Vision/Kiosk/Manager unit·replay·build, DB failure/readiness/lifecycle synthetic 검증 | Node 24, live Supabase, 실 Eye calibration, 로그/APM·browser 잔존 감사 |
 
 ## 1. 고정 범위
 
 | 항목 | MVP 결정 |
 | --- | --- |
 | 중앙 입력 | 원본이 아닌 정형화된 시선·표정 파생 JSON |
-| 실행 위치 | self-hosted 중앙 판단 AI |
+| 실행 위치 | hosted `gpt-5.6-luna` Responses API; derived-only 경계 유지 |
 | 호출 시점 | 룩북 종료 후 세션당 한 번 |
 | 후보 | DB의 검수된 MCM 가방 정확히 10개 |
 | 고객 결과 | Top 1 상품과 관찰 근거 설명 |
@@ -45,7 +45,7 @@
 | --- | --- | --- | --- |
 | 추천 결과 | Contract v1의 completed `items`는 정확히 2개이며 rank 상한도 2다. | 하나의 상품만 반환 | v1 호환 adapter 또는 새 major contract를 Contract PR에서 결정 |
 | 중앙 입력 | `GazeSample`, `ProductAttentionEvent`, `ExpressionSample`, `ReactionBatch`가 분리되어 있고 중앙 세션 evidence 계약은 없다. | time-aligned bounded `RecommendationEvidence` | 새 schema, example, size·count limit, invalid 의미 승인 |
-| 엔진 mode | 기존 값은 `mock`, `research_version` 중심이다. | self-hosted 중앙 모델·프롬프트 version | enum/version migration과 rollback 상태 결정 |
+| 엔진 mode | 해소: v2 public `deployment_mode=self_hosted` 호환값은 유지하고 provider metadata를 별도 기록한다. | Luna runtime provider | ADR-0008 Accepted 기준의 실제 key canary·운영 readiness |
 | 상품 데이터 | 예제 상품·lookbook 연결은 있으나 검수된 가방 10개 DB catalog는 보장하지 않는다. | exactly 10 active profiles | catalog schema, seed·migration, 검수 책임 승인 |
 | 설명 | 기존 결과는 상품 ID 중심이다. | 근거 code·reference·비진단적 문구 | 설명 schema와 server-side grounding 결정 |
 | 수명 | 생산자별 임시 상태는 있으나 중앙 evidence end-to-end 폐기 Gate가 없다. | final-only persistence | 성공·실패·취소·timeout cleanup test 추가 |
@@ -72,7 +72,7 @@
 현재 v2 Contract에서 정의한 것:
 
 - session·video·playback epoch와 capture time 기준
-- frame별 시선 좌표·이동, AOI, 체류·재확인·왕복·지속 요약
+- frame별 시선 좌표·이동, 캡처 시점 video 좌표와 Backend 승인 AOI 기반 체류·재확인·왕복·지속 요약
 - 표정 observable score, 변화율·지속 구간, quality·valid·reason
 - Eye·Face 정렬 오차, coverage, drop·결측 요약과 evidence reference
 - event count, payload bytes, 문자열·시간 범위 상한
@@ -85,22 +85,32 @@
 - producer와 consumer가 동일 fixture를 검증한다.
 - `python scripts/validate_contracts.py`가 통과한다.
 
-### W2. Eye·Face Producer와 Evidence Builder — 박형진·정은미, 양유상 Eye 검토
+### W2. Vision 3-A·Eye/Face Producer와 Evidence Builder — 박형진·정은미, 양유상 Eye 검토
 
 구현 순서:
 
-1. 기존 sample 의미를 바꾸지 않고 capture context를 보존한다.
-2. 동일 session·video·playback epoch 안에서만 시간 정렬한다.
-3. 시선 이동·체류·이탈 후 재확인과 표정 변화·지속 feature를 결정적으로 계산한다.
-4. invalid를 neutral·0점으로 채우지 않고 reason과 coverage를 유지한다.
-5. bounded buffer가 넘치면 계약된 drop·요약 규칙을 적용하고 metric만 집계한다.
-6. finalize 뒤 immutable evidence를 한 번 만들고 모든 session buffer를 정리한다.
+1. Kiosk가 camera frame 생성 직전에 모든 capture/video context와 layout을 snapshot한다.
+2. Gateway와 Kiosk가 Eye·Face 결과의 session/video/frame/sequence/capture/video-time/epoch 일치를 검증한다.
+3. Kiosk는 캡처 layout으로 video 좌표까지만 만들고 product candidate는 보내지 않는다.
+4. Backend만 canonical media identity와 승인 AOI를 검증해 상품·부위·tag로 매핑한다.
+5. 같은 상품의 겹친 AOI는 모두 집계하고 다른 상품 중첩은 ambiguous로 fail-closed한다.
+6. 동일 session·video·playback epoch 안에서 시선 이동·체류·재확인과 표정 변화·지속 feature를 결정적으로 계산한다.
+7. invalid를 neutral·0점으로 채우지 않고 reason과 coverage를 유지한다.
+8. finalize 뒤 immutable evidence를 한 번 만들고 모든 session buffer를 정리한다.
 
 완료 Gate:
 
-- replay fixture에서 같은 입력이 같은 evidence와 version을 만든다.
+- 3-A: 지연 응답에도 캡처 시점 `video_time_ms`가 유지되고, letterbox·영상 밖·불일치 context가 상품을 만들지 않는다.
+- 3-A: actual AOI가 승인 전이면 Backend가 `aoi_metadata_unapproved`를 반환한다.
+- synthetic replay fixture에서 같은 입력이 같은 evidence와 version을 만든다.
 - pause·seek·replay, frame drop, 순서 역전, no-face, low-confidence와 일부 worker 실패를 검증한다.
 - payload가 DB·로그·APM·browser storage에 남지 않는다.
+
+Vision 전체 완료 Gate는 별도다.
+
+- 5번 데이터 작업에서 actual 33.5초 영상의 시간 구간, polygon, 상품, component, visual tag, parent 관계를 담당자가 검수하고 `approved` revision으로 고정한다.
+- 3-B에서 actual valid gaze → 캡처 시점 video time/point → 같은 상품의 전체·세부 AOI → 정확한 product/component/tag → 집계 evidence를 재검증한다.
+- 3-B 전에는 “상품을 아는 Vision E2E” 또는 Vision 전체 완료로 표시하지 않는다.
 
 ### W3. MCM 가방 10개 Catalog — 박형진 구현, 양유상 내용, 조윤혜 표시 검토
 
@@ -111,10 +121,15 @@
 - 설명에 쓸 검수 문구와 금지 주장
 - schema/content version, 활성 상태와 검수 provenance
 - 정확히 10개 active profile을 보장하는 seed·migration·readiness check
+- Supabase session pooler runtime과 direct migration/backup credential 분리
+- `pending→running→terminal` atomic transition, cancel-late 차단과 restart/orphan cleanup
+- terminal 최소 metadata 24시간 retention 및 `/healthz`·`/readyz` 분리
 
 완료 Gate:
 
 - 10개가 아니면 central AI readiness가 실패한다.
+- 기존 승인 catalog를 seed가 덮어쓰지 않고 ID/revision/tag 불일치를 자동 보정하지 않는다.
+- 재시작·취소·30분 orphan·24시간 retention 뒤 원본 evidence를 복구하거나 DB에 남기지 않는다.
 - 모든 룩북 AOI product ID와 catalog ID가 검증된다.
 - 모델 출력이 아닌 DB가 고객 표시 사실의 원천이다.
 
@@ -122,7 +137,7 @@
 
 모델 평가 항목:
 
-- self-hosted 실행 가능 여부와 목표 장비 latency·memory
+- hosted provider의 strict output, latency·rate-limit·secret 경계
 - exact revision, code·weight license, checksum과 공급망 안전성
 - strict JSON 준수율, 후보 밖 ID 비율, 한국어 근거 품질
 - 심리·감정·성격 과잉 추론과 근거 없는 상품 사실 생성 비율
@@ -186,7 +201,7 @@ P0 Decision docs
   → P2 Producers + Evidence Builder
   → P3 Product Catalog + migration
   → P4 Model evaluation + prompt decision
-  → P5 Self-hosted runtime + strict validator
+  → P5 Luna runtime + strict validator
   → P6 API/Kiosk/Manager consumers
   → P7 Wiring + privacy/E2E gate
 ```
@@ -211,11 +226,12 @@ P0 Decision docs
 
 ## 7. 남은 결정
 
-- self-hosted 모델·runtime·quantization·revision·weight checksum과 목표 hardware
+- 실제 OpenAI key canary와 provider rate-limit/cost 운영 기준
 - A/B/C 실제 반복 benchmark에 따른 input variant 승인
 - catalog 10개 상품의 개별 공식 URL, 이미지·QR 라이선스와 tag·설명 최종 검수
+- actual `mcm-lookbook-v2` 전체 AOI·부위·색상·소재 tag 검수와 Vision 3-B
 - 최소 최종 추천 metadata의 보유 기간·삭제 정책
-- live PostgreSQL 재시작·다중 process·job 복구와 운영 readiness
+- live Supabase 재시작·pending orphan cleanup·backup/restore와 운영 readiness
 - 승인 Vision producer, 실제 Browser E2E, Node.js 24.19.0 재검증
 - insufficient-data 화면 문구와 재시도 UX의 사용자 테스트
 

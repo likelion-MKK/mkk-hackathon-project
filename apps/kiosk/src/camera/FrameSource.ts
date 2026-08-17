@@ -27,6 +27,7 @@ export class CameraAccessError extends Error {
 }
 
 export type FrameCaptureOutcome = "delivered" | "dropped";
+export type FrameContextFactory = () => FrameContext;
 export type FrameConsumer = (
   frame: EphemeralVideoFrame,
   context: FrameContext,
@@ -239,6 +240,12 @@ export class FrameSource {
     return this.stream !== null && this.video !== null;
   }
 
+  getVideoDimensions(): { width: number; height: number } | null {
+    const video = this.video;
+    if (!video || video.videoWidth <= 0 || video.videoHeight <= 0) return null;
+    return { width: video.videoWidth, height: video.videoHeight };
+  }
+
   async open(): Promise<void> {
     if (this.isOpen()) return;
     if (this.openTask && !this.openTask.operation.controller.signal.aborted) {
@@ -296,7 +303,7 @@ export class FrameSource {
   }
 
   async capture(
-    context: FrameContext,
+    contextOrFactory: FrameContext | FrameContextFactory,
     consume: FrameConsumer,
   ): Promise<FrameCaptureOutcome> {
     if (this.captureOperation) return "dropped";
@@ -318,6 +325,11 @@ export class FrameSource {
     this.captureOperation = operation;
 
     try {
+      // Snapshot lookbook time/layout immediately before initiating camera-frame
+      // capture. The same immutable object follows this frame through inference;
+      // response-time video.currentTime is never read again.
+      const context =
+        typeof contextOrFactory === "function" ? contextOrFactory() : contextOrFactory;
       operation.frame = await this.createFrame(video);
       this.assertCaptureActive(operation);
 

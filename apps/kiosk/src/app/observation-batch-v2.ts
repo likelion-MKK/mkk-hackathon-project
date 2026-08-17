@@ -6,13 +6,9 @@ import type {
   GazeSample,
   LookbookManifest,
   ObservationBatchV2,
-  ProductAttentionEvent,
+  AttentionObservationV2,
 } from "./kiosk-types.ts";
-import {
-  createProductAttentionEvent,
-  mapD1MockGazeToVideoPoint,
-  mapGazeToVideoPoint,
-} from "./reaction-batch.ts";
+import { mapGazeToVideoPoint } from "./reaction-batch.ts";
 import type { VideoLayout } from "./video-context.ts";
 
 const MAX_OBSERVATIONS_PER_BATCH = 256;
@@ -43,9 +39,15 @@ type FusedFrame = {
 type GazeContinuity = {
   sample: Extract<GazeSample, { valid: true }>;
   run_started_at_mono_ms: number;
-  last_unambiguous_product_id: string | null;
-  seen_product_ids: Set<string>;
 };
+
+type VideoAttentionResult = {
+  value: AttentionObservationV2 | null;
+  reason: string | null;
+};
+
+const VIDEO_COORDINATE_PRODUCER_ID = "kiosk-video-coordinate-v1";
+const VIDEO_COORDINATE_REVISION = "video-coordinate-v1";
 
 type ExpressionContinuity = {
   sample: Extract<ExpressionSample, { valid: true }>;
@@ -158,12 +160,32 @@ function mapAttention(
   sample: GazeSample,
   manifest: LookbookManifest,
   videoLayoutsByFrameId: ReadonlyMap<string, VideoLayout> | undefined,
-): ProductAttentionEvent {
+): VideoAttentionResult {
   const layout = videoLayoutsByFrameId?.get(sample.frame_id);
-  const videoPoint = layout
-    ? mapGazeToVideoPoint(sample, layout)
-    : mapD1MockGazeToVideoPoint(sample);
-  return createProductAttentionEvent(sample, manifest, sample.sequence, videoPoint);
+  if (!layout) {
+    return { value: null, reason: "capture_layout_unavailable" };
+  }
+  const videoPoint = mapGazeToVideoPoint(sample, layout);
+  if (!videoPoint.valid) {
+    return { value: null, reason: videoPoint.reason };
+  }
+  return {
+    value: {
+      outside_video: videoPoint.outside_video,
+      ...(videoPoint.outside_video
+        ? {}
+        : {
+            video_x_norm: videoPoint.video_x_norm,
+            video_y_norm: videoPoint.video_y_norm,
+          }),
+      confidence: sample.confidence,
+      producer_id: VIDEO_COORDINATE_PRODUCER_ID,
+      model_revision: VIDEO_COORDINATE_REVISION,
+      manifest_version: manifest.manifest_version,
+      candidates: [],
+    },
+    reason: null,
+  };
 }
 
 function isContinuityReset(
@@ -179,17 +201,9 @@ function isContinuityReset(
   );
 }
 
-function unambiguousProductId(attention: ProductAttentionEvent | null): string | null {
-  if (!attention?.valid || attention.outside_video || attention.candidates.length !== 1) {
-    return null;
-  }
-  return attention.candidates[0].product_id;
-}
-
 function buildGazeDerived(
   sample: Extract<GazeSample, { valid: true }>,
   frame: FusedFrame,
-  attention: ProductAttentionEvent,
   previous: GazeContinuity | null,
   forcedReset: boolean,
 ): { value: GazeDerivedV2; next: GazeContinuity } {
@@ -202,18 +216,6 @@ function buildGazeDerived(
         sample.screen_x_norm - previous.sample.screen_x_norm,
         sample.screen_y_norm - previous.sample.screen_y_norm,
       );
-  const currentProductId = unambiguousProductId(attention);
-  const seenProductIds = reset ? new Set<string>() : new Set(previous.seen_product_ids);
-  const lastProductId = reset ? null : previous.last_unambiguous_product_id;
-  const returnCandidate =
-    currentProductId !== null &&
-    lastProductId !== currentProductId &&
-    seenProductIds.has(currentProductId);
-
-  if (currentProductId) seenProductIds.add(currentProductId);
-  const productIsAmbiguous =
-    attention.valid && !attention.outside_video && attention.candidates.length > 1;
-
   return {
     value: {
       movement: reset
@@ -226,20 +228,14 @@ function buildGazeDerived(
       continuous_observation_ms: reset
         ? 0
         : frame.captured_at_mono_ms - previous.run_started_at_mono_ms,
-      return_candidate: reset || productIsAmbiguous ? null : returnCandidate,
-      return_candidate_reason: reset
-        ? resetReason
-        : productIsAmbiguous
-          ? "ambiguous_product"
-          : null,
+      return_candidate: null,
+      return_candidate_reason: reset ? resetReason : "backend_aoi_required",
     },
     next: {
       sample,
       run_started_at_mono_ms: reset
         ? frame.captured_at_mono_ms
         : previous.run_started_at_mono_ms,
-      last_unambiguous_product_id: currentProductId,
-      seen_product_ids: seenProductIds,
     },
   };
 }
@@ -323,16 +319,16 @@ function buildObservations(options: BuildObservationBatchesV2Options): FrameObse
     const expressionSample = frame.expression;
     const validGaze = gazeSample?.valid ? gazeSample : null;
     const validExpression = expressionSample?.valid ? expressionSample : null;
-    const attentionEvent = validGaze
+    const attentionResult = validGaze
       ? mapAttention(validGaze, options.manifest, options.videoLayoutsByFrameId)
-      : null;
+      : { value: null, reason: "source_gaze_unavailable" };
+    const attention = attentionResult.value;
 
     let gazeDerived: GazeDerivedV2 | null = null;
-    if (validGaze && attentionEvent?.valid) {
+    if (validGaze) {
       const result = buildGazeDerived(
         validGaze,
         frame,
-        attentionEvent,
         gazeContinuity,
         gazeWasReset,
       );
@@ -382,28 +378,8 @@ function buildObservations(options: BuildObservationBatchesV2Options): FrameObse
           }
         : null,
       gaze_reason: validGaze ? null : (gazeSample?.reason ?? "not_observed"),
-      attention:
-        attentionEvent?.valid
-          ? {
-              outside_video: attentionEvent.outside_video,
-              ...(attentionEvent.outside_video
-                ? {}
-                : {
-                    video_x_norm: attentionEvent.video_x_norm,
-                    video_y_norm: attentionEvent.video_y_norm,
-                  }),
-              confidence: attentionEvent.confidence,
-              producer_id: attentionEvent.producer_id,
-              model_revision: attentionEvent.model_revision,
-              manifest_version: attentionEvent.manifest_version,
-              candidates: attentionEvent.candidates,
-            }
-          : null,
-      attention_reason: attentionEvent?.valid
-        ? null
-        : validGaze
-          ? (attentionEvent?.reason ?? "aoi_mapping_failed")
-          : "source_gaze_unavailable",
+      attention,
+      attention_reason: attention ? null : attentionResult.reason,
       expression: validExpression
         ? {
             scores: validExpression.scores,

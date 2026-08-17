@@ -3,7 +3,7 @@
   "$id": "https://mcm-lookbook.example/contracts/v2/observation-batch-v2.schema.json",
   "x-event-schema": true,
   "title": "ObservationBatchV2",
-  "description": "중앙 추천 경계가 동일 프레임의 파생 시선, AOI와 얼굴 동작만 수신하는 batch입니다.",
+  "description": "Backend가 동일 캡처 frame의 파생 시선, video 좌표와 얼굴 동작을 수신하는 batch입니다. Kiosk가 보낸 product candidate는 금지되고 Backend가 승인 AOI로 재계산합니다.",
   "type": "object",
   "additionalProperties": false,
   "required": [

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import os
 from typing import Annotated
 
@@ -15,6 +17,7 @@ from apps.api.app.schemas import (
     ErrorResponse,
     Health,
     IDENTIFIER_PATTERN,
+    Liveness,
     LookbookManifest,
     ManagerEvent,
     ManagerProductRequest,
@@ -24,14 +27,17 @@ from apps.api.app.schemas import (
     ReactionBatchAccepted,
     RecommendationAccepted,
     RecommendationResult,
+    Readiness,
     SessionCreate,
     SessionCreated,
+    VisionStreamToken,
 )
+from apps.common.vision_token import SignedVisionTokenIssuer
 from apps.api.app.store import DomainError, MemoryStore
 from apps.api.app.v2_central import (
+    AsyncioJobDispatcher,
     CentralRecommendationClient,
     JobDispatcher,
-    ThreadJobDispatcher,
     configured_central_client,
     is_loopback_development_endpoint,
 )
@@ -91,6 +97,13 @@ def _configured_cors_origins() -> list[str]:
     return origins
 
 
+def _configured_vision_token_issuer() -> SignedVisionTokenIssuer | None:
+    secret = os.getenv("VISION_STREAM_TOKEN_SECRET", "").strip()
+    if not secret:
+        return None
+    return SignedVisionTokenIssuer(secret, ttl_seconds=60)
+
+
 def _positive_env_float(name: str, default: float) -> float:
     raw = os.getenv(name, str(default)).strip()
     try:
@@ -104,9 +117,10 @@ def _positive_env_float(name: str, default: float) -> float:
 
 def _configured_input_variant() -> str:
     endpoint = os.getenv("CENTRAL_AI_ENDPOINT", "").strip()
+    provider = os.getenv("CENTRAL_AI_PROVIDER", "").strip().lower()
     raw_variant = os.getenv("CENTRAL_AI_INPUT_VARIANT")
-    if endpoint and (raw_variant is None or not raw_variant.strip()):
-        raise ValueError("CENTRAL_AI_ENDPOINT requires explicit CENTRAL_AI_INPUT_VARIANT")
+    if (endpoint or provider == "openai_luna") and (raw_variant is None or not raw_variant.strip()):
+        raise ValueError("configured central provider requires explicit CENTRAL_AI_INPUT_VARIANT")
     variant = (raw_variant or "C").strip().upper()
     if variant not in {"A", "B", "C"}:
         raise ValueError("CENTRAL_AI_INPUT_VARIANT must be A, B or C")
@@ -139,16 +153,58 @@ def create_app(
         allow_headers=["Content-Type", "Authorization"],
     )
     app.state.store = store or MemoryStore()
+    app.state.vision_token_issuer = _configured_vision_token_issuer()
     app.state.recommendation_engine = recommendation_engine or _configured_recommendation_engine()
     app.state.central_client = central_client or configured_central_client()
-    app.state.job_dispatcher = job_dispatcher or ThreadJobDispatcher()
+    app.state.job_dispatcher = job_dispatcher or AsyncioJobDispatcher(max_workers=2)
     app.state.v2_store = v2_store or V2RecommendationStore(
         configured_recommendation_repository(app.state.store),
         collecting_ttl_seconds=_positive_env_float("V2_COLLECTING_TTL_SECONDS", 300.0),
-        pending_ttl_seconds=_positive_env_float("V2_PENDING_TTL_SECONDS", 60.0),
+        pending_ttl_seconds=_positive_env_float("V2_PENDING_TTL_SECONDS", 1_800.0),
         decision_ttl_seconds=_positive_env_float("V2_DECISION_TTL_SECONDS", 900.0),
+        orphan_job_seconds=_positive_env_float("V2_ORPHAN_JOB_SECONDS", 1_800.0),
+        job_retention_seconds=_positive_env_float(
+            "V2_JOB_RETENTION_SECONDS", 86_400.0
+        ),
         input_variant=central_input_variant or _configured_input_variant(),
     )
+    app.state.maintenance_task = None
+
+    async def initialize_database_runtime() -> None:
+        await asyncio.to_thread(app.state.v2_store.initialize_runtime)
+        if not app.state.v2_store.durable_mode:
+            return
+        interval_seconds = _positive_env_float(
+            "V2_MAINTENANCE_INTERVAL_SECONDS", 60.0
+        )
+
+        async def maintenance_loop() -> None:
+            while True:
+                await asyncio.sleep(interval_seconds)
+                readiness = await asyncio.to_thread(
+                    app.state.v2_store.check_readiness
+                )
+                if not readiness.ready:
+                    readiness = await asyncio.to_thread(
+                        app.state.v2_store.initialize_runtime
+                    )
+                if readiness.ready:
+                    await asyncio.to_thread(
+                        app.state.v2_store.cleanup_operational
+                    )
+
+        app.state.maintenance_task = asyncio.create_task(maintenance_loop())
+
+    async def stop_database_runtime() -> None:
+        task = app.state.maintenance_task
+        app.state.maintenance_task = None
+        if task is not None:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+    app.router.add_event_handler("startup", initialize_database_runtime)
+    app.router.add_event_handler("shutdown", stop_database_runtime)
     app.router.add_event_handler("shutdown", app.state.job_dispatcher.close)
 
     @app.exception_handler(DomainError)
@@ -177,6 +233,22 @@ def create_app(
     )
     def get_manifest(lookbook_id: IdentifierPath) -> LookbookManifest:
         return app.state.store.get_manifest(lookbook_id)
+
+    @app.post(
+        "/api/v1/sessions/{session_id}/vision-stream-token",
+        response_model=VisionStreamToken,
+        responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}},
+    )
+    def issue_vision_stream_token(session_id: IdentifierPath) -> VisionStreamToken:
+        issuer = app.state.vision_token_issuer
+        if issuer is None:
+            raise DomainError(
+                409,
+                "vision_token_unavailable",
+                "backend Vision Stream tokens are not configured",
+            )
+        video_id = app.state.store.get_active_session_video_id(session_id)
+        return VisionStreamToken.model_validate(issuer.issue(session_id, video_id))
 
     @app.post(
         "/api/v1/sessions/{session_id}/reaction-batches",
@@ -249,11 +321,29 @@ def create_app(
     def get_product(product_id: IdentifierPath) -> Product:
         return app.state.store.get_product(product_id)
 
-    @app.get("/api/v1/health", response_model=Health)
+    @app.get("/healthz", response_model=Liveness)
+    def healthz() -> Liveness:
+        return Liveness(status="ok")
+
+    @app.get(
+        "/readyz",
+        response_model=Readiness,
+        responses={503: {"model": Readiness}},
+    )
+    def readyz(response: Response) -> Readiness:
+        readiness = app.state.v2_store.check_readiness()
+        if not readiness.ready:
+            response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+            return Readiness(status="not_ready", reason=readiness.reason)
+        return Readiness(status="ready", reason=None)
+
+    @app.get("/api/v1/health", response_model=Health, deprecated=True)
     def health() -> Health:
-        # The memory store is a development adapter. The response shape stays
-        # compatible with the future PostgreSQL readiness check.
-        return Health(status="ok", database="up")
+        readiness = app.state.v2_store.check_readiness()
+        return Health(
+            status="ok" if readiness.ready else "degraded",
+            database="up" if readiness.ready else "down",
+        )
 
     @app.post(
         "/api/v2/sessions/{session_id}/observations",
@@ -276,9 +366,13 @@ def create_app(
         "/api/v2/sessions/{session_id}/complete",
         response_model=RecommendationAcceptedV2,
         status_code=status.HTTP_202_ACCEPTED,
-        responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}},
+        responses={
+            404: {"model": ErrorResponse},
+            409: {"model": ErrorResponse},
+            503: {"model": ErrorResponse},
+        },
     )
-    def complete_v2_session(session_id: IdentifierPath) -> RecommendationAcceptedV2:
+    async def complete_v2_session(session_id: IdentifierPath) -> RecommendationAcceptedV2:
         return app.state.v2_store.complete(
             session_id,
             app.state.central_client,

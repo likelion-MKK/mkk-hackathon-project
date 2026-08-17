@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from hashlib import sha256
+from pathlib import Path
 from threading import RLock
 from time import monotonic
 from typing import Callable, Literal, Protocol
@@ -14,9 +16,16 @@ from uuid import uuid4
 
 from apps.api.app.schemas import ManagerProductRequestAccepted
 from apps.api.app.store import DomainError, MemoryStore
+from apps.api.app.v2_aoi import (
+    LookbookAoiMetadataV2,
+    load_aoi_metadata,
+    validate_aoi_metadata_for_catalog,
+    verify_media_file,
+)
 from apps.api.app.v2_central import (
     CentralModelError,
     CentralRecommendationClient,
+    JobHandle,
     JobDispatcher,
     validate_central_output,
 )
@@ -37,6 +46,11 @@ from apps.api.app.v2_models import (
     RecommendationDecisionV2,
     RecommendationVersionV2,
 )
+from apps.api.app.v2_postgres import (
+    DatabaseReadiness,
+    JobFailureReasonCode,
+    load_canonical_catalog,
+)
 
 
 MAX_BUFFERED_OBSERVATIONS = 512
@@ -50,11 +64,12 @@ class SessionRecommendationContext:
     catalog_version: str
     products: tuple[ProductRecommendationItemV2, ...]
     exposure_product_pairs: frozenset[tuple[str, str]]
+    aoi_metadata: LookbookAoiMetadataV2 | None
     already_completed_v1: bool
 
 
 class RecommendationRepository(Protocol):
-    """DB/provider seam used by v2 without requiring the future catalog migration."""
+    """Session/catalog seam with optional durable PostgreSQL job operations."""
 
     def get_context(self, session_id: str) -> SessionRecommendationContext: ...
 
@@ -69,27 +84,66 @@ class RecommendationRepository(Protocol):
 
     def list_manager_events(self, after_sequence: int | None = None) -> list[ManagerEventV2]: ...
 
+    @property
+    def durable_mode(self) -> bool: ...
+
+    def initialize_runtime(self) -> DatabaseReadiness: ...
+
+    def check_readiness(self) -> DatabaseReadiness: ...
+
     def save_pending(
         self,
         session_id: str,
         accepted: RecommendationAcceptedV2,
-        evidence: object,
         version: RecommendationVersionV2,
-    ) -> None: ...
+    ) -> bool: ...
 
-    def save_decision(self, session_id: str, decision: RecommendationDecisionV2) -> None: ...
+    def claim_job(self, decision_request_id: str) -> bool: ...
+
+    def save_decision(self, session_id: str, decision: RecommendationDecisionV2) -> bool: ...
+
+    def mark_cancelled(self, decision_request_id: str) -> bool: ...
+
+    def fail_job(
+        self, decision_request_id: str, reason: JobFailureReasonCode
+    ) -> bool: ...
+
+    def cleanup_orphan_jobs(self, orphan_seconds: float) -> int: ...
+
+    def cleanup_retention(self, retention_seconds: float) -> int: ...
 
 
 class DecisionPersistence(Protocol):
+    def initialize_runtime(
+        self, catalog: ProductRecommendationProfileV2
+    ) -> DatabaseReadiness: ...
+
+    def check_readiness(
+        self, catalog: ProductRecommendationProfileV2
+    ) -> DatabaseReadiness: ...
+
     def save_pending(
         self,
         session_id: str,
         accepted: RecommendationAcceptedV2,
-        evidence: object,
         version: RecommendationVersionV2,
-    ) -> None: ...
+    ) -> bool: ...
 
-    def save_decision(self, session_id: str, decision: RecommendationDecisionV2) -> None: ...
+    def claim_job(self, decision_request_id: str) -> bool: ...
+
+    def save_decision(
+        self, session_id: str, decision: RecommendationDecisionV2
+    ) -> bool: ...
+
+    def mark_cancelled(self, decision_request_id: str) -> bool: ...
+
+    def fail_job(
+        self, decision_request_id: str, reason: JobFailureReasonCode
+    ) -> bool: ...
+
+    def cleanup_orphan_jobs(self, orphan_seconds: float) -> int: ...
+
+    def cleanup_retention(self, retention_seconds: float) -> int: ...
 
 
 class MemoryStoreRecommendationRepository:
@@ -101,9 +155,16 @@ class MemoryStoreRecommendationRepository:
         *,
         catalog: ProductRecommendationProfileV2 | None = None,
         persistence: DecisionPersistence | None = None,
+        database_required: bool | None = None,
     ) -> None:
         self._store = store
         self._persistence = persistence
+        self._database_required = (
+            persistence is not None if database_required is None else database_required
+        )
+        self._database_configuration_failed = (
+            self._database_required and persistence is None
+        )
         self._manager_lock = RLock()
         self._manager_events_v2: list[ManagerEventV2] = []
         self._manager_requests_v2: dict[str, tuple[str, str, str]] = {}
@@ -126,6 +187,50 @@ class MemoryStoreRecommendationRepository:
         if len(ids) != 10 or len(ids) != len(set(ids)):
             raise RuntimeError("canonical v2 catalog must contain exactly 10 unique products")
         self._products = {product.product_id: product for product in self._catalog.products}
+        self._aoi_metadata = self._load_aoi_metadata()
+        self._verify_configured_media()
+
+    def _load_aoi_metadata(self) -> dict[str, LookbookAoiMetadataV2]:
+        metadata_by_video: dict[str, LookbookAoiMetadataV2] = {}
+        for video_id in ("mcm-central-ai-replay-v2", "mcm-lookbook-v2"):
+            path = (
+                self._store.repository_root
+                / "data"
+                / "lookbooks"
+                / video_id
+                / "aoi-metadata-v2.json"
+            )
+            if not path.is_file():
+                continue
+            metadata = load_aoi_metadata(path)
+            manifest = self._store._require_lookbook(video_id)
+            if metadata.video_id != manifest.video_id:
+                raise RuntimeError("AOI metadata video_id does not match the playback manifest")
+            validate_aoi_metadata_for_catalog(
+                metadata,
+                tuple(self._catalog.products),
+                manifest_version=manifest.manifest_version,
+            )
+            if metadata.video_id in metadata_by_video:
+                raise RuntimeError("only one AOI metadata revision can be active per video")
+            metadata_by_video[metadata.video_id] = metadata
+        return metadata_by_video
+
+    def _verify_configured_media(self) -> None:
+        raw_path = os.getenv("LOOKBOOK_VIDEO_PATH", "").strip()
+        require_media = os.getenv("REQUIRE_LOOKBOOK_MEDIA_READINESS", "false").strip().lower()
+        require_media = require_media in {"1", "true", "yes", "on"}
+        if not raw_path:
+            if require_media:
+                raise RuntimeError("LOOKBOOK_VIDEO_PATH is required for media readiness")
+            return
+        path = Path(raw_path)
+        if not path.is_absolute():
+            path = self._store.repository_root / path
+        metadata = self._aoi_metadata.get("mcm-lookbook-v2")
+        if metadata is None:
+            raise RuntimeError("canonical lookbook media metadata is unavailable")
+        verify_media_file(path.resolve(), metadata.media_identity)
 
     def get_context(self, session_id: str) -> SessionRecommendationContext:
         with self._store._lock:
@@ -141,6 +246,7 @@ class MemoryStoreRecommendationRepository:
                     (exposure.exposure_id, exposure.product_id)
                     for exposure in manifest.exposures
                 ),
+                aoi_metadata=self._aoi_metadata.get(manifest.video_id),
                 already_completed_v1=session.completed,
             )
 
@@ -200,19 +306,92 @@ class MemoryStoreRecommendationRepository:
                 if after_sequence is None or event.sequence > after_sequence
             ]
 
+    @property
+    def durable_mode(self) -> bool:
+        return self._database_required
+
+    def initialize_runtime(self) -> DatabaseReadiness:
+        if self._persistence is None:
+            reason = (
+                "db_unavailable"
+                if self._database_configuration_failed
+                else "database_not_configured"
+            )
+            return DatabaseReadiness(False, reason)
+        initialize = getattr(self._persistence, "initialize_runtime", None)
+        if not callable(initialize):
+            return DatabaseReadiness(True)
+        try:
+            return initialize(self._catalog)
+        except Exception:
+            return DatabaseReadiness(False, "db_unavailable")
+
+    def check_readiness(self) -> DatabaseReadiness:
+        if self._persistence is None:
+            reason = (
+                "db_unavailable"
+                if self._database_configuration_failed
+                else "database_not_configured"
+            )
+            return DatabaseReadiness(False, reason)
+        check = getattr(self._persistence, "check_readiness", None)
+        if not callable(check):
+            return DatabaseReadiness(True)
+        try:
+            return check(self._catalog)
+        except Exception:
+            return DatabaseReadiness(False, "db_unavailable")
+
     def save_pending(
         self,
         session_id: str,
         accepted: RecommendationAcceptedV2,
-        evidence: object,
         version: RecommendationVersionV2,
-    ) -> None:
-        if self._persistence is not None:
-            self._persistence.save_pending(session_id, accepted, evidence, version)
+    ) -> bool:
+        if self._persistence is None:
+            return not self._database_required
+        result = self._persistence.save_pending(session_id, accepted, version)
+        return result is not False
 
-    def save_decision(self, session_id: str, decision: RecommendationDecisionV2) -> None:
-        if self._persistence is not None:
-            self._persistence.save_decision(session_id, decision)
+    def claim_job(self, decision_request_id: str) -> bool:
+        if self._persistence is None:
+            return not self._database_required
+        claim = getattr(self._persistence, "claim_job", None)
+        return True if not callable(claim) else claim(decision_request_id)
+
+    def save_decision(
+        self, session_id: str, decision: RecommendationDecisionV2
+    ) -> bool:
+        if self._persistence is None:
+            return not self._database_required
+        result = self._persistence.save_decision(session_id, decision)
+        return result is not False
+
+    def mark_cancelled(self, decision_request_id: str) -> bool:
+        if self._persistence is None:
+            return not self._database_required
+        operation = getattr(self._persistence, "mark_cancelled", None)
+        return True if not callable(operation) else operation(decision_request_id)
+
+    def fail_job(
+        self, decision_request_id: str, reason: JobFailureReasonCode
+    ) -> bool:
+        if self._persistence is None:
+            return not self._database_required
+        operation = getattr(self._persistence, "fail_job", None)
+        return True if not callable(operation) else operation(decision_request_id, reason)
+
+    def cleanup_orphan_jobs(self, orphan_seconds: float) -> int:
+        if self._persistence is None:
+            return 0
+        operation = getattr(self._persistence, "cleanup_orphan_jobs", None)
+        return 0 if not callable(operation) else operation(orphan_seconds)
+
+    def cleanup_retention(self, retention_seconds: float) -> int:
+        if self._persistence is None:
+            return 0
+        operation = getattr(self._persistence, "cleanup_retention", None)
+        return 0 if not callable(operation) else operation(retention_seconds)
 
 
 def configured_recommendation_repository(store: MemoryStore) -> MemoryStoreRecommendationRepository:
@@ -221,7 +400,6 @@ def configured_recommendation_repository(store: MemoryStore) -> MemoryStoreRecom
         return MemoryStoreRecommendationRepository(store)
     from apps.api.app.v2_postgres import psycopg_persistence
 
-    persistence = psycopg_persistence(database_url)
     catalog_path = (
         store.repository_root
         / "data"
@@ -229,13 +407,23 @@ def configured_recommendation_repository(store: MemoryStore) -> MemoryStoreRecom
         / "mcm-demo-recommendation-profile-v2.json"
     )
     try:
-        catalog = persistence.seed_and_load(catalog_path)
+        catalog = load_canonical_catalog(catalog_path)
+        persistence = psycopg_persistence(database_url)
     except Exception as exc:
-        raise RuntimeError("PostgreSQL v2 catalog readiness check failed") from exc
+        # Keep liveness available for operators while readiness safely reports
+        # a database failure. Never include the URL or driver exception.
+        del exc
+        return MemoryStoreRecommendationRepository(
+            store,
+            catalog=load_canonical_catalog(catalog_path),
+            persistence=None,
+            database_required=True,
+        )
     return MemoryStoreRecommendationRepository(
         store,
         catalog=catalog,
         persistence=persistence,
+        database_required=True,
     )
 
 
@@ -249,6 +437,10 @@ class V2SessionState:
     accepted: RecommendationAcceptedV2 | None = None
     decision: RecommendationDecisionV2 | None = None
     active_job_id: str | None = None
+    active_job: CompletionJob | None = None
+    active_job_handle: JobHandle | None = None
+    highest_playback_epoch: int = -1
+    last_video_time_by_epoch: dict[int, int] = field(default_factory=dict)
     expires_at: float = 0.0
 
     def clear_transient(self) -> None:
@@ -256,16 +448,22 @@ class V2SessionState:
         self.sequence_index.clear()
         self.batch_fingerprints.clear()
         self.batch_sequence_index.clear()
+        self.highest_playback_epoch = -1
+        self.last_video_time_by_epoch.clear()
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class CompletionJob:
     session_id: str
     job_id: str
     accepted: RecommendationAcceptedV2
-    request: CentralRecommendationRequestV2
-    summary: EvidenceSummary
+    request: CentralRecommendationRequestV2 | None
+    summary: EvidenceSummary | None
     version: RecommendationVersionV2
+
+    def clear_transient(self) -> None:
+        self.request = None
+        self.summary = None
 
 
 def _merge_observation(
@@ -329,11 +527,19 @@ class V2RecommendationStore:
         *,
         clock: Callable[[], float] = monotonic,
         collecting_ttl_seconds: float = 300.0,
-        pending_ttl_seconds: float = 60.0,
+        pending_ttl_seconds: float = 1_800.0,
         decision_ttl_seconds: float = 900.0,
+        orphan_job_seconds: float = 1_800.0,
+        job_retention_seconds: float = 86_400.0,
         input_variant: Literal["A", "B", "C"] = "C",
     ) -> None:
-        if min(collecting_ttl_seconds, pending_ttl_seconds, decision_ttl_seconds) <= 0:
+        if min(
+            collecting_ttl_seconds,
+            pending_ttl_seconds,
+            decision_ttl_seconds,
+            orphan_job_seconds,
+            job_retention_seconds,
+        ) <= 0:
             raise ValueError("v2 TTL values must be positive")
         if input_variant not in {"A", "B", "C"}:
             raise ValueError("v2 input_variant must be A, B or C")
@@ -342,12 +548,45 @@ class V2RecommendationStore:
         self._collecting_ttl = collecting_ttl_seconds
         self._pending_ttl = pending_ttl_seconds
         self._decision_ttl = decision_ttl_seconds
+        self._orphan_job_seconds = orphan_job_seconds
+        self._job_retention_seconds = job_retention_seconds
         self._input_variant = input_variant
         self._lock = RLock()
         self._states: dict[str, V2SessionState] = {}
 
+    @property
+    def durable_mode(self) -> bool:
+        return self._repository.durable_mode
+
+    def initialize_runtime(self) -> DatabaseReadiness:
+        return self._repository.initialize_runtime()
+
+    def check_readiness(self) -> DatabaseReadiness:
+        return self._repository.check_readiness()
+
+    def cleanup_operational(self) -> tuple[int, int, int]:
+        """Run bounded memory, DB orphan and terminal retention cleanup."""
+
+        memory_expired = self.cleanup_expired()
+        if not self.durable_mode:
+            return memory_expired, 0, 0
+        try:
+            database_orphans = self._repository.cleanup_orphan_jobs(
+                self._orphan_job_seconds
+            )
+            retained_deleted = self._repository.cleanup_retention(
+                self._job_retention_seconds
+            )
+        except Exception:
+            # Maintenance failures affect /readyz through the next DB probe;
+            # payloads and driver errors are deliberately not logged here.
+            return memory_expired, 0, 0
+        return memory_expired, database_orphans, retained_deleted
+
     def cleanup_expired(self) -> int:
         now = self._clock()
+        handles: list[JobHandle] = []
+        orphaned_jobs: list[tuple[str, CompletionJob | None]] = []
         with self._lock:
             expired = [
                 session_id
@@ -356,9 +595,28 @@ class V2RecommendationStore:
             ]
             for session_id in expired:
                 state = self._states.pop(session_id)
+                if state.active_job_handle is not None:
+                    handles.append(state.active_job_handle)
+                if state.status == "pending" and state.accepted is not None:
+                    orphaned_jobs.append(
+                        (state.accepted.decision_request_id, state.active_job)
+                    )
                 state.clear_transient()
                 state.active_job_id = None
-            return len(expired)
+                state.active_job = None
+                state.active_job_handle = None
+        for handle in handles:
+            handle.cancel()
+        for decision_request_id, job in orphaned_jobs:
+            if job is not None:
+                job.clear_transient()
+            try:
+                self._repository.fail_job(
+                    decision_request_id, "orphan_cleanup"
+                )
+            except Exception:
+                pass
+        return len(expired)
 
     def append_batch(
         self, session_id: str, batch: ObservationBatchV2
@@ -371,32 +629,42 @@ class V2RecommendationStore:
         if context.already_completed_v1:
             raise DomainError(409, "session_completed", "completed sessions cannot accept observations")
 
-        catalog_ids = {product.product_id for product in context.products}
+        metadata = context.aoi_metadata
         for observation in batch.observations:
             attention = observation.attention
             if attention is not None:
+                if observation.gaze is None:
+                    raise DomainError(
+                        400,
+                        "gaze_attention_mismatch",
+                        "video attention coordinates require a valid gaze observation",
+                    )
                 if attention.manifest_version != context.manifest_version:
                     raise DomainError(
                         400,
                         "manifest_mismatch",
                         "attention manifest_version does not match the session manifest",
                     )
-                if any(candidate.product_id not in catalog_ids for candidate in attention.candidates):
+                if attention.candidates:
                     raise DomainError(
                         400,
-                        "catalog_mismatch",
-                        "attention referenced a product outside the session catalog",
+                        "client_product_attribution_forbidden",
+                        "Kiosk observations cannot provide product or AOI candidates",
                     )
-                if any(
-                    (candidate.exposure_id, candidate.product_id)
-                    not in context.exposure_product_pairs
-                    for candidate in attention.candidates
+                if not attention.outside_video and (
+                    metadata is None or metadata.approval_status != "approved"
                 ):
                     raise DomainError(
-                        400,
-                        "manifest_mismatch",
-                        "attention candidate does not match a manifest exposure",
+                        409,
+                        "aoi_metadata_unapproved",
+                        "the canonical video does not have an approved AOI metadata revision",
                     )
+            if metadata is not None and observation.video_time_ms >= metadata.media_identity.duration_ms:
+                raise DomainError(
+                    400,
+                    "video_time_out_of_range",
+                    "video_time_ms must be inside the canonical media duration",
+                )
 
         fingerprint = sha256(batch.model_dump_json().encode("utf-8")).hexdigest()
         self.cleanup_expired()
@@ -427,6 +695,8 @@ class V2RecommendationStore:
             changed = False
             prospective_observations = dict(state.observations)
             prospective_sequence_index = dict(state.sequence_index)
+            prospective_highest_epoch = state.highest_playback_epoch
+            prospective_last_video_time = dict(state.last_video_time_by_epoch)
             for observation in batch.observations:
                 key = (observation.playback_epoch, observation.frame_id)
                 sequence_key = prospective_sequence_index.get(observation.sequence)
@@ -438,6 +708,14 @@ class V2RecommendationStore:
                     )
                 current = prospective_observations.get(key)
                 if current is None:
+                    if observation.playback_epoch < prospective_highest_epoch:
+                        raise DomainError(
+                            400,
+                            "stale_playback_epoch",
+                            "a new observation cannot arrive from an older playback epoch",
+                        )
+                    if observation.playback_epoch > prospective_highest_epoch:
+                        prospective_highest_epoch = observation.playback_epoch
                     if len(prospective_observations) >= MAX_BUFFERED_OBSERVATIONS:
                         raise DomainError(
                             413,
@@ -468,11 +746,29 @@ class V2RecommendationStore:
                     "session_offset_conflict",
                     "session_offset_ms must be nondecreasing in analysis order",
                 )
+            epoch_frames: dict[int, list[FrameObservationV2]] = {}
+            for item in prospective_observations.values():
+                epoch_frames.setdefault(item.playback_epoch, []).append(item)
+            for epoch, frames in epoch_frames.items():
+                by_sequence = sorted(frames, key=lambda item: item.sequence)
+                video_times = [item.video_time_ms for item in by_sequence]
+                if any(
+                    current < previous
+                    for previous, current in zip(video_times, video_times[1:])
+                ):
+                    raise DomainError(
+                        400,
+                        "video_time_regression",
+                        "video_time_ms cannot move backward inside one playback epoch",
+                    )
+                prospective_last_video_time[epoch] = max(video_times)
 
             state.observations = prospective_observations
             state.sequence_index = prospective_sequence_index
             state.batch_fingerprints[batch.batch_id] = fingerprint
             state.batch_sequence_index[batch.batch_sequence] = batch.batch_id
+            state.highest_playback_epoch = prospective_highest_epoch
+            state.last_video_time_by_epoch = prospective_last_video_time
             state.expires_at = self._clock() + self._collecting_ttl
             return ObservationBatchAcceptedV2(
                 batch_id=batch.batch_id,
@@ -499,8 +795,9 @@ class V2RecommendationStore:
                 raise DomainError(409, "session_completed", "session has already been completed")
 
             snapshot = tuple(item.model_copy(deep=True) for item in state.observations.values())
-            recommendation_id = f"recommendation-v2-{session_id}-001"
-            decision_request_id = f"decision-{uuid4().hex}"
+            idempotency_digest = sha256(session_id.encode("utf-8")).hexdigest()[:32]
+            recommendation_id = f"recommendation-v2-{idempotency_digest}"
+            decision_request_id = f"decision-v2-{idempotency_digest}"
             accepted = RecommendationAcceptedV2(
                 recommendation_id=recommendation_id,
                 decision_request_id=decision_request_id,
@@ -555,22 +852,21 @@ class V2RecommendationStore:
                 video_id=context.video_id,
                 manifest_version=context.manifest_version,
                 catalog_version=context.catalog_version,
+                aoi_metadata=context.aoi_metadata,
                 product_ids=[product.product_id for product in context.products],
                 input_variant=self._input_variant,
             )
             if (
                 summary.data_quality.gaze_valid_ratio == 0
-                or summary.data_quality.expression_valid_ratio == 0
                 or not summary.eligible_product_ids
             ):
                 code = (
                     "insufficient_valid_signal"
                     if summary.data_quality.gaze_valid_ratio == 0
-                    or summary.data_quality.expression_valid_ratio == 0
                     else "no_eligible_product"
                 )
                 explanation = (
-                    "추천에 필요한 유효한 시선·표정 신호가 충분하지 않습니다."
+                    "추천에 필요한 유효한 시선 신호가 충분하지 않습니다."
                     if code == "insufficient_valid_signal"
                     else "하나의 상품에 안전하게 연결할 수 있는 관찰 근거가 없습니다."
                 )
@@ -602,7 +898,7 @@ class V2RecommendationStore:
                 evidence=summary.evidence,
                 products=list(context.products),
             )
-            return accepted, CompletionJob(
+            job = CompletionJob(
                 session_id=session_id,
                 job_id=job_id,
                 accepted=accepted,
@@ -610,17 +906,39 @@ class V2RecommendationStore:
                 summary=summary,
                 version=version,
             )
+            state.active_job = job
+            return accepted, job
 
-    def run_completion(
+    async def run_completion(
+        self,
+        job: CompletionJob,
+        client: CentralRecommendationClient,
+    ) -> None:
+        """Always release the model request and aggregate evidence snapshot."""
+
+        try:
+            await self._run_completion_inner(job, client)
+        finally:
+            job.clear_transient()
+
+    async def _run_completion_inner(
         self,
         job: CompletionJob,
         client: CentralRecommendationClient,
     ) -> None:
         """Call the model outside the store lock, then conditionally save once."""
 
+        request = job.request
+        summary = job.summary
+        if request is None or summary is None:
+            return
         try:
-            raw_output = client.recommend(job.request)
-            output = validate_central_output(raw_output, request=job.request)
+            recommend_async = getattr(client, "recommend_async", None)
+            if callable(recommend_async):
+                raw_output = await recommend_async(request)
+            else:
+                raw_output = await asyncio.to_thread(client.recommend, request)
+            output = validate_central_output(raw_output, request=request)
             decision = RecommendationDecisionV2(
                 recommendation_id=job.accepted.recommendation_id,
                 decision_request_id=job.accepted.decision_request_id,
@@ -633,9 +951,11 @@ class V2RecommendationStore:
                 evidence=output.evidence,
                 style=output.style,
                 exploration_tendency_code=output.exploration_tendency_code,
-                data_quality=job.summary.data_quality,
+                data_quality=summary.data_quality,
                 version=job.version,
             )
+        except asyncio.CancelledError:
+            raise
         except CentralModelError as exc:
             code = exc.reason_code
             if code not in {"model_unavailable", "invalid_model_output", "catalog_mismatch"}:
@@ -655,7 +975,7 @@ class V2RecommendationStore:
                 evidence=[],
                 style=None,
                 exploration_tendency_code=None,
-                data_quality=job.summary.data_quality,
+                data_quality=summary.data_quality,
                 version=job.version,
             )
         except Exception:
@@ -673,13 +993,18 @@ class V2RecommendationStore:
                 evidence=[],
                 style=None,
                 exploration_tendency_code=None,
-                data_quality=job.summary.data_quality,
+                data_quality=summary.data_quality,
                 version=job.version,
             )
 
         saved = self._commit_terminal(job, decision)
         if saved:
-            self._repository.save_decision(job.session_id, decision)
+            try:
+                self._repository.save_decision(job.session_id, decision)
+            except Exception:
+                # A terminal in-memory result is safer than retaining transient
+                # evidence because a persistence outage must not retry the job.
+                pass
 
     def _commit_terminal(
         self,
@@ -696,16 +1021,20 @@ class V2RecommendationStore:
                 or state.status != "pending"
                 or state.active_job_id != job.job_id
             ):
-                return
+                return False
             state.decision = decision
             state.status = "terminal"
             state.active_job_id = None
+            state.active_job = None
+            state.active_job_handle = None
             state.clear_transient()
             state.expires_at = self._clock() + self._decision_ttl
             return True
 
     @staticmethod
     def _job_start_failure(job: CompletionJob) -> RecommendationDecisionV2:
+        if job.summary is None:
+            raise RuntimeError("completion evidence was already disposed")
         return RecommendationDecisionV2(
             recommendation_id=job.accepted.recommendation_id,
             decision_request_id=job.accepted.decision_request_id,
@@ -729,21 +1058,41 @@ class V2RecommendationStore:
         client: CentralRecommendationClient,
         dispatcher: JobDispatcher,
     ) -> RecommendationAcceptedV2:
+        if self.durable_mode:
+            readiness = self.check_readiness()
+            if not readiness.ready:
+                raise DomainError(
+                    503,
+                    "service_not_ready",
+                    "recommendation persistence is not ready",
+                )
         accepted, job = self.begin_completion(session_id, client)
         if job is not None:
             try:
-                self._repository.save_pending(
-                    session_id,
-                    accepted,
-                    job.summary.evidence,
-                    job.version,
-                )
-                dispatcher.submit(lambda: self.run_completion(job, client))
+                if not self._repository.save_pending(
+                    session_id, accepted, job.version
+                ):
+                    raise RuntimeError("durable recommendation idempotency conflict")
+                if not self._repository.claim_job(accepted.decision_request_id):
+                    raise RuntimeError("durable recommendation job was already claimed")
+                handle = dispatcher.submit(lambda: self.run_completion(job, client))
+                with self._lock:
+                    state = self._states.get(session_id)
+                    if state is not None and state.active_job_id == job.job_id:
+                        state.active_job_handle = handle
+                    elif handle is not None:
+                        handle.cancel()
             except Exception:
                 # A durable pending record without a runnable job would poll
                 # forever. Fail closed in memory and best-effort persist the
                 # sanitized terminal failure; never restore the raw timeline.
                 decision = self._job_start_failure(job)
+                try:
+                    self._repository.fail_job(
+                        accepted.decision_request_id, "job_start_failed"
+                    )
+                except Exception:
+                    pass
                 if self._commit_terminal(job, decision):
                     try:
                         self._repository.save_decision(session_id, decision)
@@ -796,11 +1145,29 @@ class V2RecommendationStore:
 
     def cancel(self, session_id: str) -> None:
         self._repository.get_context(session_id)
+        handle: JobHandle | None = None
+        decision_request_id: str | None = None
+        job: CompletionJob | None = None
         with self._lock:
             state = self._states.pop(session_id, None)
             if state is not None:
+                handle = state.active_job_handle
+                job = state.active_job
+                if state.accepted is not None:
+                    decision_request_id = state.accepted.decision_request_id
                 state.clear_transient()
                 state.active_job_id = None
+                state.active_job = None
+                state.active_job_handle = None
+        if handle is not None:
+            handle.cancel()
+        if job is not None:
+            job.clear_transient()
+        if decision_request_id is not None:
+            try:
+                self._repository.mark_cancelled(decision_request_id)
+            except Exception:
+                pass
 
     def buffered_observation_count(self, session_id: str) -> int:
         with self._lock:

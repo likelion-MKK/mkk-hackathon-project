@@ -66,6 +66,15 @@ class SessionCreated(ContractModel):
     created_at: datetime
 
 
+class VisionStreamToken(ContractModel):
+    protocol_version: Literal["1.0"]
+    session_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
+    video_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
+    stream_token: str = Field(min_length=32, max_length=2048)
+    expires_at: datetime
+    websocket_path: Literal["/vision/v1/stream"]
+
+
 class Product(ContractModel):
     product_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
     display_name: str = Field(min_length=1, max_length=200)
@@ -370,6 +379,35 @@ class ManagerEvent(ContractModel):
 class Health(ContractModel):
     status: Literal["ok", "degraded"]
     database: Literal["up", "down"]
+
+
+class Liveness(ContractModel):
+    status: Literal["ok"]
+
+
+ReadinessReasonCode = Literal[
+    "database_not_configured",
+    "db_unavailable",
+    "migration_version_mismatch",
+    "catalog_count_mismatch",
+    "catalog_revision_mismatch",
+    "catalog_product_mismatch",
+    "catalog_content_mismatch",
+    "job_intake_unavailable",
+]
+
+
+class Readiness(ContractModel):
+    status: Literal["ready", "not_ready"]
+    reason: ReadinessReasonCode | None
+
+    @model_validator(mode="after")
+    def reason_matches_status(self) -> Self:
+        if self.status == "ready" and self.reason is not None:
+            raise ValueError("ready response cannot include a failure reason")
+        if self.status == "not_ready" and self.reason is None:
+            raise ValueError("not-ready response requires a safe reason code")
+        return self
 
 
 class ErrorResponse(ContractModel):

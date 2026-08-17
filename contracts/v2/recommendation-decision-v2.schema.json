@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://mcm-lookbook.example/contracts/v2/recommendation-decision-v2.schema.json",
   "title": "RecommendationDecisionV2",
-  "description": "self-hosted 중앙 추천 AI의 단일 상품 선택과 근거가 검증되는 결과입니다.",
+  "description": "중앙 추천 AI의 단일 상품 선택과 근거가 catalog·evidence validator를 통과한 결과입니다.",
   "type": "object",
   "additionalProperties": false,
   "required": [

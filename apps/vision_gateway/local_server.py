@@ -10,11 +10,13 @@ from typing import Any
 
 from starlette.types import Receive, Scope, Send
 
+from apps.common.vision_token import SignedVisionTokenIssuer
 from apps.vision_gateway.server import (
     LocalVisionTokenIssuer,
     VisionStreamApp,
     selected_face_worker_factory,
 )
+from apps.vision_gateway.eye_client import HttpEyeWorkerClient, UnavailableEyeWorkerClient
 
 
 _ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
@@ -108,12 +110,21 @@ class LocalVisionGatewayApp:
         *,
         model_path: Path,
         allowed_origins: frozenset[str] = _DEFAULT_ORIGINS,
+        token_issuer: Any | None = None,
     ) -> None:
         self.allowed_origins = allowed_origins
-        self.token_issuer = LocalVisionTokenIssuer()
+        self.token_issuer = token_issuer or LocalVisionTokenIssuer()
+        self.local_token_enabled = isinstance(self.token_issuer, LocalVisionTokenIssuer)
+        eye_worker_url = os.getenv("VISION_EYE_WORKER_URL", "").strip()
+        eye_worker = (
+            HttpEyeWorkerClient(eye_worker_url)
+            if eye_worker_url
+            else UnavailableEyeWorkerClient()
+        )
         self.stream_app = VisionStreamApp(
             token_verifier=self.token_issuer,
             face_worker_factory=selected_face_worker_factory(model_path),
+            eye_worker=eye_worker,
         )
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
@@ -133,6 +144,10 @@ class LocalVisionGatewayApp:
             return
         if scope.get("method") != "POST":
             await _send_json(send, 405, {"code": "method_not_allowed"}, origin=origin)
+            return
+
+        if not self.local_token_enabled:
+            await _send_json(send, 404, {"code": "not_found"}, origin=origin)
             return
 
         try:
@@ -162,7 +177,13 @@ class LocalVisionGatewayApp:
 
 def create_app() -> LocalVisionGatewayApp:
     model_path = Path(os.getenv("VISION_FACE_MODEL_PATH", str(_default_model_path())))
-    return LocalVisionGatewayApp(model_path=model_path, allowed_origins=_configured_origins())
+    secret = os.getenv("VISION_STREAM_TOKEN_SECRET", "").strip()
+    token_issuer = SignedVisionTokenIssuer(secret, ttl_seconds=60) if secret else None
+    return LocalVisionGatewayApp(
+        model_path=model_path,
+        allowed_origins=_configured_origins(),
+        token_issuer=token_issuer,
+    )
 
 
 app: Any = create_app()

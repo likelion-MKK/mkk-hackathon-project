@@ -4,16 +4,16 @@
 
 ## 현재 MVP 방향
 
-고객은 회원가입이나 설문 없이 약 60초의 룩북을 본다. Eye·Face 생산자는 웹캠 frame을 처리해 시선 좌표, 상품 구간, 체류·재방문, 표정 관찰값과 변화·지속 정보를 만든다. 원본 frame은 추천 AI로 보내지 않는다.
+고객은 회원가입이나 설문 없이 검수된 33.5초 룩북 `mcm-lookbook-v2`를 본다. Eye·Face 생산자는 웹캠 frame을 처리해 시선·표정 관찰값을 만들고, Kiosk는 캡처 순간의 영상 시각·layout으로 시선을 영상 정규화 좌표로만 변환한다. 상품 구간·부위는 Backend가 승인 AOI metadata로 연결한다. 원본 frame은 추천 AI로 보내지 않는다.
 
-룩북이 끝나면 Backend가 세션 메모리에 있는 파생 신호를 한 번의 `RecommendationEvidence`로 정리한다. self-hosted 중앙 판단 AI는 이 JSON과 DB에 등록된 **MCM 가방 정확히 10개**의 태그·분석을 비교해 **Top 1** 상품과 근거를 반환한다.
+룩북이 끝나면 Backend가 세션 메모리에 있는 파생 신호를 한 번의 `RecommendationEvidence`로 정리한다. hosted Luna 중앙 판단 AI는 이 JSON과 DB에 등록된 **MCM 가방 정확히 10개**의 태그·분석을 비교해 **Top 1** 상품과 근거를 반환한다.
 
 ```text
 웹캠 frame(추론 중 메모리만)
   → Eye·Face 파생 신호
   → 시간·상품 기준 RecommendationEvidence JSON(세션 메모리)
   + DB의 MCM 가방 10개 프로필
-  → 룩북 종료 후 self-hosted 중앙 판단 AI 1회 호출
+  → 룩북 종료 후 hosted Luna 중앙 판단 AI 1회 호출
   → Top 1 상품 ID + 관찰 근거 설명
   → 최종 추천만 저장, frame 단위 파생값은 폐기
 ```
@@ -24,7 +24,7 @@
 | --- | --- |
 | **S01. Screensaver** | 대기 화면을 터치해 서비스를 시작한다. |
 | **S02. Main Menu** | AI 추천을 선택하고 카메라·분석 안내와 동의를 확인한다. |
-| **S03. AI Lookbook** | 약 60초 룩북을 보며 시선·표정의 관찰 가능한 신호를 수집한다. |
+| **S03. AI Lookbook** | 33.5초 실제 룩북을 보며 시선·표정의 관찰 가능한 신호를 수집한다. |
 | **S04. Analysis Report** | 추천 가방 한 개, 세션에서 관찰된 근거와 상품 QR을 확인한다. 필요할 때 고객이 직접 매니저 호출을 누른다. |
 
 매니저 요청은 고객의 명시적 버튼 입력으로만 생성하며 Manager 화면은 REST polling으로 확인한다. 분석 시작이나 추천 완료만으로 자동 호출하지 않는다.
@@ -44,7 +44,7 @@ benchmark에서는 기존 파생값을 상대적 시각적 주의·관찰 가능
 
 | 데이터 | 처리 원칙 |
 | --- | --- |
-| 웹캠 원본 frame·영상·image bytes·embedding | 동의된 Vision 추론 수명 동안 메모리에서만 처리하며 파일·DB·로그·cache·queue·추천 AI 입력에 남기지 않는다. 원격 Vision 전송은 [`ADR-0001`](docs/adr/0001-remote-vision-inference.md)이 승인되기 전 실제 고객에게 적용하지 않는다. |
+| 웹캠 원본 frame·영상·image bytes·embedding | 동의된 Vision 추론 수명 동안 메모리에서만 처리하며 파일·DB·로그·cache·queue·추천 AI 입력에 남기지 않는다. Vision Gateway와 Eye worker 사이의 private loopback 경계에서만 일시 전달한다. |
 | frame 단위 시선·표정 파생값과 결합 evidence | 세션 메모리에 제한해 룩북 종료 후 한 번의 추천에 사용하고 성공·실패·취소 뒤 폐기한다. |
 | 상품 카탈로그 | 검수된 MCM 가방 10개의 ID, 태그와 설명을 DB에 저장한다. |
 | 최종 추천 | 상품 ID, 비진단적 설명, 알고리즘·모델·프롬프트 버전과 최소 운영 metadata만 정책에 따라 저장한다. |
@@ -63,22 +63,26 @@ benchmark에서는 기존 파생값을 상대적 시각적 주의·관찰 가능
 
 ## 현재 상태와 구현 경계
 
-문서 기준선은 `dev`의 `a6eb3d78f47ce38da9d0b2be9b0794479986e280`이고, 이 작업 브랜치에는 중앙 추천 v2 vertical
-slice가 구현되어 있다.
+문서 기준선은 `dev`의 `77ae806192db56ef2472439a0359380e7025fae2`이고, 이 작업 브랜치에는 Luna
+Max 기반 중앙 추천 v2 vertical slice와 로컬 배포 준비가 구현되어 있다.
 
 - v1을 깨뜨리지 않는 frame observation·evidence·Top 1·Manager v2 계약과 privacy
   negative fixture
-- 정확히 10개 상품 profile, PostgreSQL migration·기동 시 seed/readiness adapter
+- 정확히 10개 상품 profile, direct migration/비덮어쓰기 seed와 strict readiness adapter
 - bounded session buffer, frame fusion, 비동기 1회 호출, strict output 검증과
   성공·실패·취소·TTL cleanup
 - Kiosk의 real HTTP v2 흐름과 code+DB tag 기반 고객 문구, Manager REST polling
-- versioned Korean prompt, Google Colab GPU 7개 후보 registry, A/B/C·12개 합성 case의 self-hosted benchmark CLI
+- versioned Korean prompt, Luna Max variant C strict adapter, no-timeout cancellable job과 30분 orphan cleanup
+- Backend Vision token endpoint, signed one-time token, private Eye worker client와 fail-closed gaze 경계
+- Vision 3-A의 capture-time context, letterbox 보정 영상 좌표, Gateway 동일-frame 검증과 Backend 승인 AOI 경계
+- Supabase pooler runtime, direct admin URL 분리, job restart/orphan/24시간 retention 운영화
 
-다만 production 준비가 끝났다는 뜻은 아니다. 실제 self-hosted 모델은 아직 선택·실행하지
-않았고, live PostgreSQL·실제 Browser E2E·승인된 Vision producer도 검증 전이다. 공식
-listing에서 상품명만 확인했으므로 개별 상품 URL·이미지·QR은 `null+reason`이며 팀 검수와
-자산 승인이 필요하다. 현재 Frontend 검증은 Node.js 22.19.0에서 수행되어 요구 버전
-24.19.0 재검증도 남아 있다.
+다만 production 공개 배포가 끝났다는 뜻은 아니다. 실제 OpenAI key·Supabase project,
+Gabia SSH 설정과 백업/복구, EyeTrax calibration worker 실기기 검증, 실제 영상 전체 AOI 검수와
+Vision 3-B, 공식 상품 이미지·QR 생성, domain/TLS와 원격 Browser E2E가 남아 있다. 3-B 전에는
+“상품을 아는 Vision E2E”가 완료된 것이 아니다. canonical 영상은 Git에 넣지 않고
+`scripts/stage_lookbook_media.ps1`로 로컬 `apps/kiosk/public/media/`에 staging한다.
+현재 Frontend 검증은 Node.js 22.19.0에서 수행되어 요구 버전 24.19.0 재검증도 남아 있다.
 
 구현 순서와 호환성 차이는 [`IMPLEMENTATION_PLAN`](docs/IMPLEMENTATION_PLAN.md)을 기준으로 한다.
 
@@ -113,5 +117,6 @@ Kiosk는 기본적으로 `http://localhost:5173`, Manager는 `http://localhost:5
 - [AI Agent 작업 규칙](AGENTS.md)
 - [개발 및 PR 운영 규칙](CONTRIBUTING.md)
 - [Contract v1·v2](contracts/README.md)
+- [배포 준비와 운영 구성](deploy/README.md)
 
 Eye·Face benchmark와 SJF 자료는 공식 결정의 근거·협업 참고자료로 보존하며, 현재 제품 방향은 위 공식 문서를 우선한다.

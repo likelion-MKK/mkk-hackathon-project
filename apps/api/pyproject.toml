@@ -8,6 +8,7 @@ dependencies = [
   "uvicorn[standard]>=0.30,<1",
   "pydantic>=2.7,<3",
   "psycopg[binary]>=3.2,<4",
+  "httpx>=0.27,<1",
 ]
 
 [project.optional-dependencies]
@@ -17,8 +18,8 @@ camera = [
 
 [dependency-groups]
 dev = [
-  "httpx>=0.27,<1",
   "mcm-face-service; python_full_version == '3.13.15'",
+  "jsonschema>=4.23,<5",
   "numpy>=2,<3",
   "pytest>=8.3,<9",
 ]
@@ -29,4 +30,6 @@ mcm-face-service = { path = "../../services/face", editable = true }
 [tool.pytest.ini_options]
 testpaths = ["tests", "../../tests"]
 pythonpath = ["../.."]
-addopts = ["--basetemp=.pytest-tmp", "-p", "no:cacheprovider"]
+# Keep tmp_path artifacts outside the OneDrive workspace. Windows can hold the
+# synchronized local basetemp open and make an otherwise passing suite fail.
+addopts = ["-p", "no:cacheprovider"]

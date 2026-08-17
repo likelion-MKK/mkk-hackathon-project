@@ -15,6 +15,6 @@
 | [`ADR-0004 EyeTrax 해커톤 MVP 선정`](0004-eyetrax-mvp-selection.md) | Accepted (해커톤 MVP 한정) | EyeTrax revision·Dense5 보정·개발 PC Gate와 재평가 조건 |
 | [`ADR-0006 중앙 판단 추천 AI와 파생 evidence 수명`](0006-central-recommendation-ai.md) | Accepted (방향·경계) | derived-only self-hosted 중앙 판단, 룩북 종료 후 1회, MCM 가방 10개·Top 1, 세션 메모리 폐기와 비진단 설명 |
 | [`ADR-0007 중앙 추천 모델 선정`](0007-central-recommendation-model-selection.md) | Proposed | Google Colab GPU 7개 후보의 provenance·자원·안전 benchmark와 블라인드 검토 뒤 model·runtime·variant 선정 |
-| [`ADR-0008 OpenAI Luna 중앙 추천 모델 선택`](0008-openai-luna-central-recommendation.md) | Proposed — selected pending integration reviews | Luna Max·max·variant C·prompt v4 선택, latency 기록 전용, hosted provider 승인·통합 Gate |
+| [`ADR-0008 OpenAI Luna 중앙 추천 모델 선택`](0008-openai-luna-central-recommendation.md) | Accepted — implementation baseline | Luna Max·max·variant C·prompt v4 선택, hosted provider migration과 통합 Gate |
 
 ADR 번호 공백은 예약·이전 논의의 추적성을 위해 재사용하지 않는다. 생산자 ADR의 모델·taxonomy·보정 결정은 계속 유효하지만 추천 weight·파생 evidence 보유 방식이 충돌하면 ADR-0006이 우선한다.

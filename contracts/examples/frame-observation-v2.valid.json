@@ -20,12 +20,10 @@
     "video_x_norm": 0.3,
     "video_y_norm": 0.43,
     "confidence": 1.0,
-    "producer_id": "kiosk-aoi-mapper-v1",
-    "model_revision": "aoi-mapper-v1",
+    "producer_id": "kiosk-video-coordinate-v1",
+    "model_revision": "video-coordinate-v1",
     "manifest_version": "demo-lookbook-v1",
-    "candidates": [
-      { "exposure_id": "demo-exposure-001", "product_id": "mcm-toni-medium-disco-visetos", "priority": 0 }
-    ]
+    "candidates": []
   },
   "attention_reason": null,
   "expression": {

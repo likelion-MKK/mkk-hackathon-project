@@ -1275,6 +1275,26 @@
   line-height: 1.7;
 }
 
+.report-qr {
+  display: flex;
+  width: max-content;
+  margin-top: 1.25rem;
+  align-items: center;
+  gap: 0.8rem;
+  color: #555;
+  font-size: 0.62rem;
+  line-height: 1.4;
+}
+
+.report-qr img {
+  width: 5.5rem;
+  height: 5.5rem;
+  padding: 0.35rem;
+  border: 1px solid var(--line);
+  background: var(--white);
+  object-fit: contain;
+}
+
 .report-disclaimer {
   margin-top: 1rem;
   padding-top: 1rem;

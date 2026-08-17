@@ -1,18 +1,25 @@
-# Vision Gateway: D7 harness + local Vision Stream v1
+# Vision Gateway: Vision Stream v1 + D7 harness
 
-## Current local Face-only implementation
+## Current stream boundary
 
-`server.py` now provides a localhost ASGI WebSocket at `/vision/v1/stream`.
-It validates a one-time in-memory token, receives the v1 binary frame envelope,
-and returns only a derived `ExpressionSample`. Until EyeTrax is connected,
-`gaze_sample` is explicitly `null` with `gaze_reason=eye_not_connected`.
+`server.py` provides `/vision/v1/stream`, validates a one-time token, receives the
+v1 binary frame envelope, and returns only derived Eye/Face samples. When
+`VISION_EYE_WORKER_URL` is configured, the encoded frame is sent once over the
+private bounded loopback/container boundary to the Python 3.12 Eye worker. If
+that worker is absent, timed out or not calibrated, `gaze_sample` stays `null`
+with an explicit reason; no neutral coordinate or replay coordinate is created.
+Calibration keeps accepting bounded browser frames while EyeTrax runs, and a
+user stop cancels the in-memory calibration job instead of waiting for it.
+Every Eye and Face result must repeat the original session, video, frame,
+sequence, monotonic capture time, capture-time video time and playback epoch.
+The Gateway drops a mismatched result and never creates an AOI or product ID.
 
-## 브라우저 localhost Face-only live 개발
+## 브라우저 localhost Eye + Face live 개발
 
-`local_server.py`는 PR #44의 WebSocket Gateway에 개발용 일회성 token bootstrap만
-추가한다. 원본 frame은 계속 binary WebSocket과 Worker 메모리 경계 안에서만 처리하며,
-token은 URL·로그·파일에 기록하지 않는다. 이 경로는 운영용 Backend token endpoint가
-아니다.
+`local_server.py`는 개발용 local token을 유지하고, `VISION_STREAM_TOKEN_SECRET`가
+설정되면 API가 발급한 signed one-time token을 검증한다. Backend token endpoint는
+`/api/v1/sessions/{session_id}/vision-stream-token`이며 token은 URL·로그·파일에
+기록하지 않는다.
 
 ```powershell
 Set-Location apps/api
@@ -22,11 +29,9 @@ uv run --project apps/api --with "mediapipe==1.0.0" python -m uvicorn `
   apps.vision_gateway.local_server:app --host 127.0.0.1 --port 8765
 ```
 
-Kiosk는 `.env.local`에서 `VITE_VISION_MODE=live`와
-`VITE_VISION_TOKEN_MODE=local`을 설정한다. 현재 Gateway는 Face-only이므로
-`gaze_sample=null`, `gaze_reason=eye_not_connected`를 반환한다. Backend의 공식
-`/api/v1/sessions/{session_id}/vision-stream-token` 연결과 EyeTrax fan-out은
-별도 작업이다.
+개발 중 local token mode는 localhost에서만 사용한다. 배포 build는 backend token
+mode와 same-origin `/vision/v1/stream`을 사용한다. Domain/TLS 전에는 원격
+camera E2E를 공식 acceptance로 보지 않는다.
 
 The D7 in-process harness bounds its wait for a timed-out adapter completion.
 If that bound is exceeded, `dispatch_next()` returns the fail-closed observation
@@ -34,18 +39,19 @@ while retaining `in_flight` and the frame until the adapter completion callback;
 it does not wait indefinitely for a blocking adapter.
 
 Tests inject `LocalVisionTokenIssuer` and `FakeFaceAdapter`. A real MediaPipe
-worker can be injected with `selected_face_worker_factory(model_path)`. TLS,
-the Backend token endpoint, browser `getUserMedia`, and EyeTrax fan-out remain
-separate follow-up work.
+worker can be injected with `selected_face_worker_factory(model_path)`. The Eye
+worker uses `/srv/mcm/models/face_landmarker.task`; its browser calibration-frame
+stream is implemented with bounded in-memory frames; physical camera calibration
+and the real server model asset remain deployment acceptance gates.
 
 수신 rate는 `max_fps`로 제한하고 decoder·inference deadline 초과는 terminal
 `drop`으로 반환한다. timeout된 decoder 또는 Face adapter의 실제 underlying 작업이
 늦게 끝나면 완료 시점까지 frame과 in-flight 상태를 유지한 뒤 닫으며, worker close는
 별도 bounded cleanup으로 처리한다.
 
-이 디렉터리는 D7 Replay E2E와 D8 개발 camera smoke, localhost Face-only
-Vision Stream을 위한 테스트 가능한 transport 경계다. 운영 인증·TLS와
-원격 고객 frame 전송을 포함하지 않으므로 production-ready로 사용하지 않는다.
+이 디렉터리는 D7 Replay E2E, D8 개발 camera smoke와 Vision Stream transport
+경계를 함께 둔다. 운영 domain/TLS와 Eye calibration acceptance가 끝나기 전에는
+public customer traffic에 연결하지 않는다.
 
 ## 데이터 흐름
 
@@ -83,17 +89,18 @@ uv run --project apps/api python -m apps.vision_gateway.demo --mode synthetic
 uv run --project apps/api python -m apps.vision_gateway.demo --mode replay
 ```
 
-실제 카메라, 실제 고객 frame, MediaPipe 선택 모델, 브라우저 `getUserMedia`와 외부
-네트워크를 사용하지 않는다.
+위 명령은 synthetic/replay 기본 모드이며 실제 고객 frame을 사용하지 않는다. live
+카메라 모드는 별도 `.env`와 signed backend token, Eye model asset을 설정한 뒤
+localhost에서 opt-in으로 검증한다.
 
 D8의 opt-in 실제 개발 camera 경로와 quality·diagnostics 의미는
 [`D8_README.md`](D8_README.md)를 따른다. D7 명령과 기본 모드는 camera extra를
 요구하지 않는다.
 
-## D8 경계
+## 현재 배포 경계
 
-[`Vision Stream v1 계약`](../../contracts/vision-stream-v1/README.md)은 정의됐지만,
-이 브랜치에서 개발용 binary WebSocket serialization, one-time in-memory auth,
-frame limit, in-flight/drop, cleanup 경계를 구현한다. Production TLS/WSS 배포,
-Backend token endpoint, Kiosk-to-server getUserMedia 연결, EyeTrax fan-out과
-현장 live 검증은 별도 작업이다.
+[`Vision Stream v1 계약`](../../contracts/vision-stream-v1/README.md)은 정의됐고,
+binary WebSocket serialization, one-time signed auth, frame limit, in-flight/drop,
+Browser `getUserMedia` frame capture, EyeTrax calibration/inference fan-out과
+cleanup 경계를 구현한다. Production domain/TLS/WSS와 현장 live 검증은 별도
+배포 acceptance gate다.

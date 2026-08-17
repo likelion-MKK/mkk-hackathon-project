@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://mcm-lookbook.example/contracts/v2/recommendation-evidence-v2.schema.json",
   "title": "RecommendationEvidenceV2",
-  "description": "결정적 feature extractor가 self-hosted 중앙 추천 AI에 전달하는 A/B/C 비교용 입력입니다.",
+  "description": "결정적 feature extractor가 derived-only 중앙 추천 AI에 전달하는 A/B/C 비교용 입력입니다. 운영 variant C에는 개별 frame과 좌표가 없습니다.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -319,6 +319,28 @@
       "properties": {
         "product_id": { "$ref": "#/$defs/id" },
         "exposure_duration_ms": { "type": "number", "minimum": 0 },
+        "observed_component_codes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "whole_product",
+              "body",
+              "handle",
+              "strap",
+              "closure",
+              "hardware",
+              "pocket",
+              "trim",
+              "logo"
+            ]
+          }
+        },
+        "observed_visual_tag_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" }
+        },
         "gaze": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/gazeSummary" }] },
         "gaze_reason": { "$ref": "#/$defs/nullableReason" },
         "expression": {
@@ -360,6 +382,28 @@
         "video_start_ms": { "type": "integer", "minimum": 0 },
         "video_end_ms": { "type": "integer", "minimum": 0 },
         "playback_epoch": { "type": "integer", "minimum": 0 },
+        "observed_component_codes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "whole_product",
+              "body",
+              "handle",
+              "strap",
+              "closure",
+              "hardware",
+              "pocket",
+              "trim",
+              "logo"
+            ]
+          }
+        },
+        "observed_visual_tag_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" }
+        },
         "evidence_codes": {
           "type": "array",
           "minItems": 1,

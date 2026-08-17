@@ -19,6 +19,12 @@ from mcm_face import FaceWorker, SelectedFaceAdapter
 from starlette.types import Receive, Scope, Send
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
+from apps.common.vision_token import VisionTokenClaims
+from apps.vision_gateway.eye_client import (
+    EyeInferenceResult,
+    EyeWorkerClient,
+    UnavailableEyeWorkerClient,
+)
 from apps.vision_gateway.vision_stream import (
     DecodedBinaryFrame,
     FrameDecoder,
@@ -49,6 +55,7 @@ _HELLO_FIELDS = frozenset(
 _ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _MEDIA_TYPE_PATTERN = re.compile(r"^image/[a-z0-9][a-z0-9.+-]{0,63}$")
 _CALIBRATION_UNAVAILABLE_PREFIX = "calibration-unavailable-"
+_CALIBRATION_MAX_FPS = 20.0
 
 
 def _close_frame(frame: Any) -> None:
@@ -105,15 +112,28 @@ def _same_frame_context(
     )
 
 
+def _same_gaze_payload_context(
+    sample: Mapping[str, object],
+    context: StreamFrameContext,
+    *,
+    session_id: str,
+) -> bool:
+    return all(
+        sample.get(name) == value
+        for name, value in (
+            ("session_id", session_id),
+            ("video_id", context.video_id),
+            ("frame_id", context.frame_id),
+            ("sequence", context.sequence),
+            ("captured_at_mono_ms", context.captured_at_mono_ms),
+            ("video_time_ms", context.video_time_ms),
+            ("playback_epoch", context.playback_epoch),
+        )
+    )
+
+
 class VisionTokenVerifier(Protocol):
     def consume(self, token: str) -> "VisionTokenClaims | None": ...
-
-
-@dataclass(frozen=True, slots=True)
-class VisionTokenClaims:
-    session_id: str
-    video_id: str
-    expires_at: datetime
 
 
 class VisionAuthorizationError(VisionStreamProtocolError):
@@ -185,6 +205,7 @@ class VisionStreamApp:
         decode_timeout_ms: int = 250,
         inference_timeout_ms: int = 500,
         worker_cleanup_timeout_ms: int = 250,
+        eye_worker: EyeWorkerClient | None = None,
     ) -> None:
         if (
             max_frame_bytes <= 0
@@ -202,6 +223,7 @@ class VisionStreamApp:
         self.decode_timeout_ms = decode_timeout_ms
         self.inference_timeout_ms = inference_timeout_ms
         self.worker_cleanup_timeout_ms = worker_cleanup_timeout_ms
+        self.eye_worker = eye_worker or UnavailableEyeWorkerClient()
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope.get("type") == "lifespan":
@@ -223,6 +245,7 @@ class VisionStreamApp:
             if event.get("type") == "lifespan.startup":
                 await send({"type": "lifespan.startup.complete"})
             elif event.get("type") == "lifespan.shutdown":
+                await self.eye_worker.close()
                 await send({"type": "lifespan.shutdown.complete"})
                 return
 
@@ -235,6 +258,8 @@ class VisionStreamApp:
         await websocket.accept()
         worker: FaceWorker | None = None
         process_task: asyncio.Task[_FrameOutcome] | None = None
+        calibration_task: asyncio.Task[tuple[bool, str | None]] | None = None
+        calibration_request: tuple[str, str] | None = None
         receive_task: asyncio.Task[dict[str, Any]] | None = None
         state: _StreamState | None = None
         close_requested: tuple[str, str] | None = None
@@ -278,7 +303,45 @@ class VisionStreamApp:
                 wait_for: set[asyncio.Task[Any]] = {receive_task}
                 if process_task is not None:
                     wait_for.add(process_task)
+                if calibration_task is not None:
+                    wait_for.add(calibration_task)
                 done, _ = await asyncio.wait(wait_for, return_when=asyncio.FIRST_COMPLETED)
+
+                if calibration_task is not None and calibration_task in done:
+                    request = calibration_request
+                    try:
+                        valid, reason = calibration_task.result()
+                    except Exception:
+                        valid, reason = False, "eye_worker_unavailable"
+                    calibration_task = None
+                    calibration_request = None
+                    state.calibration_started = False
+                    state.max_fps = self.max_fps
+                    if request is not None:
+                        request_id, calibration_id = request
+                        await self._send_control_result(
+                            websocket,
+                            request_id=request_id,
+                            action="start_calibration",
+                            valid=valid,
+                            reason=reason if not valid else None,
+                            calibration_id=(
+                                calibration_id
+                                if valid
+                                else _calibration_unavailable_id(request_id)
+                            ),
+                        )
+                    if close_requested is not None and process_task is None:
+                        request_id, action = close_requested
+                        await self._send_control_result(
+                            websocket,
+                            request_id=request_id,
+                            action=action,
+                            valid=True,
+                            reason=None,
+                        )
+                        await self._send_close(websocket, code=1000, reason="normal")
+                        return
 
                 if process_task is not None and process_task in done:
                     outcome = process_task.result()
@@ -341,33 +404,49 @@ class VisionStreamApp:
                         )
                         event = {}
                         continue
-                    if not state.inference_started:
-                        await self._send_error(websocket, "invalid_message", retryable=False)
-                        await self._send_close(websocket, code=1002, reason="protocol_error")
-                        return
+                    if not state.inference_started and not state.calibration_started:
+                        await websocket.send_json(
+                            self._drop(binary.metadata.context, "session_closing", retryable=True)
+                        )
+                        event = {}
+                        continue
                     state.accept(binary.metadata.context)
-                    process_task = asyncio.create_task(
-                        self._process_frame(binary, worker, state, claims.session_id)
-                    )
+                    if state.calibration_started and not state.inference_started:
+                        process_task = asyncio.create_task(
+                            self._process_calibration_frame(binary, state, claims.session_id)
+                        )
+                    else:
+                        process_task = asyncio.create_task(
+                            self._process_frame(binary, worker, state, claims.session_id)
+                        )
                     del binary
                     event = {}
                     continue
                 if event_type == "websocket.receive" and isinstance(event.get("text"), str):
                     try:
-                        request_id, action = self._control_message(event)
+                        request_id, action, payload = self._control_message(event)
                     except VisionStreamProtocolError:
                         await self._send_error(websocket, "invalid_message", retryable=False)
                         await self._send_close(websocket, code=1002, reason="protocol_error")
                         return
                     if action == "start_inference":
-                        state.inference_started = True
-                        await self._send_control_result(
-                            websocket,
-                            request_id=request_id,
-                            action=action,
-                            valid=True,
-                            reason=None,
-                        )
+                        if state.calibration_started:
+                            await self._send_control_result(
+                                websocket,
+                                request_id=request_id,
+                                action=action,
+                                valid=False,
+                                reason="calibration_in_progress",
+                            )
+                        else:
+                            state.inference_started = True
+                            await self._send_control_result(
+                                websocket,
+                                request_id=request_id,
+                                action=action,
+                                valid=True,
+                                reason=None,
+                            )
                     elif action == "stop_inference":
                         state.inference_started = False
                         await self._send_control_result(
@@ -378,15 +457,42 @@ class VisionStreamApp:
                             reason=None,
                         )
                     elif action == "start_calibration":
-                        await self._send_control_result(
-                            websocket,
-                            request_id=request_id,
-                            action=action,
-                            valid=False,
-                            reason="eye_not_connected",
-                            calibration_id=_calibration_unavailable_id(request_id),
+                        assert payload is not None
+                        if calibration_task is not None:
+                            await self._send_control_result(
+                                websocket,
+                                request_id=request_id,
+                                action=action,
+                                valid=False,
+                                reason="calibration_in_progress",
+                                calibration_id=_calibration_unavailable_id(request_id),
+                            )
+                            continue
+                        calibration_id = f"calibration-{request_id}"
+                        state.calibration_started = True
+                        state.max_fps = max(self.max_fps, _CALIBRATION_MAX_FPS)
+                        calibration_request = (request_id, calibration_id)
+                        calibration_task = asyncio.create_task(
+                            self.eye_worker.start_calibration(
+                            session_id=claims.session_id,
+                            video_id=claims.video_id,
+                            calibration_id=calibration_id,
+                            pattern=payload,
+                            )
                         )
                     elif action == "stop_session":
+                        if calibration_task is not None:
+                            # A user cancellation must not wait for a long
+                            # EyeTrax calibration to finish. The worker's
+                            # cancellation path only releases in-memory
+                            # frames and calibration state.
+                            calibration_task.cancel()
+                            with contextlib.suppress(asyncio.CancelledError, Exception):
+                                await calibration_task
+                            calibration_task = None
+                            calibration_request = None
+                            state.calibration_started = False
+                            state.max_fps = self.max_fps
                         if process_task is None:
                             await self._send_control_result(
                                 websocket,
@@ -413,8 +519,79 @@ class VisionStreamApp:
             if process_task is not None:
                 with contextlib.suppress(Exception):
                     await process_task
+            if calibration_task is not None:
+                calibration_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await calibration_task
             if worker is not None:
                 await self._cleanup_worker(worker, state)
+
+    async def _process_calibration_frame(
+        self,
+        binary: DecodedBinaryFrame,
+        state: "_StreamState",
+        session_id: str,
+    ) -> _FrameOutcome:
+        """Forward a calibration frame to Eye without invoking Face."""
+
+        context = binary.metadata.context
+        eye_task = asyncio.create_task(self.eye_worker.infer(binary))
+        try:
+            try:
+                eye_result = await asyncio.wait_for(
+                    asyncio.shield(eye_task),
+                    timeout=self.inference_timeout_ms / 1000,
+                )
+            except asyncio.TimeoutError:
+                state.defer_cleanup(eye_task, lambda _result: None)
+                return _FrameOutcome(
+                    "drop", self._drop(context, "inference_timeout", retryable=True)
+                )
+            except asyncio.CancelledError:
+                if not eye_task.done():
+                    state.defer_cleanup(eye_task, lambda _result: None)
+                raise
+            except Exception:
+                return _FrameOutcome(
+                    "result",
+                    {
+                        "type": "result",
+                        "protocol_version": "1.0",
+                        **context.as_payload(),
+                        "gaze_sample": None,
+                        "gaze_reason": "eye_worker_unavailable",
+                        "expression_sample": None,
+                        "expression_reason": "calibration_in_progress",
+                    },
+                )
+
+            candidate = eye_result.gaze_sample
+            gaze_sample: Mapping[str, object] | None = None
+            gaze_reason = eye_result.reason or "calibration_in_progress"
+            if candidate is not None:
+                if not _same_gaze_payload_context(
+                    candidate, context, session_id=session_id
+                ):
+                    gaze_reason = "gaze_context_mismatch"
+                elif not isinstance(candidate.get("valid"), bool):
+                    gaze_reason = "eye_worker_invalid_response"
+                else:
+                    gaze_sample = candidate
+                    gaze_reason = None
+            return _FrameOutcome(
+                "result",
+                {
+                    "type": "result",
+                    "protocol_version": "1.0",
+                    **context.as_payload(),
+                    "gaze_sample": gaze_sample,
+                    "gaze_reason": gaze_reason,
+                    "expression_sample": None,
+                    "expression_reason": "calibration_in_progress",
+                },
+            )
+        finally:
+            del binary
 
     async def _process_frame(
         self,
@@ -429,6 +606,12 @@ class VisionStreamApp:
         frame_cleanup_deferred = False
         decode_task: asyncio.Task[Any] | None = None
         worker_task: asyncio.Task[Any] | None = None
+        eye_task: asyncio.Task[EyeInferenceResult] | None = None
+
+        def defer_eye_cleanup() -> None:
+            if eye_task is not None and not eye_task.done():
+                state.defer_cleanup(eye_task, lambda _result: None)
+
         try:
             if not state.inference_started:
                 return _FrameOutcome(
@@ -465,6 +648,7 @@ class VisionStreamApp:
                     self._error("invalid_message", retryable=False, frame=context),
                 )
             try:
+                eye_task = asyncio.create_task(self.eye_worker.infer(binary))
                 worker_task = asyncio.create_task(
                     asyncio.to_thread(worker.process, frame, context)
                 )
@@ -474,6 +658,7 @@ class VisionStreamApp:
                 )
             except asyncio.TimeoutError:
                 assert worker_task is not None
+                defer_eye_cleanup()
                 captured_frame = frame
                 state.defer_cleanup(
                     worker_task,
@@ -485,6 +670,7 @@ class VisionStreamApp:
                     "drop", self._drop(context, "inference_timeout", retryable=True)
                 )
             except asyncio.CancelledError:
+                defer_eye_cleanup()
                 if worker_task is not None and not worker_task.done():
                     captured_frame = frame
                     state.defer_cleanup(
@@ -495,6 +681,7 @@ class VisionStreamApp:
                     frame_cleanup_deferred = True
                 raise
             except Exception:
+                defer_eye_cleanup()
                 return _FrameOutcome(
                     "error",
                     self._error("vision_unavailable", retryable=True, frame=context),
@@ -512,17 +699,47 @@ class VisionStreamApp:
                     self._error("vision_unavailable", retryable=True, frame=context),
                 )
             if sample.reason == "timeout":
+                defer_eye_cleanup()
                 return _FrameOutcome(
                     "drop", self._drop(context, "inference_timeout", retryable=True)
                 )
+            gaze_sample: Mapping[str, object] | None = None
+            gaze_reason: str | None = "eye_not_connected"
+            if eye_task is not None:
+                try:
+                    eye_result = await asyncio.wait_for(
+                        asyncio.shield(eye_task),
+                        timeout=self.inference_timeout_ms / 1000,
+                    )
+                    candidate = eye_result.gaze_sample
+                    if candidate is None:
+                        gaze_reason = eye_result.reason or "gaze_unavailable"
+                    elif not _same_gaze_payload_context(
+                        candidate, context, session_id=session_id
+                    ):
+                        gaze_reason = "gaze_context_mismatch"
+                    elif not isinstance(candidate.get("valid"), bool):
+                        gaze_reason = "eye_worker_invalid_response"
+                    else:
+                        gaze_sample = candidate
+                        gaze_reason = None
+                except asyncio.TimeoutError:
+                    state.defer_cleanup(eye_task, lambda _result: None)
+                    gaze_reason = "eye_worker_timeout"
+                except asyncio.CancelledError:
+                    if eye_task is not None and not eye_task.done():
+                        state.defer_cleanup(eye_task, lambda _result: None)
+                    raise
+                except Exception:
+                    gaze_reason = "eye_worker_unavailable"
             return _FrameOutcome(
                 "result",
                 {
                     "type": "result",
                     "protocol_version": "1.0",
                     **context.as_payload(),
-                    "gaze_sample": None,
-                    "gaze_reason": "eye_not_connected",
+                    "gaze_sample": gaze_sample,
+                    "gaze_reason": gaze_reason,
                     "expression_sample": sample.to_payload(),
                     "expression_reason": None,
                 },
@@ -615,7 +832,9 @@ class VisionStreamApp:
         raise VisionStreamProtocolError("no supported frame encoding was offered")
 
     @classmethod
-    def _control_message(cls, event: Mapping[str, object]) -> tuple[str, str]:
+    def _control_message(
+        cls, event: Mapping[str, object]
+    ) -> tuple[str, str, Mapping[str, object] | None]:
         control = cls._json_message(event)
         if set(control) - _CONTROL_FIELDS:
             raise VisionStreamProtocolError("control message has unknown fields")
@@ -630,9 +849,11 @@ class VisionStreamApp:
         if action == "start_calibration":
             payload = control.get("payload")
             cls._validate_calibration_payload(payload)
+            assert isinstance(payload, Mapping)
+            return request_id, action, payload
         elif "payload" in control:
             raise VisionStreamProtocolError("control payload is not allowed")
-        return request_id, action
+        return request_id, action, None
 
     @staticmethod
     def _validate_calibration_payload(payload: object) -> None:
@@ -642,7 +863,7 @@ class VisionStreamApp:
         points = payload.get("points")
         if not isinstance(pattern_id, str) or _ID_PATTERN.fullmatch(pattern_id) is None:
             raise VisionStreamProtocolError("calibration pattern_id is invalid")
-        if not isinstance(points, list) or not 1 <= len(points) <= 32:
+        if not isinstance(points, list) or not 1 <= len(points) <= 64:
             raise VisionStreamProtocolError("calibration points are invalid")
         for point in points:
             if (
@@ -754,6 +975,7 @@ class _StreamState:
     selected_encoding: str
     max_fps: float
     inference_started: bool = False
+    calibration_started: bool = False
     current_epoch: int | None = None
     last_sequence: int = -1
     last_received_at: float | None = None

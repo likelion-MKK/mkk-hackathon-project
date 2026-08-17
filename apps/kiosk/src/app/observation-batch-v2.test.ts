@@ -6,6 +6,7 @@ import type {
   LookbookManifest,
 } from "./kiosk-types.ts";
 import { buildObservationBatchesV2 } from "./observation-batch-v2.ts";
+import type { VideoLayout } from "./video-context.ts";
 
 const manifest: LookbookManifest = {
   schema_version: "1.0",
@@ -30,6 +31,16 @@ const manifest: LookbookManifest = {
       },
     },
   ],
+};
+
+const videoLayout: VideoLayout = {
+  viewport_width_px: 1280,
+  viewport_height_px: 720,
+  source_width_px: 1280,
+  source_height_px: 720,
+  object_fit: "contain",
+  element_rect: { x_px: 0, y_px: 0, width_px: 1280, height_px: 720 },
+  content_rect: { x_px: 0, y_px: 0, width_px: 1280, height_px: 720 },
 };
 
 function gaze(
@@ -137,6 +148,9 @@ function build(
   expressionSamples: readonly ExpressionSample[],
   lookbookManifest = manifest,
 ) {
+  const videoLayoutsByFrameId = new Map(
+    gazeSamples.map((sample) => [sample.frame_id, videoLayout] as const),
+  );
   return buildObservationBatchesV2({
     batchId: "observation-batch-001",
     batchSequence: 0,
@@ -144,6 +158,7 @@ function build(
     manifest: lookbookManifest,
     gazeSamples,
     expressionSamples,
+    videoLayoutsByFrameId,
   });
 }
 
@@ -157,8 +172,8 @@ test("동일 frame_id의 시선과 표정을 하나의 v2 observation으로 결�
   assert.equal(observation.frame_id, "frame-1");
   assert.equal(observation.gaze?.producer_id, "eye-producer");
   assert.equal(observation.expression?.producer_id, "face-producer");
-  assert.equal(observation.attention?.producer_id, "kiosk-aoi-mapper-v1");
-  assert.equal(observation.attention?.candidates[0]?.product_id, "MCM-DEMO-BAG-001");
+  assert.equal(observation.attention?.producer_id, "kiosk-video-coordinate-v1");
+  assert.deepEqual(observation.attention?.candidates, []);
   assert.equal(observation.gaze_reason, null);
   assert.equal(observation.expression_reason, null);
   assert.equal(observation.derived_reason, null);
@@ -191,7 +206,7 @@ test("frame drop의 source sequence gap을 재번호화하지 않고 보존한�
   );
 });
 
-test("이탈 후 같은 단일 AOI로 돌아온 경우만 return 후보로 표시한다", () => {
+test("Kiosk는 상품 복귀를 판정하지 않고 Backend AOI 단계로 넘긴다", () => {
   const observations = build(
     [
       gaze(1),
@@ -207,7 +222,11 @@ test("이탈 후 같은 단일 AOI로 돌아온 경우만 return 후보로 표�
     "no_previous_observation",
   );
   assert.equal(observations[1].attention?.candidates.length, 0);
-  assert.equal(observations[2].derived?.gaze?.return_candidate, true);
+  assert.equal(observations[2].derived?.gaze?.return_candidate, null);
+  assert.equal(
+    observations[2].derived?.gaze?.return_candidate_reason,
+    "backend_aoi_required",
+  );
   assert.ok((observations[2].derived?.gaze?.movement?.distance_norm ?? 0) > 0);
 });
 
@@ -306,6 +325,20 @@ test("invalid gaze와 no-face를 좌표나 중립 score로 바꾸지 않는다",
   assert.equal(observation.derived?.expression, null);
 });
 
+test("캡처 시점 layout이 없으면 화면 좌표를 영상 좌표로 추정하지 않는다", () => {
+  const observation = buildObservationBatchesV2({
+    batchId: "observation-batch-no-layout",
+    batchSequence: 0,
+    sessionId: "session-v2-001",
+    manifest,
+    gazeSamples: [gaze(1)],
+    expressionSamples: [expression(1)],
+  })[0].observations[0];
+
+  assert.equal(observation.attention, null);
+  assert.equal(observation.attention_reason, "capture_layout_unavailable");
+});
+
 test("1초를 넘는 frame gap은 movement와 expression change 연속성을 reset한다", () => {
   const observations = build(
     [gaze(1), gaze(2, { captured_at_mono_ms: 1_501 })],
@@ -328,7 +361,7 @@ test("v2 batch 상한을 넘는 모든 frame을 순서대로 분할 보존한다
   assert.equal(batches[1].observations[0].sequence, 257);
 });
 
-test("겹치는 AOI는 특정 상품의 복귀 근거로 임의 귀속하지 않는다", () => {
+test("manifest AOI가 겹쳐도 Kiosk는 상품 후보를 만들지 않는다", () => {
   const overlappingManifest: LookbookManifest = {
     ...manifest,
     exposures: [
@@ -342,7 +375,7 @@ test("겹치는 AOI는 특정 상품의 복귀 근거로 임의 귀속하지 않
   };
   const observation = build([gaze(1)], [expression(1)], overlappingManifest)[0]
     .observations[0];
-  assert.equal(observation.attention?.candidates.length, 2);
+  assert.equal(observation.attention?.candidates.length, 0);
   assert.equal(observation.derived?.gaze?.return_candidate, null);
   assert.equal(
     observation.derived?.gaze?.return_candidate_reason,

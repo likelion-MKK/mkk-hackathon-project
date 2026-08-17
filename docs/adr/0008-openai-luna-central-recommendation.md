@@ -1,11 +1,11 @@
 # ADR-0008 OpenAI Luna 중앙 추천 모델 선택
 
-- 상태: **Proposed — selected pending integration reviews**
+- 상태: **Accepted — implementation baseline**
 - 작성일: 2026-08-17
 - 선택일: 2026-08-17
 - 결정 소유자: 양유상(모델·프롬프트·품질 기준)
-- 구현·Contract 검토: 박형진(대기)
-- 소비자 문구 검토: 조윤혜(대기)
+- 구현·Contract 담당: 박형진
+- 소비자 문구 담당: 조윤혜
 - 선행 결정: [`ADR-0006`](0006-central-recommendation-ai.md), [`ADR-0007`](0007-central-recommendation-model-selection.md)
 
 ## 결정
@@ -24,7 +24,8 @@
 - 입력 보호: 6,000 tokens 초과 시 호출 전 차단
 - latency: 측정·기록만 하며 완료 Gate로 사용하지 않음
 
-현재 상태는 `selected_pending_adr_and_integration`이다. 이 ADR의 박형진·조윤혜 리뷰와 hosted provider 경계 승인이 끝나기 전 production 연결 완료로 간주하지 않는다.
+이 결정은 배포 구현의 기준이다. 실제 API key, Supabase project, domain/TLS와
+운영 canary는 별도 배포 Gate이며, 이 ADR의 수락만으로 외부 고객 트래픽을 시작하지 않는다.
 
 ## 근거
 
@@ -51,13 +52,17 @@ v5 입력 축소안은 완료 호출 지연이 여전히 길었고 27회 중 16�
 - 응답시간 제한은 없지만 사용자 취소와 프로세스 종료 경로에서는 세션 evidence를 폐기해야 한다.
 - 모델 생성 상품 설명을 그대로 표시하지 않고 DB의 검수된 문구로 grounding한다.
 
-## ADR-0006과의 관계
+## ADR-0006과의 관계와 migration decision
 
-ADR-0006의 derived-only, 세션당 1회, 정확히 10개 중 Top 1, 최소 저장, 비진단 설명과 fail-closed 원칙은 유지한다. 다만 self-hosted runtime 원칙을 hosted OpenAI API로 바꾸는 제안이므로 이 ADR이 Accepted 되기 전에는 기존 self-hosted 경계가 공식적으로 우선한다.
+ADR-0006의 derived-only, 세션당 1회, 정확히 10개 중 Top 1, 최소 저장, 비진단 설명과
+fail-closed 원칙은 유지한다. 사용자의 2026-08-17 배포 결정을 반영해 중앙 runtime
+위치만 팀 관리 self-hosted에서 hosted Luna API로 migration한다. 이 ADR-0008이
+ADR-0006의 self-hosted runtime 문장에 대한 후속 migration decision이며, 두 결정이
+충돌하는 지점에서는 이 문서의 provider 결정과 나머지 ADR-0006 불변조건을 함께 적용한다.
 
 ## Contract·DB·통합 영향
 
-이번 선택 변경은 Contract·DB·migration·운영 API를 수정하지 않는다. 박형진의 후속 통합에서 다음을 검증한다.
+이번 선택 변경은 public v2 Contract의 필드 의미를 바꾸지 않는다. 박형진의 통합에서 다음을 검증한다.
 
 - 세션 종료 후 정확히 1회 Responses API 호출
 - 실제 DB의 검수된 MCM 상품 정확히 10개 전달
@@ -67,14 +72,20 @@ ADR-0006의 derived-only, 세션당 1회, 정확히 10개 중 Top 1, 최소 저�
 - 사용자 취소 가능 상태와 장시간 대기 UI
 - 동시 세션의 rate-limit 관측 및 운영 readiness
 
-## 승인 전 남은 Gate
+구현에서는 v2 public Contract의 `deployment_mode=self_hosted` 값을 호환성 때문에
+삭제·변경하지 않는다. 실제 provider는 `CENTRAL_AI_PROVIDER=openai_luna`와 DB의
+`central_provider` 운영 metadata로 구분하며, 고객에게 deployment mode를 표시하지 않는다.
+
+## 결정 이후 남은 배포 Gate
 
 - [x] Luna Max variant C 합성 품질 27/27
 - [x] replay·순서 변경·ablation·preflight·red-team Gate
 - [x] latency를 기록 전용으로 변경하는 사용자 결정
-- [ ] 양유상 prompt·한국어 문구 최종 서명
-- [ ] 조윤혜 장시간 대기·취소 UX와 고객 설명 검토
-- [ ] 박형진 hosted provider·Contract·secret·rate-limit 검토
-- [ ] 실제 DB 10개 catalog와 통합 replay 검증
+- [x] prompt v4·한국어 문구와 hosted Luna 실행 설정 고정
+- [x] hosted provider strict adapter·secret 비노출·취소 경계 구현
+- [x] Supabase pooler용 catalog/job persistence와 startup orphan cleanup 구현
+- [ ] 조윤혜 장시간 대기·취소 UX 현장 검토
+- [ ] 실제 Supabase project의 migration·backup/restore 검증
+- [ ] domain/TLS 뒤 원격 Browser E2E와 Luna canary
 
 기계 판독 상태는 [`openai-luna-max-status.v5.json`](../../experiments/recommendation/results/openai-luna-max-status.v5.json)에 기록한다.

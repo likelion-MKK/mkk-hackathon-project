@@ -1,11 +1,11 @@
 # Recommendation Engine Boundary
 
-신규 운영 방향은 `RecommendationEvidenceV2`와 정확히 10개 `ProductRecommendationProfileV2`를 self-hosted 중앙 판단 model에 전달하고, schema/catalog/evidence 검증을 통과한 단일 `RecommendationDecisionV2`만 공개하는 교체 지점이다. 입력 신호의 quality·결측·continuity reset과 모든 model/prompt/feature/catalog revision을 보존한다.
+신규 운영 방향은 `RecommendationEvidenceV2`와 정확히 10개 `ProductRecommendationProfileV2`를 hosted `gpt-5.6-luna` 중앙 판단 model에 전달하고, schema/catalog/evidence 검증을 통과한 단일 `RecommendationDecisionV2`만 공개하는 교체 지점이다. 입력 신호의 quality·결측·continuity reset과 모든 model/prompt/feature/catalog revision을 보존한다.
 
 Model runner는 API Pydantic/store를 import하지 않고 다음 순서를 지킨다.
 
 1. 결정적 extractor가 A/B/C 중 선택된 payload를 만든다.
-2. self-hosted model은 제공된 catalog ID 하나만 선택하거나 데이터 부족을 반환한다.
+2. Luna model은 제공된 catalog ID 하나만 선택하거나 데이터 부족을 반환한다.
 3. JSON Schema, catalog membership, evidence window reference, 금지 표현과 version 일치를 검증한다.
 4. 고객 문구는 model 자유 문장이 아니라 allowlisted reason/tendency code와 DB tag template으로 조합한다.
 

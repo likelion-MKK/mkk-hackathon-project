@@ -7,11 +7,8 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import {
-  createProductAttentionEvent,
-  mapGazeToVideoPoint,
-} from "../app/reaction-batch.ts";
-import type { GazeSample, LookbookManifest } from "../app/kiosk-types.ts";
+import { mapGazeToVideoPoint } from "../app/reaction-batch.ts";
+import type { GazeSample } from "../app/kiosk-types.ts";
 import {
   calculateContainedVideoLayout,
   createFrameContext,
@@ -36,14 +33,13 @@ type LookbookPlayerProps = {
   debugEnabled: boolean;
   debugGazeLayout: FrameContext["layout"] | null;
   debugGazeSample: GazeSample | null;
-  manifest: LookbookManifest;
   posterUrl: string;
   sessionId: string;
   videoId: string;
   videoUrl: string;
   onCameraRetry: () => Promise<void>;
   onComplete: () => Promise<void>;
-  onFrameCapture: (context: FrameContext) => Promise<void>;
+  onFrameCapture: (contextFactory: () => FrameContext) => Promise<void>;
   onHome: () => void;
   onPlaybackUnavailable: () => void;
 };
@@ -66,19 +62,6 @@ function toPixelRect(rect: DOMRect): PixelRect {
   };
 }
 
-function toPolygonClipPath(points: [number, number][]): string {
-  return `polygon(${points.map(([x, y]) => `${x * 100}% ${y * 100}%`).join(", ")})`;
-}
-
-function getPolygonCenter(points: [number, number][]): [number, number] {
-  const total = points.reduce(
-    ([xTotal, yTotal], [x, y]) => [xTotal + x, yTotal + y],
-    [0, 0],
-  );
-
-  return [total[0] / points.length, total[1] / points.length];
-}
-
 export function LookbookPlayer({
   cameraState,
   categoryLabel,
@@ -86,7 +69,6 @@ export function LookbookPlayer({
   debugEnabled,
   debugGazeLayout,
   debugGazeSample,
-  manifest,
   posterUrl,
   sessionId,
   videoId,
@@ -100,6 +82,7 @@ export function LookbookPlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const stageRef = useRef<HTMLElement>(null);
   const playbackEpochRef = useRef(0);
+  const sourceIdentityRef = useRef(`${videoId}\u0000${videoUrl}`);
   const frameSequenceRef = useRef(0);
   const didCompleteRef = useRef(false);
   const [mediaState, setMediaState] = useState<MediaState>(
@@ -116,6 +99,22 @@ export function LookbookPlayer({
     playbackEpochRef.current += 1;
     setPlaybackEpoch(playbackEpochRef.current);
   };
+
+  useEffect(() => {
+    const nextIdentity = `${videoId}\u0000${videoUrl}`;
+    if (sourceIdentityRef.current === nextIdentity) return;
+
+    // A changed source starts a new playback epoch before any frame from the
+    // replacement media can be captured. Sequence remains session-monotonic.
+    sourceIdentityRef.current = nextIdentity;
+    playbackEpochRef.current += 1;
+    setPlaybackEpoch(playbackEpochRef.current);
+    didCompleteRef.current = false;
+    setIsPlaying(false);
+    setCurrentTimeMs(0);
+    setDurationMs(0);
+    setMediaState(videoUrl ? "loading" : "missing");
+  }, [videoId, videoUrl]);
 
   const readFrameContext = useCallback((sequence: number, frameId: string) => {
     const video = videoRef.current;
@@ -203,14 +202,13 @@ export function LookbookPlayer({
       if (!isActive) return;
 
       const sequence = frameSequenceRef.current;
-      const context = readFrameContext(
-        sequence,
-        `frame-${String(sequence).padStart(8, "0")}`,
-      );
-      if (!context) return;
-
+      const frameId = `frame-${String(sequence).padStart(8, "0")}`;
       frameSequenceRef.current += 1;
-      void onFrameCapture(context).catch(() => undefined);
+      void onFrameCapture(() => {
+        const context = readFrameContext(sequence, frameId);
+        if (!context) throw new Error("Lookbook frame context is unavailable.");
+        return context;
+      }).catch(() => undefined);
     };
 
     captureCurrentFrame();
@@ -283,14 +281,6 @@ export function LookbookPlayer({
   };
 
   const contentRect = contextPreview?.layout.content_rect;
-  const activeExposures = useMemo(
-    () =>
-      manifest.exposures.filter(
-        (exposure) =>
-          exposure.start_ms <= currentTimeMs && currentTimeMs < exposure.end_ms,
-      ),
-    [currentTimeMs, manifest.exposures],
-  );
   const debugVideoPoint = useMemo(
     () =>
       debugGazeSample && debugGazeLayout
@@ -298,20 +288,6 @@ export function LookbookPlayer({
         : null,
     [debugGazeLayout, debugGazeSample],
   );
-  const debugAttention = useMemo(() => {
-    if (!debugGazeSample || !debugVideoPoint) return null;
-
-    try {
-      return createProductAttentionEvent(
-        debugGazeSample,
-        manifest,
-        debugGazeSample.sequence,
-        debugVideoPoint,
-      );
-    } catch {
-      return null;
-    }
-  }, [debugGazeSample, debugVideoPoint, manifest]);
   const contentStyle =
     contentRect && stageRect
       ? ({
@@ -329,9 +305,7 @@ export function LookbookPlayer({
         ? "WAITING FOR CAPTURE LAYOUT"
         : debugVideoPoint.outside_video
           ? "OUTSIDE VIDEO"
-          : debugAttention && debugAttention.candidates.length > 0
-            ? `AOI HIT / ${debugAttention.candidates.map((candidate) => candidate.product_id).join(", ")}`
-            : "VALID / NO AOI HIT";
+          : "VALID VIDEO POINT / BACKEND AOI PENDING";
   const mediaMessage =
     mediaState === "missing"
       ? "룩북 영상 파일을 연결해주세요."
@@ -368,25 +342,6 @@ export function LookbookPlayer({
           <>
             {contentStyle && (
               <div className="lookbook-debug-canvas" style={contentStyle} aria-hidden="true">
-                {activeExposures.map((exposure) => {
-                  const [centerX, centerY] = getPolygonCenter(exposure.shape.points);
-
-                  return (
-                    <div className="lookbook-aoi-region" key={exposure.exposure_id}>
-                      <span
-                        className="lookbook-aoi-region__fill"
-                        style={{ clipPath: toPolygonClipPath(exposure.shape.points) }}
-                      />
-                      <span
-                        className="lookbook-aoi-region__label"
-                        style={{ left: `${centerX * 100}%`, top: `${centerY * 100}%` }}
-                      >
-                        {exposure.product_id}
-                      </span>
-                    </div>
-                  );
-                })}
-
                 {debugVideoPoint?.valid && !debugVideoPoint.outside_video && (
                   <span
                     className="lookbook-gaze-point"
@@ -419,8 +374,8 @@ export function LookbookPlayer({
                   </dd>
                 </div>
                 <div>
-                  <dt>EXPOSURES</dt>
-                  <dd>{activeExposures.length} ACTIVE</dd>
+                  <dt>AOI</dt>
+                  <dd>BACKEND ONLY</dd>
                 </div>
               </dl>
             </aside>
@@ -435,7 +390,7 @@ export function LookbookPlayer({
 
         <span className={`lookbook-camera-status is-${cameraState}`} role="status">
           {cameraState === "ready"
-            ? "CAMERA ACTIVE · IN-PROCESS REPLAY"
+            ? "CAMERA ACTIVE · TEMPORARY VISION"
             : cameraState === "requesting"
               ? "CAMERA CONNECTING"
               : "CAMERA OFF"}

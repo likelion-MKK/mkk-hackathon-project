@@ -28,3 +28,4 @@
 - `product-detail-v2.invalid.json`: 자산 pending record에 검증되지 않은 개별 상품 URL을 승인 정보처럼 넣습니다.
 - `manager-product-request-v2.invalid.json`: allowlist 밖 심리 profile intent를 사용합니다.
 - `manager-event-v2.invalid.json`: v2에서 금지한 자동 `recommendation_ready` event를 사용합니다.
+- `lookbook-aoi-metadata-v2.invalid.json`: `pending_review` revision에 검수되지 않은 exposure를 넣어 fail-closed 승인 규칙을 위반합니다.

@@ -3,7 +3,7 @@
   "$id": "https://mcm-lookbook.example/contracts/v2/frame-observation-v2.schema.json",
   "x-event-schema": true,
   "title": "FrameObservationV2",
-  "description": "원본 프레임 없이 동일 캡처 프레임의 유효한 시선, AOI와 관찰 가능한 얼굴 동작을 결합합니다.",
+  "description": "원본 프레임 없이 카메라 frame 캡처 순간에 고정한 영상 문맥, 유효한 시선 좌표와 관찰 가능한 얼굴 동작을 결합합니다. Product candidate는 Backend가 승인 AOI로 만든 내부 evidence에서만 허용됩니다.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -33,7 +33,11 @@
       "minimum": 0,
       "description": "세션에서 처음 수락된 분석 frame을 0으로 한 상대 시간(ms)입니다. 세션 안에서 감소할 수 없습니다."
     },
-    "video_time_ms": { "type": "integer", "minimum": 0 },
+    "video_time_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Eye/Face 응답 시각이 아니라 이 frame을 캡처한 순간의 video currentTime snapshot입니다."
+    },
     "playback_epoch": { "type": "integer", "minimum": 0 },
     "gaze": {
       "oneOf": [
@@ -119,6 +123,23 @@
         "calibration_id": { "$ref": "#/$defs/id" }
       }
     },
+    "componentCode": {
+      "enum": [
+        "whole_product",
+        "body",
+        "handle",
+        "strap",
+        "closure",
+        "hardware",
+        "pocket",
+        "trim",
+        "logo"
+      ]
+    },
+    "visualTag": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+    },
     "candidate": {
       "type": "object",
       "additionalProperties": false,
@@ -126,7 +147,22 @@
       "properties": {
         "exposure_id": { "$ref": "#/$defs/id" },
         "product_id": { "$ref": "#/$defs/id" },
-        "priority": { "type": "integer", "minimum": 0 }
+        "priority": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "v2 호환 필드이며 AOI 선택 우선순위로 사용하지 않습니다. Backend는 0만 생성합니다."
+        },
+        "parent_aoi_id": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/id" }]
+        },
+        "specificity_rank": { "type": "integer", "minimum": 0, "maximum": 32 },
+        "component_code": { "$ref": "#/$defs/componentCode" },
+        "observed_visual_tag_ids": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/visualTag" }
+        }
       }
     },
     "attention": {
@@ -151,6 +187,7 @@
         "candidates": {
           "type": "array",
           "maxItems": 32,
+          "description": "Kiosk producer는 항상 빈 배열을 보내며 Backend가 승인 AOI를 적용한 내부 timeline에서만 채웁니다.",
           "items": { "$ref": "#/$defs/candidate" }
         }
       },

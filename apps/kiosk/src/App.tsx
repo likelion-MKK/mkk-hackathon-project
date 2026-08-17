@@ -43,7 +43,12 @@ import {
   presentMockRecommendation,
   type RecommendationPresentation,
 } from "./app/recommendation-presentation.ts";
-import type { FrameContext, VideoLayout } from "./app/video-context.ts";
+import {
+  calculateContainedVideoLayout,
+  createFrameContext,
+  type FrameContext,
+  type VideoLayout,
+} from "./app/video-context.ts";
 import type {
   ExpressionSample,
   GazeSample,
@@ -79,7 +84,7 @@ import "./App.css";
 const useMockApi = import.meta.env.VITE_USE_MOCK_API?.trim().toLowerCase() === "true";
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() ?? "";
 const configuredLookbookId =
-  import.meta.env.VITE_LOOKBOOK_ID?.trim() || "mcm-central-ai-replay-v2";
+  import.meta.env.VITE_LOOKBOOK_ID?.trim() || "mcm-lookbook-v2";
 const mockApiClient = new MockApiClient({ sessionStartDelayMs: 450 });
 const httpApiClient = new HttpApiClient(apiBaseUrl);
 const apiClient: ApiClient = useMockApi ? mockApiClient : httpApiClient;
@@ -130,16 +135,28 @@ type ConsentIssue =
   | "camera-denied"
   | "camera-error";
 
+const dense5CalibrationPoints: [number, number][] = [
+  ...[0.1, 0.3, 0.5, 0.7, 0.9].flatMap((y, row) =>
+    (row % 2 === 0 ? [0.1, 0.3, 0.5, 0.7, 0.9] : [0.9, 0.7, 0.5, 0.3, 0.1]).map(
+      (x) => [x, y] as [number, number],
+    ),
+  ),
+];
+const validationCalibrationPoints: [number, number][] = [
+  [0.2, 0.3],
+  [0.38, 0.3],
+  [0.2, 0.7],
+  [0.42, 0.7],
+  [0.8, 0.3],
+  [0.62, 0.3],
+  [0.8, 0.7],
+  [0.58, 0.7],
+];
 const calibrationPattern = {
-  pattern_id: "five-point-v1",
-  points: [
-    [0.5, 0.5],
-    [0.1, 0.1],
-    [0.9, 0.1],
-    [0.1, 0.9],
-    [0.9, 0.9],
-  ] as [number, number][],
+  pattern_id: "dense5-validation-v1",
+  points: [...dense5CalibrationPoints, ...validationCalibrationPoints],
 };
+const CALIBRATION_CAPTURE_INTERVAL_MS = 50;
 
 type CategoryOption = {
   name: ProductCategory;
@@ -689,18 +706,62 @@ function CameraConsent({
 
 function Calibration({
   onHome,
+  onBegin,
   onComplete,
+  onFrameCapture,
 }: {
   onHome: () => void;
+  onBegin: () => Promise<unknown>;
   onComplete: () => Promise<void>;
+  onFrameCapture: () => Promise<void>;
 }) {
   useEffect(() => {
-    const calibrationTimer = window.setTimeout(() => {
-      void onComplete();
-    }, 1800);
+    let active = true;
+    const frameTimer = window.setInterval(() => {
+      void onFrameCapture().catch(() => undefined);
+    }, CALIBRATION_CAPTURE_INTERVAL_MS);
 
-    return () => window.clearTimeout(calibrationTimer);
-  }, [onComplete]);
+    void (async () => {
+      try {
+        await onBegin();
+        if (active) await onComplete();
+      } catch {
+        // Complete the same guarded flow so a failed stream/calibration
+        // request is surfaced by the parent instead of becoming an
+        // unhandled promise rejection.
+        if (active) await onComplete();
+      } finally {
+        window.clearInterval(frameTimer);
+      }
+    })();
+
+    return () => {
+      active = false;
+      window.clearInterval(frameTimer);
+    };
+  }, [onBegin, onComplete, onFrameCapture]);
+
+  const [targetIndex, setTargetIndex] = useState(0);
+  useEffect(() => {
+    let active = true;
+    let currentIndex = 0;
+    let targetTimer: number | undefined;
+    const scheduleNextTarget = () => {
+      const duration = currentIndex < dense5CalibrationPoints.length ? 2_000 : 1_750;
+      targetTimer = window.setTimeout(() => {
+        if (!active) return;
+        currentIndex = (currentIndex + 1) % calibrationPattern.points.length;
+        setTargetIndex(currentIndex);
+        scheduleNextTarget();
+      }, duration);
+    };
+    scheduleNextTarget();
+    return () => {
+      active = false;
+      if (targetTimer !== undefined) window.clearTimeout(targetTimer);
+    };
+  }, []);
+  const [targetX, targetY] = calibrationPattern.points[targetIndex] ?? [0.5, 0.5];
 
   return (
     <main className="store-screen calibration-screen screen-enter">
@@ -715,7 +776,7 @@ function Calibration({
           </h1>
           <p>
             고개는 편안하게 두고 화면 위의 검은 점만 바라봐주세요.
-            실제 시선 보정 기능은 다음 개발 단계에서 연결됩니다.
+            보정이 끝날 때까지 점의 움직임을 눈으로 따라가 주세요.
           </p>
           <span className="preview-label">CALIBRATION PREVIEW</span>
           <button className="back-link" type="button" onClick={onHome}>
@@ -731,7 +792,10 @@ function Calibration({
             <span />
             <span />
           </div>
-          <span className="calibration-target" />
+          <span
+            className="calibration-target"
+            style={{ left: `${targetX * 100}%`, top: `${targetY * 100}%` }}
+          />
           <p>FOLLOW THE DOT WITH YOUR EYES</p>
         </div>
       </section>
@@ -779,6 +843,7 @@ function ReportScreen({
   onRequestManager: () => Promise<void>;
 }) {
   const [imageFailed, setImageFailed] = useState(false);
+  const [qrFailed, setQrFailed] = useState(false);
   const [requestState, setRequestState] = useState<"idle" | "sending" | "sent" | "failed">(
     "idle",
   );
@@ -802,6 +867,9 @@ function ReportScreen({
   const productUrl = isCentralProduct
     ? (product.official_product_url ?? product.official_listing_url)
     : product.product_url;
+  const qrUrl = isCentralProduct && product.approved_asset && product.qr_asset_path
+    ? `/${product.qr_asset_path}`
+    : null;
 
   return (
     <main className="store-screen report-screen">
@@ -823,6 +891,16 @@ function ReportScreen({
           </p>
           <h2>{product.display_name}</h2>
           <p className="report-reason">{recommendation.reason}</p>
+          {qrUrl && !qrFailed && (
+            <div className="report-qr">
+              <img
+                src={qrUrl}
+                alt="공식 상품 페이지 QR 코드"
+                onError={() => setQrFailed(true)}
+              />
+              <span>공식 상품 페이지에서 보기</span>
+            </div>
+          )}
           {recommendation.mode === "mock_v1" && (
             <p className="report-disclaimer">개발 환경에서만 사용하는 v1 Mock fixture 결과입니다.</p>
           )}
@@ -910,6 +988,8 @@ function App() {
   const expressionSamples = useRef<ExpressionSample[]>([]);
   const sessionStartAbortController = useRef<AbortController | null>(null);
   const recommendationAbortController = useRef<AbortController | null>(null);
+  const calibrationPromise = useRef<ReturnType<typeof visionClient.startCalibration> | null>(null);
+  const calibrationSequence = useRef(0);
 
   const abortSessionStart = useCallback(() => {
     sessionStartAbortController.current?.abort();
@@ -954,6 +1034,8 @@ function App() {
     abortSessionStart();
     recommendationAbortController.current?.abort();
     recommendationAbortController.current = null;
+    calibrationPromise.current = null;
+    calibrationSequence.current = 0;
     frameSource.stop();
     if (session && screen !== "report") {
       if (useMockApi) void mockApiClient.discardSession(session.session_id);
@@ -989,6 +1071,8 @@ function App() {
     abortSessionStart();
     recommendationAbortController.current?.abort();
     recommendationAbortController.current = null;
+    calibrationPromise.current = null;
+    calibrationSequence.current = 0;
     frameSource.stop();
     gazeSamples.current.length = 0;
     videoLayoutsByFrameId.current.clear();
@@ -1140,34 +1224,77 @@ function App() {
     }
   };
 
+  const beginCalibration = useCallback(() => {
+    if (calibrationPromise.current) return calibrationPromise.current;
+    calibrationSequence.current = 0;
+    const promise = flowController.runSerialized(() =>
+      visionClient.startCalibration(calibrationPattern),
+    );
+    calibrationPromise.current = promise;
+    return promise;
+  }, [flowController]);
+
   const completeCalibration = useCallback(async () => {
     const generation = flowController.captureGeneration();
 
     try {
-      const result = await flowController.runSerialized(() =>
-        visionClient.startCalibration(calibrationPattern),
-      );
+      const result = await beginCalibration();
       if (!flowController.isCurrent(generation)) return;
 
-      // The merged localhost Gateway is intentionally Face-only. EyeTrax is not
-      // connected yet, so its explicit calibration absence must not block the
-      // MediaPipe live slice. A future Eye-connected Gateway must return valid=true.
-      const faceOnlyCalibration =
-        configuredVisionMode === "live" && result.reason === "eye_not_connected";
-      if (!result.valid && !faceOnlyCalibration) {
+      // Production live mode is fail-closed: an unavailable Eye worker is not
+      // converted into a neutral gaze or a successful calibration.
+      if (!result.valid) {
         throw new Error(result.reason ?? "calibration_failed");
       }
       await flowController.runSerialized(() => visionClient.startInference());
 
       if (flowController.isCurrent(generation)) send("CALIBRATION_SUCCESS");
     } catch {
+      calibrationPromise.current = null;
       frameSource.stop();
       if (flowController.isCurrent(generation)) {
         setCameraState("error");
         setFlowError("로컬 시선 보정을 완료하지 못했습니다.");
       }
     }
-  }, [flowController, send]);
+  }, [beginCalibration, flowController, send]);
+
+  const captureCalibrationFrame = useCallback(async () => {
+    if (!session || !manifest) return;
+    const dimensions = frameSource.getVideoDimensions();
+    if (!dimensions) return;
+
+    const viewportWidth = Math.max(1, document.documentElement.clientWidth || window.innerWidth);
+    const viewportHeight = Math.max(1, document.documentElement.clientHeight || window.innerHeight);
+    const layout = calculateContainedVideoLayout({
+      viewport_width_px: viewportWidth,
+      viewport_height_px: viewportHeight,
+      source_width_px: dimensions.width,
+      source_height_px: dimensions.height,
+      element_rect: {
+        x_px: 0,
+        y_px: 0,
+        width_px: viewportWidth,
+        height_px: viewportHeight,
+      },
+    });
+    const sequence = calibrationSequence.current;
+    calibrationSequence.current += 1;
+    const context = createFrameContext({
+      session_id: session.session_id,
+      sequence,
+      frame_id: `calibration-frame-${String(sequence).padStart(8, "0")}`,
+      captured_at_mono_ms: performance.now(),
+      video_id: manifest.video_id,
+      video_time_seconds: 0,
+      playback_epoch: 0,
+      layout,
+    });
+
+    await frameSource.capture(context, async (frame, frameContext, signal) => {
+      await visionClient.sendFrame(frame, frameContext, { signal });
+    });
+  }, [manifest, session]);
 
   const completeLookbook = useCallback(async () => {
     const generation = flowController.captureGeneration();
@@ -1245,14 +1372,20 @@ function App() {
   }, [flowController, manifest, send, session]);
 
   const captureCameraFrame = useCallback(
-    async (context: FrameContext) => {
+    async (contextFactory: () => FrameContext) => {
       const generation = flowController.captureGeneration();
-      rememberCapturedFrameLayout(videoLayoutsByFrameId.current, context);
 
       try {
-        await frameSource.capture(context, async (frame, frameContext, signal) => {
-          await visionClient.sendFrame(frame, frameContext, { signal });
-        });
+        await frameSource.capture(
+          () => {
+            const context = contextFactory();
+            rememberCapturedFrameLayout(videoLayoutsByFrameId.current, context);
+            return context;
+          },
+          async (frame, frameContext, signal) => {
+            await visionClient.sendFrame(frame, frameContext, { signal });
+          },
+        );
       } catch (error: unknown) {
         if (
           !flowController.isCurrent(generation) ||
@@ -1414,7 +1547,14 @@ function App() {
   }
 
   if (screen === "calibration") {
-    return <Calibration onHome={restart} onComplete={completeCalibration} />;
+    return (
+      <Calibration
+        onBegin={beginCalibration}
+        onComplete={completeCalibration}
+        onFrameCapture={captureCalibrationFrame}
+        onHome={restart}
+      />
+    );
   }
 
   if (screen === "lookbook") {
@@ -1436,7 +1576,6 @@ function App() {
         debugEnabled={enableAoiDebugOverlay}
         debugGazeLayout={latestGazeLayout}
         debugGazeSample={latestGazeSample}
-        manifest={manifest}
         posterUrl={getLookbookPoster(selectedCategory)}
         sessionId={session.session_id}
         videoId={manifest.video_id}

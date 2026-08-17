@@ -29,6 +29,8 @@
     {
       "product_id": "mcm-toni-medium-disco-visetos",
       "exposure_duration_ms": 10000,
+      "observed_component_codes": ["whole_product"],
+      "observed_visual_tag_ids": ["monogram", "shopper"],
       "gaze": {
         "valid_observation_count": 34,
         "observed_attention_ms": 3200,
@@ -56,6 +58,8 @@
     {
       "product_id": "mcm-diamant-3d-small-calfskin",
       "exposure_duration_ms": 10000,
+      "observed_component_codes": [],
+      "observed_visual_tag_ids": [],
       "gaze": null,
       "gaze_reason": "no_product_attention",
       "expression": null,
@@ -71,6 +75,8 @@
       "video_start_ms": 4000,
       "video_end_ms": 7200,
       "playback_epoch": 0,
+      "observed_component_codes": ["whole_product"],
+      "observed_visual_tag_ids": ["monogram", "shopper"],
       "evidence_codes": ["observed_attention", "return_candidate", "face_action_change"]
     }
   ],

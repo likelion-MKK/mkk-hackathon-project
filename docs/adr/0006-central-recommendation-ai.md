@@ -23,7 +23,9 @@
 1. Eye·Face 생산자는 frame을 처리해 정규화된 파생 sample·event를 만든다.
 2. Evidence Builder는 같은 session·video·playback epoch의 capture time과 `video_time_ms`를 기준으로 시선 좌표·이동·체류·재확인·표정 관찰값·변화율·지속성·품질·무효 사유를 결합한다.
 3. 중앙 AI에는 bounded `RecommendationEvidence` JSON만 전달한다. 원본 frame·영상·image bytes·base64·embedding·원본 경로는 입력에 포함하지 않는다.
-4. 중앙 AI는 팀이 통제하는 self-hosted runtime에서 실행한다. 외부 hosted AI API를 production 판단 경로로 사용하지 않는다.
+4. 중앙 AI runtime은 ADR-0008의 migration decision에 따라 hosted Luna를 사용할 수
+   있다. provider가 hosted여도 원본 frame·영상·image bytes·base64·embedding·원본
+   경로는 전송하지 않으며, store/tool/web/conversation과 재시도는 사용하지 않는다.
 5. 룩북이 종료되고 evidence가 finalize된 뒤 세션당 한 번만 호출한다.
 6. 후보군은 DB의 활성·검수된 **MCM 가방 정확히 10개**다.
 7. 정상 결과는 후보 안의 **Top 1** 상품, allowlist reason code, evidence reference와 비진단적 설명이다.
@@ -33,7 +35,7 @@
 
 - 원본 frame은 ADR-0001이 허용하는 Vision 추론 메모리에서만 처리하고 해당 frame 성공·실패·timeout 뒤 해제한다.
 - frame 단위 파생 sample·event와 결합 evidence는 bounded session memory에서만 유지한다.
-- 추천 성공·실패·취소·만료와 제한된 retry 종료 뒤 evidence와 request state를 폐기한다.
+- 추천 성공·실패·취소·만료 뒤 evidence와 request state를 폐기한다. ADR-0008의 hosted Luna 경로는 provider 오류에도 자동 retry하지 않는다.
 - 파일, PostgreSQL, object storage, cache, queue, 로그, APM, browser storage, artifact와 backup에 frame 단위 timeline을 저장하지 않는다.
 - DB에는 상품 10개 profile과 필요한 최소 최종 추천만 저장한다. 최소 metadata와 보유 기간은 별도 정책으로 확정한다.
 
@@ -135,7 +137,9 @@ PostgreSQL migration·seed adapter가 구현되었다. 아직 공유 PR 승인�
 
 ### 외부 hosted 추천 API
 
-파생 신호라도 제3자 전송 승인·보유·학습 사용 조건이 추가된다. MVP는 self-hosted로 고정한다.
+파생 신호라도 제3자 전송 승인·보유·학습 사용 조건이 추가된다. 사용자의 후속
+ADR-0008 migration decision에 따라 hosted `gpt-5.6-luna`를 선택할 수 있지만,
+derived-only 입력·`store=false`·strict output 검증·세션당 1회 호출은 유지한다.
 
 ### frame timeline 영구 저장 후 batch 분석
 
@@ -159,7 +163,8 @@ PostgreSQL migration·seed adapter가 구현되었다. 아직 공유 PR 승인�
 - v2 evidence·result, catalog migration과 UI vertical slice를 유지·검증해야 한다.
 - 생성 모델의 비결정성·환각·과잉 심리 추론을 validator와 eval로 통제해야 한다.
 - frame timeline을 저장하지 않으므로 운영 사건 재현은 version·aggregate metric과 승인된 replay fixture에 의존한다.
-- 구체적인 모델·input variant·weight checksum·결과 보유 기간은 아직 결정되지 않았다.
+- ADR-0008에서 hosted Luna·variant C·prompt v4를 결정했으며, 결과 보유 기간과
+  실제 provider canary는 배포 Gate로 남긴다.
 
 ## 9. Rollout Gate와 rollback
 
@@ -167,12 +172,20 @@ production 연결 전 다음을 모두 만족한다.
 
 - [x] RecommendationEvidence와 Top 1 결과 Contract·example·자동화 tests 구현
 - [x] MCM 가방 exactly 10 catalog와 합성 replay AOI ID 무결성 검증
-- [ ] 선택 모델 revision·license·checksum·benchmark와 prompt version 승인
+- [x] 선택 모델·benchmark와 prompt version 승인(ADR-0008)
 - [x] 후보 밖 ID, 복수 결과, 근거 없는 설명과 심리 단정 fail-closed 자동화 검증
 - [x] 정상·invalid·insufficient·timeout·취소·중복 finalize 합성 replay 통과
 - [x] test-only stub에서 세션당 중앙 모델 호출 수 1 검증
 - [x] 앱 구조·테스트에서 종료 뒤 transient frame·derived evidence 삭제와 timeline DB table 부재 확인
 - [ ] S04 Top 1·한계 문구·명시적 Manager 요청 E2E 통과
+
+### 9.1 Hosted Luna migration gate
+
+ADR-0008 Accepted 이후 중앙 추천 provider는 `CENTRAL_AI_PROVIDER=openai_luna`로
+설정한다. v2 public Contract의 `deployment_mode=self_hosted` 호환값은 삭제하지
+않으며, 실제 provider는 runtime 환경과 DB `central_provider` metadata로 기록한다.
+Hosted 호출 실패·refusal·incomplete·429·5xx는 재시도 없이 `failed`로 끝내고,
+취소·shutdown·30분 orphan cleanup에서는 transient evidence를 복구하지 않는다.
 
 체크된 항목도 현재 branch의 fixture·test 범위다. live PostgreSQL, 실제 model server,
 reverse proxy·APM와 실제 Browser를 사용한 비잔존 검증은 별도 production Gate다.

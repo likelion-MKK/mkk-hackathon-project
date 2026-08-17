@@ -1,8 +1,8 @@
 # 문서 지도와 에이전트 읽기 순서
 
 - 상태: **Current canonical map**
-- 갱신일: 2026-08-16
-- 기준선: `dev` commit `a6eb3d78f47ce38da9d0b2be9b0794479986e280`
+- 갱신일: 2026-08-18
+- 기준선: `dev` commit `77ae806192db56ef2472439a0359380e7025fae2`
 
 이 문서는 새 요구사항을 만들지 않는다. 현재 제품 방향, 승인 결정, 구현 계약, 작업 규칙과 역사 자료의 위치를 구분해 연결한다.
 
@@ -16,7 +16,10 @@ README.md
   → 해당 ADR·Contract·영역 README·fixture
 ```
 
-중앙 추천 방향을 다루면 [`ADR-0006`](adr/0006-central-recommendation-ai.md)을 반드시 읽는다. 원격 Vision, Face 생산자, Eye 생산자 결정을 바꿀 때만 각각 ADR-0001·0003·0004를 추가한다. Superseded 문서를 현재 기준처럼 읽지 않는다.
+중앙 추천 방향을 다루면 [`ADR-0006`](adr/0006-central-recommendation-ai.md)과
+hosted Luna migration을 결정한 [`ADR-0008`](adr/0008-openai-luna-central-recommendation.md)을
+반드시 읽는다. 원격 Vision, Face 생산자, Eye 생산자 결정을 바꿀 때만 각각
+ADR-0001·0003·0004를 추가한다. Superseded 문서를 현재 기준처럼 읽지 않는다.
 
 ## 2. 활성 공식 문서
 
@@ -26,7 +29,7 @@ README.md
 | [`AGENTS.md`](../AGENTS.md) | 우선순위, 소유권, 개인정보·작업 안전 규칙 | 모든 AI 작업 시작 |
 | [`OVERALL_DESIGN.md`](OVERALL_DESIGN.md) | canonical 구성요소·데이터 흐름·수명·고객 문구 | 전체 구조·경계 변경 |
 | [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) | 현재 Contract와 목표의 차이, owner·PR 순서·완료 Gate | 구현·스프린트·인계 |
-| [`ADR-0006`](adr/0006-central-recommendation-ai.md) | derived-only self-hosted 중앙 판단, 1회 호출, 가방 10개·Top 1, evidence 폐기 | 추천·DB·프롬프트·결과 UI |
+| [`ADR-0006`](adr/0006-central-recommendation-ai.md) | derived-only 중앙 판단, 1회 호출, 가방 10개·Top 1, evidence 폐기 | 추천·DB·프롬프트·결과 UI |
 | [`ADR-0007`](adr/0007-central-recommendation-model-selection.md) | 중앙 추천 model·artifact·runtime·variant 선정용 Proposed benchmark 결정 초안 | 후보 provenance·실행·사람 검토·선택 승인 |
 | [`ADR-0008`](adr/0008-openai-luna-central-recommendation.md) | Luna Max·max·variant C·prompt v4 선택과 hosted provider 통합 Gate | OpenAI 중앙 추천 선택·timeout·latency·실패 경계 |
 | [`CONTRIBUTING.md`](../CONTRIBUTING.md) | `dev` 기반 branch·PR·Contract First | 작업 시작·PR 준비 |
@@ -44,9 +47,9 @@ README.md
 | [`ADR-0001 원격 Eye·Face 추론`](adr/0001-remote-vision-inference.md) | Proposed | 고객 frame의 WSS 전송, Vision Gateway, 원본 비저장·장애·배포 Gate | 추천 AI 입력·파생 수명은 ADR-0006이 관할; frame은 중앙 AI에 전달하지 않음 |
 | [`ADR-0003 Face 모델·taxonomy·fallback`](adr/0003-face-model-taxonomy-fallback.md) | Proposed | Face 관찰 신호 생산자, invalid·fallback·lifecycle | 이전 추천 weight 문구는 ADR-0006이 대체 |
 | [`ADR-0004 EyeTrax MVP 선택`](adr/0004-eyetrax-mvp-selection.md) | Accepted (해커톤 MVP) | Eye 모델·보정·좌표 생산자와 재평가 Gate | dwell·revisit·최종 Top 1은 ADR-0006 경계 |
-| [`ADR-0006 중앙 판단 추천 AI`](adr/0006-central-recommendation-ai.md) | Accepted (방향·경계) | evidence 결합·수명, 중앙 AI, 상품 10개, 결과·설명, Deferred feedback | 현재 추천 architecture의 권위 결정 |
-| [`ADR-0007 중앙 추천 모델 선정`](adr/0007-central-recommendation-model-selection.md) | Proposed | 후보 revision·license·checksum, self-hosted runtime, 합성 benchmark·블라인드 검토와 최종 선택 | 실제 결과와 세 명의 리뷰 전에는 model 미선정 |
-| [`ADR-0008 OpenAI Luna 중앙 추천 모델 선택`](adr/0008-openai-luna-central-recommendation.md) | Proposed — selected pending integration reviews | Luna Max·max·variant C·prompt v4, latency 기록 전용, hosted provider 경계 | Accepted 전에는 ADR-0006 self-hosted 원칙이 우선 |
+| [`ADR-0006 중앙 판단 추천 AI`](adr/0006-central-recommendation-ai.md) | Accepted (불변조건·경계) | evidence 결합·수명, 중앙 AI, 상품 10개, 결과·설명, Deferred feedback | runtime migration은 ADR-0008 관할 |
+| [`ADR-0007 중앙 추천 모델 선정`](adr/0007-central-recommendation-model-selection.md) | Proposed / historical | self-hosted 후보 provenance·합성 benchmark 참고 | hosted Luna 선택은 ADR-0008 관할 |
+| [`ADR-0008 OpenAI Luna 중앙 추천 모델 선택`](adr/0008-openai-luna-central-recommendation.md) | Accepted — implementation baseline | Luna Max·max·variant C·prompt v4와 hosted provider migration | 실제 key·DB·domain/TLS는 배포 Gate |
 
 ## 4. 작업별 최소 읽기 묶음
 
@@ -59,7 +62,7 @@ README.md
 5. [`contracts/README.md`](../contracts/README.md)
 6. 후보를 실제 평가할 때만 관련 model card·license·runtime 문서
 
-완료 기준은 정확한 model revision·license·checksum, self-hosted 재현, strict output·안전 eval과 versioned system prompt다. 모델 선택 자체는 이 문서 최신화 PR의 완료 조건이 아니다.
+완료 기준은 정확한 hosted model ID·prompt SHA, strict output·안전 eval과 versioned system prompt다. 실제 key canary와 운영 rate-limit은 배포 Gate다.
 
 ### Evidence Contract·Builder — 박형진·정은미, 양유상 리뷰
 
@@ -77,9 +80,9 @@ README.md
 2. [`services/eye/README.md`](../services/eye/README.md)
 3. [`experiments/eye/README.md`](../experiments/eye/README.md)
 4. [`EyeTrax 실험 README`](../experiments/eye/eyetrax/README.md)
-5. AOI 작업이면 [`lookbook example`](../data/lookbooks/example/README.md)
+5. v2 AOI 작업이면 [`actual pending metadata`](../data/lookbooks/mcm-lookbook-v2/README.md)와 [`synthetic approved fixture`](../data/lookbooks/mcm-central-ai-replay-v2/README.md)
 
-Eye는 좌표·유효성·capture context와 AOI 사실을 생산한다. 최종 순위·고객 유형 판단을 Adapter에 넣지 않는다.
+Eye는 viewport 좌표·유효성·품질과 capture context를 보존한다. Kiosk가 video 좌표까지만 계산하고 Backend가 승인 AOI를 적용하므로 Eye Adapter에는 AOI·상품·최종 순위·고객 유형 판단을 넣지 않는다.
 
 ### Face 생산자·taxonomy — 정은미
 
@@ -99,9 +102,10 @@ Face는 관찰 가능한 신호·품질·invalid reason을 생산한다. 실제 
 4. [`data/products/README.md`](../data/products/README.md)
 5. [`contracts/README.md`](../contracts/README.md)
 
-이 작업 브랜치에는 10개 profile JSON과 PostgreSQL migration·기동 시 seed/readiness
-adapter가 있다. live PostgreSQL에서 migration·정확히 10행·재시작을 검증하고 개별 URL,
-이미지·QR과 tag를 승인하기 전에는 production readiness가 충족되지 않는다.
+이 작업 브랜치에는 10개 profile JSON, 기존 migration을 보존한 `0003` 운영 migration,
+비덮어쓰기 seed, `/healthz`·`/readyz`, restart/orphan/retention cleanup과 direct
+backup/restore 절차가 있다. live Supabase에서 migration·정확히 10행·재시작·복구를 검증하고
+개별 URL, 이미지·QR과 tag를 승인하기 전에는 production readiness가 충족되지 않는다.
 
 ### Kiosk·Manager 통합 — 조윤혜
 

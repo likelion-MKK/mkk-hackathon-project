@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from apps.api.app.main import _configured_input_variant, create_app
 from apps.api.app.schemas import SessionCreate
 from apps.api.app.store import MemoryStore
+from apps.api.app.v2_aoi import LookbookAoiMetadataV2, load_aoi_metadata
 from apps.api.app.v2_central import (
     APPROVED_PROMPT_VERSION,
     CentralModelError,
@@ -24,7 +25,12 @@ from apps.api.app.v2_models import (
     ObservationBatchV2,
 )
 from apps.api.app.v2_store import MemoryStoreRecommendationRepository, V2RecommendationStore
-from apps.api.app.v2_postgres import load_canonical_catalog, seed_catalog
+from apps.api.app.v2_postgres import (
+    DatabaseReadiness,
+    catalog_readiness_rows,
+    load_canonical_catalog,
+    seed_catalog,
+)
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -32,10 +38,23 @@ PRODUCT_1 = "mcm-toni-medium-disco-visetos"
 PRODUCT_2 = "mcm-diamant-3d-small-calfskin"
 VIDEO_ID = "mcm-central-ai-replay-v2"
 MANIFEST_VERSION = "mcm-central-ai-replay-v2-2026-08-16"
+ACTUAL_VIDEO_ID = "mcm-lookbook-v2"
+ACTUAL_MANIFEST_VERSION = "mcm-lookbook-v2-2026-08-18"
 EXPOSURES = {
     PRODUCT_1: "replay-scene-01-toni",
     PRODUCT_2: "replay-scene-02-diamant",
 }
+CATALOG = load_canonical_catalog(
+    REPOSITORY_ROOT / "data" / "products" / "mcm-demo-recommendation-profile-v2.json"
+)
+CATALOG_IDS = [product.product_id for product in CATALOG.products]
+SYNTHETIC_AOI_METADATA = load_aoi_metadata(
+    REPOSITORY_ROOT
+    / "data"
+    / "lookbooks"
+    / VIDEO_ID
+    / "aoi-metadata-v2.json"
+)
 
 
 def _gaze(x: float = 0.25) -> dict[str, object]:
@@ -60,23 +79,23 @@ def _expression(happy: float = 0.2) -> dict[str, object]:
     }
 
 
-def _attention(*product_ids: str, outside_video: bool = False) -> dict[str, object]:
+def _attention(
+    *product_ids: str,
+    outside_video: bool = False,
+    manifest_version: str = MANIFEST_VERSION,
+) -> dict[str, object]:
+    # Product arguments remain accepted so older test call sites stay readable,
+    # but a production Kiosk is forbidden from assigning AOIs or products.
+    del product_ids
     return {
         "outside_video": outside_video,
         "video_x_norm": None if outside_video else 0.25,
         "video_y_norm": None if outside_video else 0.5,
         "confidence": 0.9,
-        "producer_id": "aoi-test",
-        "model_revision": "aoi-v1",
-        "manifest_version": MANIFEST_VERSION,
-        "candidates": [
-            {
-                "exposure_id": EXPOSURES.get(product_id, f"exposure-{product_id}"),
-                "product_id": product_id,
-                "priority": index,
-            }
-            for index, product_id in enumerate(product_ids)
-        ],
+        "producer_id": "kiosk-video-coordinate-v1",
+        "model_revision": "video-content-rect-v1",
+        "manifest_version": manifest_version,
+        "candidates": [],
     }
 
 
@@ -152,28 +171,49 @@ def _valid_frame(sequence: int, captured_ms: float, *, product_id: str = PRODUCT
     )
 
 
-def _batch(session_id: str, batch_id: str, batch_sequence: int, frames: list[dict[str, object]]) -> dict[str, object]:
+def _batch(
+    session_id: str,
+    batch_id: str,
+    batch_sequence: int,
+    frames: list[dict[str, object]],
+    *,
+    video_id: str = VIDEO_ID,
+) -> dict[str, object]:
     return {
         "schema_version": "2.0",
         "batch_id": batch_id,
         "batch_sequence": batch_sequence,
         "session_id": session_id,
-        "video_id": VIDEO_ID,
+        "video_id": video_id,
         "observations": frames,
     }
 
 
-def _create_session(client: TestClient) -> str:
+def _create_session(client: TestClient, *, video_id: str = VIDEO_ID) -> str:
     response = client.post(
         "/api/v1/sessions",
         json={
             "kiosk_id": "kiosk-v2-test",
-            "lookbook_id": VIDEO_ID,
+            "lookbook_id": video_id,
             "consent_version": "consent-v1",
         },
     )
     assert response.status_code == 201, response.text
     return response.json()["session_id"]
+
+
+def _summarize(
+    observations: list[FrameObservationV2],
+    *,
+    aoi_metadata: LookbookAoiMetadataV2 = SYNTHETIC_AOI_METADATA,
+    **kwargs: object
+) -> object:
+    return summarize_observations(
+        observations,
+        aoi_metadata=aoi_metadata,
+        product_ids=CATALOG_IDS,
+        **kwargs,
+    )
 
 
 @pytest.fixture()
@@ -219,7 +259,8 @@ def test_same_frame_join_and_out_of_order_batches_complete_asynchronously(
         gaze=None,
         gaze_reason="join_pending",
         expression=_expression(0.4),
-        attention=_attention(PRODUCT_1),
+        attention=None,
+        attention_reason="join_pending",
     )
     joined = client.post(
         f"/api/v2/sessions/{session_id}/observations",
@@ -252,7 +293,8 @@ def test_missing_no_face_gap_and_seek_reset_continuity() -> None:
                 gaze_reason="gaze_unavailable",
                 expression=None,
                 expression_reason="face_not_detected",
-                attention=_attention(PRODUCT_1),
+                attention=None,
+                attention_reason="source_gaze_unavailable",
             )
         ),
         FrameObservationV2.model_validate(_valid_frame(2, 2_000.0)),
@@ -261,7 +303,7 @@ def test_missing_no_face_gap_and_seek_reset_continuity() -> None:
         ),
     ]
 
-    summary = summarize_observations(observations)
+    summary = _summarize(observations)
 
     assert summary.missing_gaze_count == 1
     assert summary.missing_expression_count == 1
@@ -271,24 +313,73 @@ def test_missing_no_face_gap_and_seek_reset_continuity() -> None:
     assert signal.gaze.movement_distance_norm is None
     assert signal.gaze.mean_speed_norm_per_s is None
     assert signal.gaze.movement_reason == "no_comparable_gaze_observation"
-    assert signal.exposure_duration_ms == 100.0
+    assert signal.exposure_duration_ms == 0.0
 
 
-def test_multi_aoi_is_not_attributed_to_a_product_or_expression() -> None:
+def test_different_product_aoi_overlap_is_not_attributed() -> None:
+    metadata_payload = SYNTHETIC_AOI_METADATA.model_dump(mode="json")
+    metadata_payload["metadata_revision"] = "ambiguous-products-test-v1"
+    metadata_payload["exposures"].append(
+        {
+            "aoi_id": "overlap-diamant",
+            "parent_aoi_id": None,
+            "specificity_rank": 0,
+            "start_ms": 0,
+            "end_ms": 6000,
+            "shape": {
+                "type": "polygon",
+                "points": [[0, 0], [1, 0], [1, 1], [0, 1]],
+            },
+            "product_id": PRODUCT_2,
+            "component_code": "whole_product",
+            "observed_visual_tag_ids": ["leather", "shoulder"],
+        }
+    )
+    ambiguous_metadata = LookbookAoiMetadataV2.model_validate(metadata_payload)
     ambiguous = FrameObservationV2.model_validate(
         _frame(
             0,
             0.0,
             gaze=_gaze(),
             expression=_expression(),
-            attention=_attention(PRODUCT_1, PRODUCT_2),
+            attention=_attention(),
         )
     )
 
-    summary = summarize_observations([ambiguous])
+    summary = _summarize([ambiguous], aoi_metadata=ambiguous_metadata)
 
     assert summary.ambiguous_attention_count == 1
     assert summary.eligible_product_ids == frozenset()
+
+
+def test_same_product_parent_and_child_overlap_are_all_aggregated() -> None:
+    metadata_payload = SYNTHETIC_AOI_METADATA.model_dump(mode="json")
+    metadata_payload["metadata_revision"] = "same-product-hierarchy-test-v1"
+    metadata_payload["exposures"].append(
+        {
+            "aoi_id": "toni-handle",
+            "parent_aoi_id": EXPOSURES[PRODUCT_1],
+            "specificity_rank": 1,
+            "start_ms": 0,
+            "end_ms": 6000,
+            "shape": {
+                "type": "polygon",
+                "points": [[0, 0], [0.5, 0], [0.5, 1], [0, 1]],
+            },
+            "product_id": PRODUCT_1,
+            "component_code": "handle",
+            "observed_visual_tag_ids": ["shopper"],
+        }
+    )
+    metadata = LookbookAoiMetadataV2.model_validate(metadata_payload)
+    frame = FrameObservationV2.model_validate(_valid_frame(0, 0.0))
+
+    summary = _summarize([frame], aoi_metadata=metadata)
+
+    signal = next(item for item in summary.evidence.summary if item.product_id == PRODUCT_1)
+    assert signal.observed_component_codes == ["handle", "whole_product"]
+    assert signal.observed_visual_tag_ids == ["monogram", "shopper"]
+    assert summary.eligible_product_ids == frozenset({PRODUCT_1})
 
 
 def test_cumulative_sustained_action_uses_max_and_first_frame_motion_is_unknown() -> None:
@@ -303,12 +394,12 @@ def test_cumulative_sustained_action_uses_max_and_first_frame_motion_is_unknown(
         ]
         observations.append(FrameObservationV2.model_validate(frame))
 
-    summary = summarize_observations(observations)
+    summary = _summarize(observations)
     signal = next(item for item in summary.evidence.summary if item.product_id == PRODUCT_1)
     assert signal.expression is not None
     assert signal.expression.sustained_actions[0].duration_ms == 750.0
 
-    first_only = summarize_observations([observations[0]])
+    first_only = _summarize([observations[0]])
     first_signal = next(
         item for item in first_only.evidence.summary if item.product_id == PRODUCT_1
     )
@@ -322,15 +413,15 @@ def test_cumulative_sustained_action_uses_max_and_first_frame_motion_is_unknown(
 def _central_request(
     *, input_variant: str = "C"
 ) -> CentralRecommendationRequestV2:
-    repository = MemoryStoreRecommendationRepository(MemoryStore(REPOSITORY_ROOT))
-    products = list(repository._catalog.products)
+    products = list(CATALOG.products)
     summary = summarize_observations(
         [FrameObservationV2.model_validate(_valid_frame(0, 0.0))],
         decision_request_id="decision-test",
         session_id="session-test",
         video_id=VIDEO_ID,
         manifest_version=MANIFEST_VERSION,
-        catalog_version=repository._catalog.catalog_version,
+        catalog_version=CATALOG.catalog_version,
+        aoi_metadata=SYNTHETIC_AOI_METADATA,
         product_ids=[product.product_id for product in products],
         input_variant=input_variant,
     )
@@ -433,6 +524,20 @@ def test_variant_b_uses_only_grounded_frame_references() -> None:
     ]
     with pytest.raises(CentralModelError, match="frame evidence"):
         validate_central_output(raw, request=request)
+
+
+def test_variant_c_never_contains_raw_frame_token_or_individual_gaze_coordinates() -> None:
+    request = _central_request(input_variant="C")
+    payload = request.model_dump_json()
+
+    assert request.evidence.timeline is None
+    assert "video_x_norm" not in payload
+    assert "video_y_norm" not in payload
+    assert "screen_x_norm" not in payload
+    assert "screen_y_norm" not in payload
+    assert "frame_id" not in payload
+    assert "calibration_id" not in payload
+    assert "vision_stream_token" not in payload
 
 
 @pytest.mark.parametrize(
@@ -539,6 +644,121 @@ def test_failure_cancel_and_ttl_clear_transient_state() -> None:
     store.append_batch(session_id, batch.model_copy(update={"batch_id": "batch-cancel"}))
     store.cancel(session_id)
     assert store.buffered_observation_count(session_id) == 0
+
+
+def test_gaze_only_observation_can_complete_without_expression() -> None:
+    class CapturingStub(DeterministicCentralStub):
+        def __init__(self) -> None:
+            self.requests: list[CentralRecommendationRequestV2] = []
+
+        def recommend(self, request: CentralRecommendationRequestV2) -> object:
+            self.requests.append(request)
+            return super().recommend(request)
+
+    model = CapturingStub()
+    dispatcher = ManualJobDispatcher()
+    app = create_app(
+        MemoryStore(REPOSITORY_ROOT),
+        central_client=model,
+        job_dispatcher=dispatcher,
+    )
+    with TestClient(app) as client:
+        session_id = _create_session(client)
+        gaze_only = _frame(
+            0,
+            0.0,
+            gaze=_gaze(),
+            expression=None,
+            expression_reason="not_observed",
+            attention=_attention(PRODUCT_1),
+        )
+        assert client.post(
+            f"/api/v2/sessions/{session_id}/observations",
+            json=_batch(session_id, "batch-gaze-only", 0, [gaze_only]),
+        ).status_code == 202
+        assert client.post(f"/api/v2/sessions/{session_id}/complete").status_code == 202
+        dispatcher.run_next()
+        decision = client.get(
+            f"/api/v2/sessions/{session_id}/recommendation"
+        ).json()
+
+    assert decision["status"] == "completed"
+    assert len(model.requests) == 1
+    assert model.requests[0].evidence.data_quality.expression_valid_ratio == 0.0
+
+
+def test_cancelled_job_discards_late_result_and_marks_durable_status_once() -> None:
+    class LifecyclePersistence:
+        def __init__(self) -> None:
+            self.cancelled: list[str] = []
+            self.decisions: list[object] = []
+
+        def initialize_runtime(self, _catalog: object) -> DatabaseReadiness:
+            return DatabaseReadiness(True)
+
+        def check_readiness(self, _catalog: object) -> DatabaseReadiness:
+            return DatabaseReadiness(True)
+
+        def save_pending(self, *_args: object) -> bool:
+            return True
+
+        def claim_job(self, _decision_request_id: str) -> bool:
+            return True
+
+        def save_decision(self, _session_id: str, decision: object) -> bool:
+            self.decisions.append(decision)
+            return True
+
+        def mark_cancelled(self, decision_request_id: str) -> bool:
+            self.cancelled.append(decision_request_id)
+            return True
+
+        def fail_job(self, *_args: object) -> bool:
+            return True
+
+        def cleanup_orphan_jobs(self, _seconds: float) -> int:
+            return 0
+
+        def cleanup_retention(self, _seconds: float) -> int:
+            return 0
+
+    class CapturingStub(DeterministicCentralStub):
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def recommend(self, request: CentralRecommendationRequestV2) -> object:
+            self.calls += 1
+            return super().recommend(request)
+
+    memory = MemoryStore(REPOSITORY_ROOT)
+    persistence = LifecyclePersistence()
+    repository = MemoryStoreRecommendationRepository(
+        memory,
+        persistence=persistence,
+        database_required=True,
+    )
+    model = CapturingStub()
+    dispatcher = ManualJobDispatcher()
+    app = create_app(
+        memory,
+        central_client=model,
+        job_dispatcher=dispatcher,
+        v2_store=V2RecommendationStore(repository),
+    )
+    with TestClient(app) as client:
+        session_id = _create_session(client)
+        client.post(
+            f"/api/v2/sessions/{session_id}/observations",
+            json=_batch(session_id, "batch-cancel-late", 0, [_valid_frame(0, 0.0)]),
+        )
+        accepted = client.post(f"/api/v2/sessions/{session_id}/complete").json()
+        assert len(dispatcher.jobs) == 1
+        assert client.delete(f"/api/v2/sessions/{session_id}").status_code == 204
+        dispatcher.run_next()
+
+    assert persistence.cancelled == [accepted["decision_request_id"]]
+    assert persistence.decisions == []
+    assert model.calls == 0
 
 
 def test_pending_persistence_failure_is_terminal_and_never_dispatched() -> None:
@@ -725,6 +945,157 @@ def test_v2_manifest_and_product_routes_use_canonical_ids(
     assert product.json()["official_product_url_reason"]
 
 
+def test_backend_rejects_client_supplied_product_candidates(
+    v2_client: tuple[TestClient, ManualJobDispatcher],
+) -> None:
+    client, _ = v2_client
+    session_id = _create_session(client)
+    frame = _valid_frame(0, 0.0)
+    assert isinstance(frame["attention"], dict)
+    frame["attention"]["candidates"] = [
+        {
+            "exposure_id": EXPOSURES[PRODUCT_1],
+            "product_id": PRODUCT_1,
+            "priority": 0,
+        }
+    ]
+
+    response = client.post(
+        f"/api/v2/sessions/{session_id}/observations",
+        json=_batch(session_id, "batch-client-attribution", 0, [frame]),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "client_product_attribution_forbidden"
+    assert client.app.state.v2_store.buffered_observation_count(session_id) == 0
+
+
+def test_actual_video_without_approved_aoi_fails_closed_at_backend(
+    v2_client: tuple[TestClient, ManualJobDispatcher],
+) -> None:
+    client, _ = v2_client
+    session_id = _create_session(client, video_id=ACTUAL_VIDEO_ID)
+    frame = _frame(
+        0,
+        0.0,
+        video_time_ms=1_000,
+        gaze=_gaze(),
+        expression=_expression(),
+        attention=_attention(manifest_version=ACTUAL_MANIFEST_VERSION),
+    )
+
+    response = client.post(
+        f"/api/v2/sessions/{session_id}/observations",
+        json=_batch(
+            session_id,
+            "batch-actual-pending-aoi",
+            0,
+            [frame],
+            video_id=ACTUAL_VIDEO_ID,
+        ),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "aoi_metadata_unapproved"
+    assert client.app.state.v2_store.buffered_observation_count(session_id) == 0
+
+
+def test_video_identity_time_and_epoch_context_mismatches_are_rejected(
+    v2_client: tuple[TestClient, ManualJobDispatcher],
+) -> None:
+    client, _ = v2_client
+
+    video_session = _create_session(client)
+    video_mismatch = client.post(
+        f"/api/v2/sessions/{video_session}/observations",
+        json=_batch(
+            video_session,
+            "batch-video-mismatch",
+            0,
+            [_valid_frame(0, 0.0)],
+            video_id=ACTUAL_VIDEO_ID,
+        ),
+    )
+    assert video_mismatch.status_code == 400
+    assert video_mismatch.json()["code"] == "video_mismatch"
+
+    regression_session = _create_session(client)
+    first = _valid_frame(0, 0.0, video_time_ms=500)
+    second = _valid_frame(1, 100.0, video_time_ms=400)
+    assert client.post(
+        f"/api/v2/sessions/{regression_session}/observations",
+        json=_batch(regression_session, "batch-time-first", 0, [first]),
+    ).status_code == 202
+    regression = client.post(
+        f"/api/v2/sessions/{regression_session}/observations",
+        json=_batch(regression_session, "batch-time-regression", 1, [second]),
+    )
+    assert regression.status_code == 400
+    assert regression.json()["code"] == "video_time_regression"
+
+    epoch_session = _create_session(client)
+    assert client.post(
+        f"/api/v2/sessions/{epoch_session}/observations",
+        json=_batch(
+            epoch_session,
+            "batch-new-epoch",
+            0,
+            [_valid_frame(1, 100.0, epoch=1, video_time_ms=100)],
+        ),
+    ).status_code == 202
+    stale = client.post(
+        f"/api/v2/sessions/{epoch_session}/observations",
+        json=_batch(
+            epoch_session,
+            "batch-stale-epoch",
+            1,
+            [_valid_frame(2, 200.0, epoch=0, video_time_ms=200)],
+        ),
+    )
+    assert stale.status_code == 400
+    assert stale.json()["code"] == "stale_playback_epoch"
+
+
+def test_same_frame_snapshot_cannot_change_after_first_ingest(
+    v2_client: tuple[TestClient, ManualJobDispatcher],
+) -> None:
+    client, _ = v2_client
+    session_id = _create_session(client)
+    first = _frame(
+        1,
+        100.0,
+        frame_id="immutable-frame",
+        video_time_ms=100,
+        gaze=_gaze(),
+        expression=None,
+        expression_reason="join_pending",
+        attention=_attention(),
+    )
+    changed = _frame(
+        1,
+        100.0,
+        frame_id="immutable-frame",
+        video_time_ms=101,
+        gaze=None,
+        gaze_reason="join_pending",
+        expression=_expression(),
+        attention=None,
+        attention_reason="join_pending",
+    )
+    assert client.post(
+        f"/api/v2/sessions/{session_id}/observations",
+        json=_batch(session_id, "batch-frame-first", 0, [first]),
+    ).status_code == 202
+
+    response = client.post(
+        f"/api/v2/sessions/{session_id}/observations",
+        json=_batch(session_id, "batch-frame-changed", 1, [changed]),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "frame_context_conflict"
+
+
 def test_unknown_evidence_window_reference_is_rejected() -> None:
     request = _central_request()
     profile = request.products[0]
@@ -744,6 +1115,7 @@ def test_postgres_seed_is_exactly_ten_and_idempotent_sql() -> None:
         def __init__(self) -> None:
             self.rows: list[tuple[object, ...]] = []
             self.queries: list[str] = []
+            self.last_query = ""
 
         def __enter__(self) -> "FakeCursor":
             return self
@@ -758,9 +1130,15 @@ def test_postgres_seed_is_exactly_ten_and_idempotent_sql() -> None:
         def execute(self, query: str, params: tuple[object, ...] = ()) -> None:
             del params
             self.queries.append(query)
+            self.last_query = query
 
         def fetchone(self) -> tuple[object, ...]:
             return (10,)
+
+        def fetchall(self) -> list[tuple[object, ...]]:
+            if "DISTINCT catalog_version" in self.last_query:
+                return [(CATALOG.catalog_version,)]
+            return catalog_readiness_rows(CATALOG)
 
     class FakeConnection:
         def __init__(self) -> None:
@@ -777,7 +1155,8 @@ def test_postgres_seed_is_exactly_ten_and_idempotent_sql() -> None:
     seed_catalog(connection, catalog)
     assert len(connection.fake_cursor.rows) == 20
     assert len({row[1] for row in connection.fake_cursor.rows}) == 10
-    assert "ON CONFLICT (catalog_version, product_id) DO UPDATE" in connection.fake_cursor.queries[0]
+    assert "ON CONFLICT (catalog_version, product_id) DO NOTHING" in connection.fake_cursor.queries[0]
+    assert "DO UPDATE" not in connection.fake_cursor.queries[0]
 
     migration = (
         REPOSITORY_ROOT
@@ -826,7 +1205,6 @@ def test_canonical_sixty_second_replay_produces_one_top1_and_clears_timeline() -
                 product_id=exposure["product_id"],
                 video_time_ms=video_time_ms,
             )
-            frame["attention"]["candidates"][0]["exposure_id"] = exposure["exposure_id"]
             frames.append(frame)
         assert len(frames) == 240
         response = client.post(

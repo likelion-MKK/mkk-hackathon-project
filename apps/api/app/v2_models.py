@@ -6,7 +6,15 @@ import re
 from datetime import datetime
 from typing import Literal, Self
 
-from pydantic import Field, StrictBool, StrictFloat, StrictInt, field_validator, model_validator
+from pydantic import (
+    Field,
+    StrictBool,
+    StrictFloat,
+    StrictInt,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 from apps.api.app.schemas import (
     IDENTIFIER_PATTERN,
@@ -24,6 +32,17 @@ ControlledTag = Literal[
     "monogram", "neutral", "recycled_material", "shoulder", "shopper", "soft",
     "spacious", "sporty", "structured", "tambourine", "top_handle", "tote",
     "travel", "triangle", "weekender", "work",
+]
+ComponentCodeV2 = Literal[
+    "whole_product",
+    "body",
+    "handle",
+    "strap",
+    "closure",
+    "hardware",
+    "pocket",
+    "trim",
+    "logo",
 ]
 
 
@@ -65,6 +84,17 @@ class AttentionCandidateV2(ContractModel):
     exposure_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
     product_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
     priority: StrictInt = Field(ge=0)
+    parent_aoi_id: Identifier | None = Field(
+        default=None, min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN
+    )
+    specificity_rank: StrictInt | None = Field(default=None, ge=0, le=32)
+    component_code: ComponentCodeV2 | None = None
+    observed_visual_tag_ids: list[ControlledTag] = Field(default_factory=list, max_length=32)
+
+    @field_validator("observed_visual_tag_ids")
+    @classmethod
+    def visual_tags_are_unique(cls, value: list[str]) -> list[str]:
+        return _unique(value, "observed_visual_tag_ids")
 
 
 class AttentionObservationV2(ContractModel):
@@ -335,6 +365,8 @@ class ExpressionSummaryV2(ContractModel):
 class ProductEvidenceSummaryV2(ContractModel):
     product_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
     exposure_duration_ms: StrictFloat = Field(ge=0)
+    observed_component_codes: list[ComponentCodeV2] = Field(default_factory=list)
+    observed_visual_tag_ids: list[ControlledTag] = Field(default_factory=list)
     gaze: GazeSummaryV2 | None
     gaze_reason: str | None
     expression: ExpressionSummaryV2 | None
@@ -344,6 +376,12 @@ class ProductEvidenceSummaryV2(ContractModel):
     @classmethod
     def reasons_are_normalized(cls, value: str | None) -> str | None:
         return None if value is None else _validate_reason(value)
+
+    @field_validator("observed_component_codes", "observed_visual_tag_ids")
+    @classmethod
+    def observed_values_are_unique(cls, value: list[str], info: ValidationInfo) -> list[str]:
+        field_name = info.field_name
+        return _unique(value, field_name)
 
     @model_validator(mode="after")
     def require_summary_xor_reason(self) -> Self:
@@ -367,12 +405,17 @@ class EvidenceWindowV2(ContractModel):
     video_start_ms: StrictInt = Field(ge=0)
     video_end_ms: StrictInt = Field(ge=0)
     playback_epoch: StrictInt = Field(ge=0)
+    observed_component_codes: list[ComponentCodeV2] = Field(default_factory=list)
+    observed_visual_tag_ids: list[ControlledTag] = Field(default_factory=list)
     evidence_codes: list[EvidenceCode] = Field(min_length=1)
 
-    @field_validator("evidence_codes")
+    @field_validator(
+        "observed_component_codes", "observed_visual_tag_ids", "evidence_codes"
+    )
     @classmethod
-    def evidence_codes_are_unique(cls, value: list[str]) -> list[str]:
-        return _unique(value, "evidence_codes")
+    def list_values_are_unique(cls, value: list[str], info: ValidationInfo) -> list[str]:
+        field_name = info.field_name
+        return _unique(value, field_name)
 
     @model_validator(mode="after")
     def ranges_are_forward(self) -> Self:

@@ -159,6 +159,19 @@ export type AttentionCandidateV2 = {
   exposure_id: string;
   product_id: string;
   priority: number;
+  parent_aoi_id?: string | null;
+  specificity_rank?: number;
+  component_code?:
+    | "whole_product"
+    | "body"
+    | "handle"
+    | "strap"
+    | "closure"
+    | "hardware"
+    | "pocket"
+    | "trim"
+    | "logo";
+  observed_visual_tag_ids?: string[];
 };
 
 export type GazeObservationV2 = {

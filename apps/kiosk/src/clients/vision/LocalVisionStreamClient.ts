@@ -354,7 +354,7 @@ export class LocalVisionStreamClient implements RemoteVisionClient {
   private readyWaiter: Deferred<ReadyMessage> | null = null;
   private ready: ReadyMessage | null = null;
   private pendingFrame: PendingFrame | null = null;
-  private inferenceActive = false;
+  private frameCaptureActive = false;
   private requestSequence = 0;
   private terminalError: Error | null = null;
 
@@ -426,11 +426,22 @@ export class LocalVisionStreamClient implements RemoteVisionClient {
   }
 
   async startCalibration(pattern: CalibrationPattern): Promise<CalibrationResult> {
-    const result = await this.sendControl(
-      "start_calibration",
-      controlActionForPattern(pattern),
-    );
+    // The Gateway keeps this control request pending until EyeTrax finishes.
+    // Frames must be allowed through while that request is in flight.
+    this.frameCaptureActive = true;
+    let result: ControlResultMessage;
+    try {
+      result = await this.sendControl(
+        "start_calibration",
+        controlActionForPattern(pattern),
+      );
+    } catch (error) {
+      this.frameCaptureActive = false;
+      throw error;
+    }
+    if (!result.valid) this.frameCaptureActive = false;
     if (result.calibration_id === undefined) {
+      this.frameCaptureActive = false;
       throw new Error("Vision Stream calibration response has no calibration_id.");
     }
     return {
@@ -443,7 +454,7 @@ export class LocalVisionStreamClient implements RemoteVisionClient {
   async startInference(): Promise<void> {
     const result = await this.sendControl("start_inference");
     if (!result.valid) throw new Error(result.reason ?? "Vision inference could not start.");
-    this.inferenceActive = true;
+    this.frameCaptureActive = true;
   }
 
   onGazeSample(listener: GazeSampleListener): Unsubscribe {
@@ -464,7 +475,7 @@ export class LocalVisionStreamClient implements RemoteVisionClient {
     signal?.throwIfAborted();
     const sessionContext = this.requireSession();
     const ready = this.requireReady();
-    if (!this.inferenceActive) throw new Error("Vision inference has not started.");
+    if (!this.frameCaptureActive) throw new Error("Vision frame capture has not started.");
     if (
       context.session_id !== sessionContext.session_id ||
       context.video_id !== sessionContext.video_id
@@ -625,7 +636,7 @@ export class LocalVisionStreamClient implements RemoteVisionClient {
   private clearSessionState(): void {
     this.sessionContext = null;
     this.ready = null;
-    this.inferenceActive = false;
+    this.frameCaptureActive = false;
     this.pendingFrame = null;
     this.socketOpenWaiter = null;
     this.readyWaiter = null;

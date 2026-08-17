@@ -1,0 +1,13 @@
+FROM python:3.13.15-slim
+
+WORKDIR /app
+COPY apps /app/apps
+COPY services/face /app/services/face
+
+RUN pip install --no-cache-dir \
+    "uvicorn[standard]>=0.30,<1" "httpx>=0.27,<1" \
+    "mediapipe==1.0.0" "numpy>=2,<3" "opencv-python-headless>=4.11,<5" \
+    /app/services/face
+
+ENV PYTHONPATH=/app
+CMD ["uvicorn", "apps.vision_gateway.local_server:app", "--host", "0.0.0.0", "--port", "8765", "--workers", "1"]

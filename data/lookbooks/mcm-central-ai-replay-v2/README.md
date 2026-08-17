@@ -6,6 +6,8 @@ manifest를 보관한다. `manifest.json`은 60초를 6초씩 나눈 10개 단�
 정확히 10개 ID와 일치한다.
 
 - 각 구간의 full-frame polygon은 합성 Eye·Face replay를 단순화하기 위한 fixture다.
+- `aoi-metadata-v2.json`은 Backend AOI mapper 테스트용 승인된 **합성 fixture**다.
+  `media_identity.sha256`은 실제 영상이 아니라 이 synthetic manifest 정의의 digest다.
 - 실제 영상의 상품 위치·노출 시각·priority를 측정했다는 뜻이 아니다.
 - 운영 영상이 승인되면 조윤혜가 영상 시간·좌표를, 박형진이 catalog ID를 검수한 별도
   manifest version을 만든다.

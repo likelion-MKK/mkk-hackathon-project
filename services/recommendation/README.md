@@ -1,16 +1,19 @@
 # Recommendation Service
 
-박형진(BE)이 소유하는 중앙 추천 경계입니다. 신규 v2 경로는 Eye·Face·AOI producer가 만든 파생 저수준 신호를 세션 메모리에서 결정적으로 정리한 뒤, self-hosted Korean/JSON instruction model이 제공된 10개 catalog ID 중 Top 1을 선택하게 합니다. 특정 model을 심리·감정 분석 모델로 포장하거나 표정·시선을 실제 감정, 성격 또는 구매 의도로 확정하지 않습니다.
+박형진(BE)이 소유하는 중앙 추천 경계입니다. 신규 v2 경로는 Eye·Face producer와 Kiosk 영상 좌표가 만든 파생 저수준 신호를 Backend가 승인 AOI metadata로 상품에 연결하고 세션 메모리에서 결정적으로 정리한 뒤, hosted `gpt-5.6-luna` Responses API가 제공된 10개 catalog ID 중 Top 1을 선택하게 합니다. 특정 model을 심리·감정 분석 모델로 포장하거나 표정·시선을 실제 감정, 성격 또는 구매 의도로 확정하지 않습니다.
 
 ## 활성 v2 흐름
 
-1. API는 `ObservationBatchV2`를 받아 같은 `frame_id`의 gaze, attention, expression과 derived signal을 merge합니다.
-2. Feature extractor는 version과 결측 reason을 보존해 `RecommendationEvidenceV2`의 summary, evidence window와 선택적 timeline을 만듭니다.
-3. Prompt runner는 같은 catalog와 prompt로 A/B/C payload를 평가합니다. A=summary+window+timeline, B=timeline+summary, C=summary+window입니다.
-4. Model JSON은 `RecommendationDecisionV2` schema, catalog membership, evidence reference와 privacy gate를 모두 통과해야 공개됩니다. 실패하면 임의 보정하지 않고 `failed` 또는 `insufficient_data`를 반환합니다.
-5. Terminal 결과 뒤에는 frame-level observation, timeline, window와 session aggregate를 폐기합니다.
+1. API는 `ObservationBatchV2`를 받아 같은 capture snapshot의 gaze, video coordinate, expression과 derived signal을 merge합니다. Client product/AOI candidate는 거절합니다.
+2. Feature extractor는 승인된 AOI만 적용하고 같은 상품의 중첩 부위는 모두 집계합니다. 서로 다른 상품이 겹치면 어느 상품에도 귀속하지 않습니다.
+3. Feature extractor는 version과 결측 reason을 보존해 `RecommendationEvidenceV2`의 summary, evidence window와 선택적 timeline을 만듭니다.
+4. Prompt runner는 같은 catalog와 prompt로 A/B/C payload를 평가합니다. 운영 lane은 `central-recommender-ko-v4`와 variant C(summary+window)를 사용하며, A/B는 benchmark·replay compatibility lane입니다.
+5. Model JSON은 `RecommendationDecisionV2` schema, catalog membership, evidence reference와 privacy gate를 모두 통과해야 공개됩니다. 실패하면 임의 보정하지 않고 `failed` 또는 `insufficient_data`를 반환합니다.
+6. Terminal 결과 뒤에는 frame-level observation, timeline, window와 session aggregate를 폐기합니다.
 
 모델 입력에는 정확히 10개 상품의 `product_id`, controlled tag, 팀 작성 추천 summary만 사용합니다. `official_product_url`, image와 QR asset이 미검증이면 `null+reason`을 유지하며 추천 model이 URL이나 상품 정보를 만들게 하지 않습니다.
+
+운영 provider는 `CENTRAL_AI_PROVIDER=openai_luna`, `gpt-5.6-luna`, reasoning `max/current_turn`, `store=false`, tools/web/conversation 없음, retry 0, inference deadline 없음으로 고정합니다. Responses API의 strict JSON과 서버 catalog·evidence·tag validator를 모두 통과하지 못하면 fail-closed합니다.
 
 ## 입력·출력 계약
 

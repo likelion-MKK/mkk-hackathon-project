@@ -144,7 +144,7 @@ Hard Gate는 model 응답을 고쳐서 통과시키지 않습니다. 응답 문�
 
 사용자가 지정한 `gpt-5.6-luna + reasoning=max + variant C`는 self-hosted 후보표와 분리해 합성 Responses API lane에서 진단했습니다. v4는 27/27 expected Top 1·strict output·evidence grounding, 3/3 replay, catalog 순서 안정성, 근거 ablation, preflight 무호출과 금지 추론·injection 0건을 통과했습니다. 그러나 p95 73,581.757ms, 최대 111,855.914ms로 운영 목표를 실패했습니다.
 
-계획에서 허용한 한 번의 v5 prompt·입력 축소는 최대 추정 입력을 3,645에서 2,201 tokens로 줄였습니다. 완료된 11회는 모두 품질 검사를 통과했지만 나머지 16회는 provider HTTP 429에서 재시도 없이 fail-closed 했습니다. 이후 사용자는 긴 추론시간을 허용하고 latency를 선택 Gate에서 제외했습니다. 완전히 검증된 v4 조합은 별도 [`ADR-0008`](0008-openai-luna-central-recommendation.md)에서 `selected_pending_adr_and_integration`으로 기록합니다. ADR-0008이 Accepted 되기 전에는 ADR-0006의 self-hosted 경계를 변경하지 않습니다.
+계획에서 허용한 한 번의 v5 prompt·입력 축소는 최대 추정 입력을 3,645에서 2,201 tokens로 줄였습니다. 완료된 11회는 모두 품질 검사를 통과했지만 나머지 16회는 provider HTTP 429에서 재시도 없이 fail-closed 했습니다. 이후 사용자는 긴 추론시간을 허용하고 latency를 선택 Gate에서 제외했습니다. 완전히 검증된 v4 조합과 hosted migration은 별도 [`ADR-0008`](0008-openai-luna-central-recommendation.md)에서 Accepted implementation baseline으로 확정했으며, 이 문서는 self-hosted 후보 benchmark의 historical reference로 남깁니다.
 
 | candidate_id | variant | local checksum·manifest | 45/45 correctness·safety | replay 5/5 | warm p95 | peak RSS | 자동 Gate | 사람 검토 |
 | --- | --- | --- | --- | --- | ---: | ---: | --- | --- |

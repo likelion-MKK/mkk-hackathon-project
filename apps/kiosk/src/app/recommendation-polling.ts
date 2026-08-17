@@ -19,6 +19,7 @@ export class RecommendationPollingError extends Error {
 type PollRecommendationOptions<T extends PollableRecommendation> = {
   load: (signal: AbortSignal) => Promise<T>;
   signal?: AbortSignal;
+  /** Optional compatibility guard. Production leaves this unset and waits for a terminal state. */
   timeoutMs?: number;
   intervalMs?: number;
 };
@@ -60,14 +61,16 @@ function reasonExplanation(
 export async function pollRecommendation<T extends PollableRecommendation>({
   load,
   signal,
-  timeoutMs = 20_000,
+  timeoutMs,
   intervalMs = 400,
 }: PollRecommendationOptions<T>): Promise<T> {
   const timeoutController = new AbortController();
-  const timeoutId = globalThis.setTimeout(
-    () => timeoutController.abort(new RecommendationPollingError("timeout", "추천 처리 시간이 초과되었습니다.")),
-    timeoutMs,
-  );
+  const timeoutId = timeoutMs === undefined
+    ? undefined
+    : globalThis.setTimeout(
+        () => timeoutController.abort(new RecommendationPollingError("timeout", "추천 처리 시간이 초과되었습니다.")),
+        timeoutMs,
+      );
   const forwardAbort = () => timeoutController.abort(signal?.reason);
   signal?.addEventListener("abort", forwardAbort, { once: true });
 
@@ -94,7 +97,7 @@ export async function pollRecommendation<T extends PollableRecommendation>({
       await delay(intervalMs, timeoutController.signal);
     }
   } finally {
-    globalThis.clearTimeout(timeoutId);
+    if (timeoutId !== undefined) globalThis.clearTimeout(timeoutId);
     signal?.removeEventListener("abort", forwardAbort);
   }
 }

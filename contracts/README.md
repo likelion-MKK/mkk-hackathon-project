@@ -6,8 +6,9 @@
 
 | Schema | 정상 fixture | 경계 |
 | --- | --- | --- |
-| `v2/frame-observation-v2.schema.json` | `examples/frame-observation-v2.valid.json` | 같은 frame의 시선·AOI·관찰 가능한 얼굴 동작·저수준 파생 신호 |
+| `v2/frame-observation-v2.schema.json` | `examples/frame-observation-v2.valid.json` | 캡처 시점 영상 문맥, 시선·영상 좌표·관찰 가능한 얼굴 동작·저수준 파생 신호 |
 | `v2/observation-batch-v2.schema.json` | `examples/observation-batch-v2.valid.json` | Kiosk에서 API로 보내는 최대 256개 observation envelope |
+| `v2/lookbook-aoi-metadata-v2.schema.json` | actual pending·synthetic approved data | Backend 전용 영상 fingerprint·검수 상태·계층 AOI·상품/부위/tag 연결 |
 | `v2/product-recommendation-profile-v2.schema.json` | `examples/product-recommendation-profile-v2.valid.json` | 중앙 AI가 선택할 수 있는 정확히 10개 상품과 controlled tag |
 | `v2/recommendation-evidence-v2.schema.json` | `examples/recommendation-evidence-v2.valid.json` | 결정적 feature extractor가 만드는 내부 A/B/C model payload |
 | `v2/recommendation-decision-v2.schema.json` | `examples/recommendation-decision-v2.valid.json` | 중앙 AI 출력 검증 후 공개하는 Top 1 terminal 결정 |
@@ -24,8 +25,23 @@ Transport routing은 다음과 같습니다.
 - `GET /api/v2/products/{product_id}`: nullable source/asset reason을 포함한 reviewed 단일 상품 조회
 - `POST /api/v2/sessions/{session_id}/manager-product-requests`: 고객이 명시적으로 선택한 Top 1 요청만 생성
 - `GET /api/v2/manager/events`: `customer_product_request` v2 event만 polling
+- `GET /healthz`: DB와 무관한 process liveness
+- `GET /readyz`: migration·canonical 10개 catalog·DB·job intake readiness
 
 `pending`은 model 결정이 아니므로 `RecommendationDecisionV2.status`에 넣지 않습니다. terminal status는 `completed|insufficient_data|failed`뿐이고, `completed`일 때 제공된 10개 catalog ID 중 정확히 하나만 `selected_product_id`로 반환합니다.
+DB 내부 운영 상태에는 claim용 `running`과 삭제 요청의 `cancelled`가 추가되지만 공개
+RecommendationDecision 상태로 노출하지 않습니다. `/readyz` 실패는 SQL 원문 대신 제한된
+reason code만 반환합니다.
+
+### v2 캡처 문맥·영상 좌표·AOI 소유권
+
+- Kiosk는 camera frame 캡처를 시작하기 직전에 `session_id`, `video_id`, `frame_id`, `sequence`, `captured_at_mono_ms`, `video_time_ms`, `playback_epoch`과 video layout을 한 번 snapshot합니다. Eye·Face 응답 뒤 영상 시각을 다시 읽지 않습니다.
+- Gateway와 Kiosk consumer는 Eye·Face 결과가 이 snapshot의 모든 식별·시간 필드와 정확히 같을 때만 결합합니다.
+- Kiosk는 캡처 시점 content rectangle으로 viewport gaze를 `video_x_norm`, `video_y_norm`으로 변환합니다. letterbox·pillarbox·영상 밖·무효 gaze는 상품 좌표로 대체하지 않습니다.
+- Production Kiosk의 `attention.candidates`는 항상 빈 배열입니다. Client가 product/AOI candidate를 보내면 Backend가 `client_product_attribution_forbidden`으로 거절합니다.
+- Backend만 승인된 `LookbookAoiMetadataV2`를 적용합니다. 같은 상품의 parent-child 또는 복수 부위 중첩은 모두 보존하고 component/tag는 중복 제거합니다. 서로 다른 상품의 AOI가 겹치면 해당 frame은 `ambiguous_product`로 어느 상품에도 귀속하지 않습니다. `specificity_rank`는 임의 winner 선택에 사용하지 않습니다.
+- Actual `mcm-lookbook-v2` metadata는 전체 AOI 검수 전 `pending_review`이며 영상 안 유효 좌표는 `aoi_metadata_unapproved`로 fail-closed합니다. 승인된 60초 `mcm-central-ai-replay-v2`는 synthetic fixture로만 사용합니다.
+- Controlled component code는 `whole_product`, `body`, `handle`, `strap`, `closure`, `hardware`, `pocket`, `trim`, `logo`입니다. 색상·소재는 catalog allowlist의 visual tag로 기록합니다.
 
 ### v2 저수준 신호와 연속성
 
@@ -111,11 +127,11 @@ Transport routing은 다음과 같습니다.
 ### 좌표와 무효 신호
 
 - `GazeSample` 좌표는 Kiosk viewport 좌상단 원점의 `0.0~1.0` 정규화 좌표입니다.
-- `ProductAttentionEvent` 좌표는 letterbox, crop, resize를 보정한 영상 content 기준 정규화 좌표입니다.
+- v1 `ProductAttentionEvent` 좌표와 v2 `attention.video_x_norm/y_norm`은 letterbox, crop, resize를 보정한 영상 content 기준 정규화 좌표입니다.
 - `valid=false`인 시선은 좌표를 포함할 수 없고 비어 있지 않은 `reason`을 가져야 합니다.
 - `ExpressionSample`이 무효이면 `scores`는 빈 object여야 합니다. 결측을 중립 점수로 대체하지 않습니다.
 - 영상 밖의 유효한 시선은 `outside_video=true`, 빈 `candidates`, `reason=null`로 표현합니다. 이는 측정 실패와 구분됩니다.
-- AOI가 겹치면 `candidates`에 모든 hit와 manifest의 `priority`를 전달합니다. 여기서 최종 상품을 고르지 않습니다.
+- 아래 Contract v1 호환 경로에서는 AOI hit를 `candidates`로 전달합니다. 신규 v2 production 경로의 후보 생성과 중첩 정책은 위 “v2 캡처 문맥·영상 좌표·AOI 소유권”을 따릅니다.
 
 ### 표정 점수
 

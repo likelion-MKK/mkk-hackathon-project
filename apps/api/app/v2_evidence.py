@@ -7,6 +7,12 @@ from dataclasses import dataclass
 from statistics import fmean
 from typing import Iterable, Literal
 
+from apps.api.app.v2_aoi import (
+    AoiMappingResultV2,
+    LookbookAoiMetadataV2,
+    enrich_frame_with_aoi,
+    map_frame_to_aoi,
+)
 from apps.api.app.v2_models import (
     EvidenceWindowV2,
     ExpressionSummaryV2,
@@ -22,7 +28,7 @@ from apps.api.app.v2_models import (
 )
 
 
-FEATURE_VERSION = "central-evidence-v2-demo-1"
+FEATURE_VERSION = "central-evidence-v2-demo-2"
 MAX_CONTINUOUS_GAP_MS = 1_000.0
 
 
@@ -54,6 +60,7 @@ def _ordered(observations: Iterable[FrameObservationV2]) -> list[FrameObservatio
 
 def _data_quality(
     ordered: list[FrameObservationV2],
+    mappings: list[AoiMappingResultV2],
     *,
     expected_observation_count: int | None,
 ) -> RecommendationDataQualityV2:
@@ -72,10 +79,7 @@ def _data_quality(
     matched_count = sum(
         frame.gaze is not None and frame.expression is not None for frame in ordered
     )
-    ambiguous_count = sum(
-        frame.attention is not None and len(frame.attention.candidates) > 1
-        for frame in ordered
-    )
+    ambiguous_count = sum(mapping.status == "ambiguous_product" for mapping in mappings)
     return RecommendationDataQualityV2(
         expected_observation_count=expected,
         gaze_valid_ratio=gaze_count / denominator,
@@ -85,7 +89,10 @@ def _data_quality(
     )
 
 
-def _signal_versions(ordered: list[FrameObservationV2]) -> SignalVersionsV2:
+def _signal_versions(
+    ordered: list[FrameObservationV2],
+    aoi_metadata: LookbookAoiMetadataV2 | None,
+) -> SignalVersionsV2:
     eye_versions = {
         (frame.gaze.producer_id, frame.gaze.model_revision)
         for frame in ordered
@@ -99,11 +106,6 @@ def _signal_versions(ordered: list[FrameObservationV2]) -> SignalVersionsV2:
         )
         for frame in ordered
         if frame.expression is not None
-    }
-    aoi_versions = {
-        frame.attention.model_revision
-        for frame in ordered
-        if frame.attention is not None
     }
     eye = (
         EyeSignalVersionV2(producer_id=next(iter(eye_versions))[0], model_revision=next(iter(eye_versions))[1])
@@ -124,8 +126,19 @@ def _signal_versions(ordered: list[FrameObservationV2]) -> SignalVersionsV2:
         eye_reason=None if eye is not None else ("no_valid_gaze" if not eye_versions else "mixed_eye_versions"),
         face=face,
         face_reason=None if face is not None else ("no_valid_expression" if not face_versions else "mixed_face_versions"),
-        aoi_mapper_revision=next(iter(aoi_versions)) if len(aoi_versions) == 1 else ("unavailable" if not aoi_versions else "mixed"),
+        aoi_mapper_revision=(
+            aoi_metadata.metadata_revision
+            if aoi_metadata is not None and aoi_metadata.approval_status == "approved"
+            else "unavailable"
+        ),
     )
+
+
+def _mapped_product_id(frame: FrameObservationV2) -> str | None:
+    if frame.attention is None:
+        return None
+    product_ids = {candidate.product_id for candidate in frame.attention.candidates}
+    return next(iter(product_ids)) if len(product_ids) == 1 else None
 
 
 def summarize_observations(
@@ -136,18 +149,32 @@ def summarize_observations(
     video_id: str = "video-summary",
     manifest_version: str = "manifest-summary",
     catalog_version: str = "catalog-summary",
+    aoi_metadata: LookbookAoiMetadataV2 | None = None,
     product_ids: Iterable[str] | None = None,
     expected_observation_count: int | None = None,
     max_continuous_gap_ms: float = MAX_CONTINUOUS_GAP_MS,
     input_variant: Literal["A", "B", "C"] = "C",
 ) -> EvidenceSummary:
-    """Aggregate only exact singleton AOI ownership and reset untrusted edges."""
+    """Map only approved AOIs, then aggregate one unambiguous product per frame."""
 
-    ordered = _ordered(observations)
-    if not ordered:
+    raw_ordered = _ordered(observations)
+    if not raw_ordered:
         raise ValueError("at least one observation is required to build v2 evidence")
-    if len(ordered) > 512:
+    if len(raw_ordered) > 512:
         raise ValueError("v2 evidence timeline is bounded to 512 observations")
+
+    mappings = [
+        (
+            map_frame_to_aoi(frame, aoi_metadata)
+            if aoi_metadata is not None
+            else AoiMappingResultV2("aoi_metadata_unapproved")
+        )
+        for frame in raw_ordered
+    ]
+    ordered = [
+        enrich_frame_with_aoi(frame, mapping)
+        for frame, mapping in zip(raw_ordered, mappings)
+    ]
 
     inferred_ids = {
         candidate.product_id
@@ -171,24 +198,50 @@ def summarize_observations(
     changes: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
     change_rates: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
     sustained: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
-    windows_raw: list[tuple[str, FrameObservationV2, FrameObservationV2, set[str]]] = []
+    components: dict[str, set[str]] = defaultdict(set)
+    visual_tags: dict[str, set[str]] = defaultdict(set)
+    windows_raw: list[
+        tuple[
+            str,
+            FrameObservationV2,
+            FrameObservationV2,
+            set[str],
+            set[str],
+            set[str],
+        ]
+    ] = []
 
     previous: FrameObservationV2 | None = None
     previous_product: str | None = None
+    seen_products: set[str] = set()
     window_product: str | None = None
     window_start: FrameObservationV2 | None = None
     window_end: FrameObservationV2 | None = None
     window_codes: set[str] = set()
+    window_components: set[str] = set()
+    window_visual_tags: set[str] = set()
     continuity_reset_count = 0
 
     def close_window() -> None:
-        nonlocal window_product, window_start, window_end, window_codes
+        nonlocal window_product, window_start, window_end
+        nonlocal window_codes, window_components, window_visual_tags
         if window_product is not None and window_start is not None and window_end is not None:
-            windows_raw.append((window_product, window_start, window_end, set(window_codes)))
+            windows_raw.append(
+                (
+                    window_product,
+                    window_start,
+                    window_end,
+                    set(window_codes),
+                    set(window_components),
+                    set(window_visual_tags),
+                )
+            )
         window_product = None
         window_start = None
         window_end = None
         window_codes = set()
+        window_components = set()
+        window_visual_tags = set()
 
     for frame in ordered:
         discontinuity = False
@@ -204,34 +257,41 @@ def summarize_observations(
             if discontinuity:
                 continuity_reset_count += 1
                 previous_product = None
+                seen_products.clear()
                 close_window()
 
         attention = frame.attention
-        product_id = (
-            attention.candidates[0].product_id
-            if attention is not None and len(attention.candidates) == 1
-            else None
-        )
-        if attention is not None and len(attention.candidates) > 1:
-            close_window()
-            previous_product = None
+        product_id = _mapped_product_id(frame)
 
         if product_id is not None:
+            frame_components = {
+                candidate.component_code
+                for candidate in (attention.candidates if attention is not None else [])
+                if candidate.component_code is not None
+            }
+            frame_visual_tags = {
+                tag
+                for candidate in (attention.candidates if attention is not None else [])
+                for tag in candidate.observed_visual_tag_ids
+            }
+            components[product_id].update(frame_components)
+            visual_tags[product_id].update(frame_visual_tags)
             frames_by_product[product_id].append(frame)
             if frame.gaze is not None:
                 confidences[product_id].append(frame.gaze.confidence)
             if previous_product == product_id and previous is not None and not discontinuity:
                 dwell_ms[product_id] += frame.captured_at_mono_ms - previous.captured_at_mono_ms
+            if previous is not None and not discontinuity:
+                return_comparisons[product_id] += 1
+                if previous_product != product_id and product_id in seen_products:
+                    returns[product_id] += 1
+            seen_products.add(product_id)
 
             derived = frame.derived
             if derived is not None and derived.gaze is not None and not discontinuity:
                 if derived.gaze.movement is not None:
                     movement[product_id].append(derived.gaze.movement.distance_norm)
                     speeds[product_id].append(derived.gaze.movement.speed_norm_per_s)
-                if derived.gaze.return_candidate is not None:
-                    return_comparisons[product_id] += 1
-                    if derived.gaze.return_candidate is True:
-                        returns[product_id] += 1
             if derived is not None and derived.expression is not None and not discontinuity:
                 if derived.expression.score_changes is not None:
                     for signal, value in derived.expression.score_changes.items():
@@ -259,6 +319,8 @@ def summarize_observations(
                 window_start = frame
             window_end = frame
             window_codes.update(codes)
+            window_components.update(frame_components)
+            window_visual_tags.update(frame_visual_tags)
         else:
             close_window()
         previous_product = product_id
@@ -319,6 +381,8 @@ def summarize_observations(
             ProductEvidenceSummaryV2(
                 product_id=product_id,
                 exposure_duration_ms=float(dwell_ms[product_id]),
+                observed_component_codes=sorted(components[product_id]),
+                observed_visual_tag_ids=sorted(visual_tags[product_id]),
                 gaze=gaze_summary,
                 gaze_reason=None if gaze_summary is not None else "no_valid_gaze_for_product",
                 expression=expression_summary,
@@ -337,11 +401,24 @@ def summarize_observations(
             video_start_ms=start.video_time_ms,
             video_end_ms=end.video_time_ms,
             playback_epoch=start.playback_epoch,
+            observed_component_codes=sorted(window_component_codes),
+            observed_visual_tag_ids=sorted(window_tag_ids),
             evidence_codes=sorted(codes),
         )
-        for index, (product_id, start, end, codes) in enumerate(windows_raw, start=1)
+        for index, (
+            product_id,
+            start,
+            end,
+            codes,
+            window_component_codes,
+            window_tag_ids,
+        ) in enumerate(windows_raw, start=1)
     ]
-    quality = _data_quality(ordered, expected_observation_count=expected_observation_count)
+    quality = _data_quality(
+        ordered,
+        mappings,
+        expected_observation_count=expected_observation_count,
+    )
     # No central call is made when there is no product window; B remains a
     # contract-valid diagnostic snapshot for the insufficient-data result.
     variant = input_variant if windows else "B"
@@ -355,7 +432,7 @@ def summarize_observations(
         manifest_version=manifest_version,
         catalog_version=catalog_version,
         feature_version=FEATURE_VERSION,
-        signal_versions=_signal_versions(ordered),
+        signal_versions=_signal_versions(ordered, aoi_metadata),
         data_quality=quality,
         summary=summaries,
         evidence_windows=evidence_windows,
@@ -368,7 +445,6 @@ def summarize_observations(
         missing_gaze_count=sum(frame.gaze is None for frame in ordered),
         missing_expression_count=sum(frame.expression is None for frame in ordered),
         ambiguous_attention_count=sum(
-            frame.attention is not None and len(frame.attention.candidates) > 1
-            for frame in ordered
+            mapping.status == "ambiguous_product" for mapping in mappings
         ),
     )

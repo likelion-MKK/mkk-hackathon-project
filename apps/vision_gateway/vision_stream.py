@@ -86,6 +86,22 @@ class FrameMetadata:
     height_px: int
     byte_length: int
 
+    def as_payload(self) -> dict[str, object]:
+        """Return metadata only; image bytes remain a separate transient body."""
+
+        return {
+            "type": "frame",
+            "protocol_version": "1.0",
+            **self.context.as_payload(),
+            "layout": dict(self.layout),
+            "camera_frame": {
+                "encoding": self.encoding,
+                "width_px": self.width_px,
+                "height_px": self.height_px,
+                "byte_length": self.byte_length,
+            },
+        }
+
     @classmethod
     def from_payload(cls, payload: Mapping[str, object]) -> "FrameMetadata":
         if set(payload) != _FRAME_FIELDS:

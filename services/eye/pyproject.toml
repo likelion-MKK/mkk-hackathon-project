@@ -9,6 +9,8 @@ dependencies = [
     "mediapipe==1.0.0",
     "numpy==1.26.4",
     "opencv-python==4.11.0.86",
+    "starlette>=0.37,<1",
+    "uvicorn[standard]>=0.30,<1",
 ]
 
 [dependency-groups]

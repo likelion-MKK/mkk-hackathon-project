@@ -256,8 +256,11 @@ paths:
       operationId: appendObservationBatchV2
       summary: Accept a batch of derived frame observations for the central recommender
       description: >-
-        Accepts only privacy-minimized derived signals. Raw frames, image bytes,
+        Accepts only privacy-minimized derived signals whose video_time_ms was
+        snapshotted when the camera frame was captured. Raw frames, image bytes,
         base64/data URIs, embeddings, landmarks and original/source paths are forbidden.
+        Kiosk producers must send an empty attention.candidates array; Backend rejects
+        client product attribution and maps only approved server-side AOI metadata.
       parameters:
         - $ref: "#/components/parameters/SessionId"
       requestBody:
@@ -411,11 +414,44 @@ paths:
                 items:
                   $ref: "./v2/manager-event-v2.schema.json"
 
+  /healthz:
+    get:
+      tags: [System]
+      operationId: getLiveness
+      summary: Check whether the API process is alive
+      responses:
+        "200":
+          description: Process is alive; this does not imply database readiness
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Liveness"
+
+  /readyz:
+    get:
+      tags: [System]
+      operationId: getReadiness
+      summary: Check migration, canonical catalog, database and job intake readiness
+      responses:
+        "200":
+          description: API can accept recommendation jobs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Readiness"
+        "503":
+          description: API is alive but is not ready; only a bounded reason code is returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Readiness"
+
   /api/v1/health:
     get:
       tags: [System]
       operationId: getHealth
-      summary: Check API and database readiness
+      deprecated: true
+      summary: Legacy combined health view; use /healthz and /readyz
       responses:
         "200":
           description: Service health
@@ -566,6 +602,34 @@ components:
           enum: [ok, degraded]
         database:
           enum: [up, down]
+
+    Liveness:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          const: ok
+
+    Readiness:
+      type: object
+      additionalProperties: false
+      required: [status, reason]
+      properties:
+        status:
+          enum: [ready, not_ready]
+        reason:
+          oneOf:
+            - type: "null"
+            - enum:
+                - database_not_configured
+                - db_unavailable
+                - migration_version_mismatch
+                - catalog_count_mismatch
+                - catalog_revision_mismatch
+                - catalog_product_mismatch
+                - catalog_content_mismatch
+                - job_intake_unavailable
 
     Error:
       type: object

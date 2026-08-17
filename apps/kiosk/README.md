@@ -4,12 +4,12 @@
 
 조윤혜가 S01–S04 화면, 영상·웹캠 orchestration과 Backend 연결을 담당한다. 공유 Vision·추천 계약은 박형진·양유상·정은미와 함께 리뷰한다.
 
-기본 실행은 실제 FastAPI에 연결하는 중앙 추천 v2 transport다. 원격 Vision은 [`ADR-0001`](../../docs/adr/0001-remote-vision-inference.md)이 Proposed인 동안 실제 고객에게 사용하지 않으며, 현재 Vision producer는 개발 검증용 local/in-process replay다. 원본 frame·image bytes·base64·embedding·원본 경로는 REST payload, 브라우저 저장소, 로그나 추천 AI 입력에 포함하지 않는다.
+기본 실행은 실제 FastAPI에 연결하는 중앙 추천 v2 transport다. live Vision은 브라우저 `getUserMedia` → signed token → Vision Gateway → private Eye/Face worker 경계를 구현했으며, [`ADR-0001`](../../docs/adr/0001-remote-vision-inference.md)이 Proposed이고 domain/TLS가 미확정인 동안 public customer traffic은 열지 않는다. 원본 frame·image bytes·base64·embedding·원본 경로는 REST payload, 브라우저 저장소, 로그나 추천 AI 입력에 포함하지 않는다.
 
 ## Real HTTP v2 흐름
 
 ```text
-S01 대기 → S02 가방 룩북 선택·동의 → 보정 → S03 약 60초 룩북
+S01 대기 → S02 가방 룩북 선택·동의 → 보정 → S03 33.5초 실제 룩북
   → 4Hz 분석 frame의 시선·표정 파생값을 frame_id로 결합
   → POST /api/v2/sessions/{id}/observations
   → POST /api/v2/sessions/{id}/complete
@@ -18,9 +18,11 @@ S01 대기 → S02 가방 룩북 선택·동의 → 보정 → S03 약 60초 룩
   → 고객이 버튼을 누른 경우에만 v2 manager-product-request 전송
 ```
 
-real mode는 `mcm-central-ai-replay-v2` manifest와 v2 계약을 사용한다. 동일 `frame_id`와 capture sequence의 Eye·Face 신호를 먼저 결합하고, 원래 frame sequence와 frame-drop gap을 보존한다. 같은 frame의 sequence가 충돌하면 임의 선택하지 않고 실패한다. 누락·무효 modality는 `null + reason`으로 유지한다. seek·`playback_epoch` 변경·결측·무효·out-of-order·1초 초과 gap에서는 이동, 변화율과 지속 상태를 초기화한다. 초기화 직후 계산할 수 없는 이동·변화값을 0으로 만들지 않는다. 겹치는 여러 AOI는 특정 상품의 복귀 근거로 임의 귀속하지 않는다.
+real mode는 actual `mcm-lookbook-v2` manifest와 v2 계약을 사용한다. Kiosk는 camera frame 생성 직전에 `session_id`, `video_id`, `frame_id`, `sequence`, `captured_at_mono_ms`, `video_time_ms`, `playback_epoch`, video layout을 한 번 snapshot하고 응답 시점의 `currentTime`을 다시 읽지 않는다. 동일 snapshot의 Eye·Face 신호만 결합하며 원래 sequence와 frame-drop gap을 보존한다. seek·replay·source 교체는 이후 frame보다 먼저 epoch를 증가시킨다.
 
-Kiosk의 분석 cadence는 250ms 간격인 4Hz다. 60초 세션은 약 240 observation을 만들며 v2 batch 상한 256 안에 들어간다. frame drop이나 modality 차이로 상한을 넘으면 모든 observation을 보존한 채 다음 batch로 분할한다.
+Kiosk는 캡처 시점 layout으로 viewport gaze를 실제 video content rectangle의 `video_x_norm`, `video_y_norm`으로 변환한다. letterbox·pillarbox·영상 밖·무효 gaze에는 상품을 만들지 않으며 production observation의 `candidates`는 항상 빈 배열이다. 승인 AOI를 적용해 상품·부위·태그를 정하는 책임은 Backend에만 있다.
+
+Kiosk의 분석 cadence는 250ms 간격인 4Hz다. 실제 33.5초 영상은 약 134 observation을 만든다. 60초·240 observation 경로는 `mcm-central-ai-replay-v2` 합성 fixture 전용이며 actual 설정과 섞지 않는다. frame drop이나 modality 차이로 batch 상한을 넘으면 모든 observation을 보존한 채 다음 batch로 분할한다.
 
 ## 고객 설명과 상품 자산
 
@@ -48,9 +50,16 @@ S04는 `completed` 결과의 단일 `selected_product_id`만 표시한다. `insu
 - `VITE_API_BASE_URL`: 실제 FastAPI 주소
 - `VITE_API_PROXY_TARGET`: 필요한 경우 Vite 개발 proxy 대상
 - `VITE_USE_MOCK_API=false`: 기본 real HTTP v2
-- `VITE_VISION_MODE=replay`: 승인 전 local/in-process replay producer
-- `VITE_LOOKBOOK_ID=mcm-central-ai-replay-v2`: canonical 가방 룩북
-- `VITE_LOOKBOOK_VIDEO_URL`: 승인된 룩북 영상 URL
+- `VITE_VISION_MODE=replay`: synthetic/in-process development producer
+- `VITE_VISION_MODE=live`: browser `getUserMedia` → Vision Gateway WSS → Eye/Face;
+  production은 backend token mode를 사용하고 Eye unavailable이면 fail-closed한다.
+- `VITE_LOOKBOOK_ID=mcm-lookbook-v2`: 33.5초 actual canonical 가방 룩북
+- `VITE_LOOKBOOK_VIDEO_URL`: 로컬에서는 `/media/mcm-lookbook-v2.mp4`로 staging한
+  canonical 영상, 배포에서는 Nginx `/media/` static path
+
+중앙 Luna 추천 polling에는 기본 20초 timeout이 없다. Kiosk는 `completed`,
+`failed`, `insufficient_data`까지 기다리며 사용자가 취소하면 AbortSignal로 job을
+취소한다. 자동 orphan cleanup은 API에서 30분 후 수행한다.
 - `VITE_KIOSK_DEBUG_AOI`: 개발용 AOI·gaze overlay 명시적 활성화 (`true`)
 
 저장소 루트에서 Node.js `24.19.0`과 npm을 사용한다.
@@ -68,12 +77,12 @@ npm run lint --workspace @mkk/kiosk
 npm run build --workspace @mkk/kiosk
 ```
 
-## D04 개발용 AOI overlay
+## 개발용 영상 좌표 overlay
 
-S03 룩북 화면은 개발 검증을 위해 현재 `video_time_ms`에 활성화된 manifest exposure polygon과 최신 gaze 위치를 실제 영상 content 영역 위에 표시한다. gaze는 해당 frame의 캡처 시점 `VideoLayout`으로 video 정규화 좌표에 매핑한다.
+S03 룩북 화면은 개발 검증을 위해 최신 gaze 위치를 실제 영상 content 영역 위에 표시한다. gaze는 해당 frame의 캡처 시점 `VideoLayout`으로 video 정규화 좌표에 매핑한다.
 
 - `valid=false`와 `outside_video`를 별도 상태로 표시하고 좌표나 상품 후보로 대체하지 않는다.
-- AOI hit 여부는 기존 `LookbookManifest`와 시선 파생 신호로만 계산한다.
+- Kiosk overlay는 AOI hit나 상품 후보를 계산하지 않고 `BACKEND AOI PENDING`만 표시한다.
 - 개발 빌드에서는 overlay가 기본 활성화되며, release 빌드는 `VITE_KIOSK_DEBUG_AOI=true`일 때만 활성화된다.
 - overlay는 디버그 표시만 담당하며 중앙 추천 v2의 S04 Top 1 결과와 Manager 요청 흐름을 변경하지 않는다.
 - 원본 frame, image bytes, base64와 얼굴 embedding을 파일·DB·API·로그·브라우저 저장소에 추가하지 않는다.
