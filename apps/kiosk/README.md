@@ -62,6 +62,14 @@ S04는 `completed` 결과의 단일 `selected_product_id`만 표시한다. `insu
 취소한다. 자동 orphan cleanup은 API에서 30분 후 수행한다.
 - `VITE_KIOSK_DEBUG_AOI`: 개발용 AOI·gaze overlay 명시적 활성화 (`true`)
 
+## Demo 3-C local actual-camera smoke
+
+[`DEMO_3C_REAL_CAMERA_SMOKE.md`](DEMO_3C_REAL_CAMERA_SMOKE.md)는 physical
+browser camera → Eye worker → Gateway → API → explicitly opt-in static AOI →
+test-only deterministic Top 1을 위한 loopback-only 수동 smoke 절차다. 이는
+production acceptance가 아니며, fake media device·Luna·Supabase를 사용하지
+않는다.
+
 저장소 루트에서 Node.js `24.19.0`과 npm을 사용한다.
 
 ```powershell

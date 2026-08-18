@@ -327,3 +327,25 @@ test("전송된 frame의 호출 abort 뒤 늦은 result를 소비하고 stopSess
     session_active: false,
   });
 });
+
+test("Demo 3-C: Gateway 연결 중단은 in-flight frame을 accepted로 바꾸지 않는다", async () => {
+  const socketRef = { current: null as FakeSocket | null };
+  const client = createClient(socketRef);
+
+  await client.startSession({ session_id: context.session_id, video_id: context.video_id });
+  await client.startInference();
+  const socket = socketRef.current;
+  assert.ok(socket);
+  socket.deferFrameResult = true;
+
+  const delivery = client.sendFrame(createFrame(), context);
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  socket.close(1011, "gateway_unavailable");
+
+  await assert.rejects(delivery, /gateway_unavailable/);
+  assert.deepEqual(await client.health(), {
+    status: "degraded",
+    runtime: "mediapipe_gateway",
+    session_active: false,
+  });
+});

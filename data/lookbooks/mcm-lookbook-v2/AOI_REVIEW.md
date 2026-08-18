@@ -1,5 +1,10 @@
 # MCM Lookbook v2 AOI human-review handoff
 
+> **Superseded review draft:** owner 검수는 [`AOI_REVIEW_R3.md`](./AOI_REVIEW_R3.md)와
+> [`aoi-proposal-2026-08-18-r3.json`](./aoi-proposal-2026-08-18-r3.json)을 사용한다.
+> 이 문서는 r2의 역사적 handoff를 보존하기 위한 기록이며 production metadata로
+> 사용하지 않는다.
+
 ## Status
 
 This is a human-review handoff record, not production AOI metadata.  The

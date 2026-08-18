@@ -11,7 +11,7 @@ from hashlib import sha256
 from pathlib import Path
 from threading import RLock
 from time import monotonic
-from typing import Callable, Literal, Protocol
+from typing import Callable, Literal, Mapping, Protocol
 from uuid import uuid4
 
 from apps.api.app.schemas import ManagerProductRequestAccepted
@@ -156,6 +156,7 @@ class MemoryStoreRecommendationRepository:
         catalog: ProductRecommendationProfileV2 | None = None,
         persistence: DecisionPersistence | None = None,
         database_required: bool | None = None,
+        aoi_metadata_paths: Mapping[str, Path] | None = None,
     ) -> None:
         self._store = store
         self._persistence = persistence
@@ -169,6 +170,13 @@ class MemoryStoreRecommendationRepository:
         self._manager_events_v2: list[ManagerEventV2] = []
         self._manager_requests_v2: dict[str, tuple[str, str, str]] = {}
         self._manager_sequence_v2 = 0
+        self._aoi_metadata_paths = dict(aoi_metadata_paths or {})
+        unsupported_aoi_path_ids = set(self._aoi_metadata_paths) - {
+            "mcm-central-ai-replay-v2",
+            "mcm-lookbook-v2",
+        }
+        if unsupported_aoi_path_ids:
+            raise ValueError("AOI metadata paths can only target supported lookbooks")
         if catalog is None:
             path = (
                 store.repository_root
@@ -193,13 +201,7 @@ class MemoryStoreRecommendationRepository:
     def _load_aoi_metadata(self) -> dict[str, LookbookAoiMetadataV2]:
         metadata_by_video: dict[str, LookbookAoiMetadataV2] = {}
         for video_id in ("mcm-central-ai-replay-v2", "mcm-lookbook-v2"):
-            path = (
-                self._store.repository_root
-                / "data"
-                / "lookbooks"
-                / video_id
-                / "aoi-metadata-v2.json"
-            )
+            path = self._aoi_metadata_path(video_id)
             if not path.is_file():
                 continue
             metadata = load_aoi_metadata(path)
@@ -215,6 +217,24 @@ class MemoryStoreRecommendationRepository:
                 raise RuntimeError("only one AOI metadata revision can be active per video")
             metadata_by_video[metadata.video_id] = metadata
         return metadata_by_video
+
+    def _aoi_metadata_path(self, video_id: str) -> Path:
+        """Resolve a reviewed revision explicitly without replacing the pending fixture."""
+
+        configured = self._aoi_metadata_paths.get(video_id)
+        if configured is not None:
+            return (
+                configured
+                if configured.is_absolute()
+                else self._store.repository_root / configured
+            )
+        return (
+            self._store.repository_root
+            / "data"
+            / "lookbooks"
+            / video_id
+            / "aoi-metadata-v2.json"
+        )
 
     def _verify_configured_media(self) -> None:
         raw_path = os.getenv("LOOKBOOK_VIDEO_PATH", "").strip()
@@ -394,10 +414,30 @@ class MemoryStoreRecommendationRepository:
         return 0 if not callable(operation) else operation(retention_seconds)
 
 
+def _configured_demo_static_aoi_paths(store: MemoryStore) -> dict[str, Path]:
+    """Return the one explicitly opt-in, non-production static demo revision."""
+
+    if os.getenv("MCM_LOOKBOOK_DEMO_STATIC_AOI", "").strip() != "1":
+        return {}
+    return {
+        "mcm-lookbook-v2": (
+            store.repository_root
+            / "data"
+            / "lookbooks"
+            / "mcm-lookbook-v2"
+            / "aoi-metadata-v2-demo-static-assumptions.json"
+        )
+    }
+
+
 def configured_recommendation_repository(store: MemoryStore) -> MemoryStoreRecommendationRepository:
+    demo_static_aoi_paths = _configured_demo_static_aoi_paths(store)
     database_url = os.getenv("DATABASE_URL", "").strip()
     if not database_url:
-        return MemoryStoreRecommendationRepository(store)
+        return MemoryStoreRecommendationRepository(
+            store,
+            aoi_metadata_paths=demo_static_aoi_paths,
+        )
     from apps.api.app.v2_postgres import psycopg_persistence
 
     catalog_path = (
@@ -418,12 +458,14 @@ def configured_recommendation_repository(store: MemoryStore) -> MemoryStoreRecom
             catalog=load_canonical_catalog(catalog_path),
             persistence=None,
             database_required=True,
+            aoi_metadata_paths=demo_static_aoi_paths,
         )
     return MemoryStoreRecommendationRepository(
         store,
         catalog=catalog,
         persistence=persistence,
         database_required=True,
+        aoi_metadata_paths=demo_static_aoi_paths,
     )
 
 

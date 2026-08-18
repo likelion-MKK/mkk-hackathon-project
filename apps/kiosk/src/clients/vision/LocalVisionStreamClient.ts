@@ -646,6 +646,17 @@ export class LocalVisionStreamClient implements RemoteVisionClient {
   private failTransport(error: Error): void {
     this.terminalError = error;
     this.rejectWaiters(error);
+    const socket = this.socket;
+    this.detachSocket();
+    this.socket = null;
+    this.clearSessionState();
+    if (socket && (socket.readyState === 0 || socket.readyState === 1)) {
+      try {
+        socket.close(1000, "normal");
+      } catch {
+        // The transport is already terminal; no retry or fallback sample is safe.
+      }
+    }
   }
 
   private rejectWaiters(error: Error): void {

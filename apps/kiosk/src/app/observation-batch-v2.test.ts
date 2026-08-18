@@ -325,6 +325,14 @@ test("invalid gaze와 no-face를 좌표나 중립 score로 바꾸지 않는다",
   assert.equal(observation.derived?.expression, null);
 });
 
+test("Demo 3-C gaze-only observation은 표정을 not_observed로 보존하고 후보를 만들지 않는다", () => {
+  const observation = build([gaze(1)], [])[0].observations[0];
+
+  assert.equal(observation.expression, null);
+  assert.equal(observation.expression_reason, "not_observed");
+  assert.deepEqual(observation.attention?.candidates, []);
+});
+
 test("캡처 시점 layout이 없으면 화면 좌표를 영상 좌표로 추정하지 않는다", () => {
   const observation = buildObservationBatchesV2({
     batchId: "observation-batch-no-layout",

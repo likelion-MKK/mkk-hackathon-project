@@ -413,3 +413,23 @@ test("브라우저 카메라 거부를 명시적인 permission_denied로 구분�
       error instanceof CameraAccessError && error.code === "permission_denied",
   );
 });
+
+test("Demo 3-C: 사용할 수 없는 camera device를 permission denied로 바꾸지 않는다", async () => {
+  const unavailableError = Object.assign(new Error("unavailable"), {
+    name: "NotFoundError",
+  });
+  const source = new FrameSource({
+    mediaDevices: {
+      getUserMedia: async () => {
+        throw unavailableError;
+      },
+    },
+  });
+
+  await assert.rejects(
+    source.open(),
+    (error: unknown) =>
+      error instanceof CameraAccessError && error.code === "camera_unavailable",
+  );
+  assert.equal(source.isOpen(), false);
+});
