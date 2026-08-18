@@ -14,6 +14,10 @@ import screensaverHeritageCartImage from "./assets/screensaver/mcm-heritage-cart
 import screensaverLifestyleImage from "./assets/screensaver/mcm-lifestyle.png";
 import screensaverLifestyleWideImage from "./assets/screensaver/mcm-lifestyle-wide.jpg";
 import screensaverMilanStreetImage from "./assets/screensaver/mcm-milan-street.jpg";
+import {
+  ACTUAL_LOOKBOOK_ID,
+  resolveActualLookbookConfig,
+} from "./app/actual-lookbook-config.ts";
 import { AsyncFlowController } from "./app/async-flow-controller.ts";
 import {
   discardCentralSessionBestEffort,
@@ -33,6 +37,7 @@ import {
 } from "./app/kiosk-machine.ts";
 import { buildManagerProductRequestV2 } from "./app/manager-product-request-v2.ts";
 import { buildObservationBatchesV2 } from "./app/observation-batch-v2.ts";
+import { resolveProductDisplayPolicy } from "./app/product-display-policy.ts";
 import { buildD1ReactionBatches } from "./app/reaction-batch.ts";
 import {
   pollRecommendation,
@@ -50,7 +55,6 @@ import {
   type VideoLayout,
 } from "./app/video-context.ts";
 import type {
-  ExpressionSample,
   GazeSample,
   KioskScreen,
   LookbookManifest,
@@ -83,13 +87,18 @@ import "./App.css";
 
 const useMockApi = import.meta.env.VITE_USE_MOCK_API?.trim().toLowerCase() === "true";
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() ?? "";
-const configuredLookbookId =
-  import.meta.env.VITE_LOOKBOOK_ID?.trim() || "mcm-lookbook-v2";
+const actualLookbookConfig = useMockApi
+  ? null
+  : resolveActualLookbookConfig(
+      import.meta.env.VITE_LOOKBOOK_ID,
+      import.meta.env.VITE_LOOKBOOK_VIDEO_URL,
+    );
+const configuredLookbookId = actualLookbookConfig?.lookbookId ?? ACTUAL_LOOKBOOK_ID;
 const mockApiClient = new MockApiClient({ sessionStartDelayMs: 450 });
 const httpApiClient = new HttpApiClient(apiBaseUrl);
 const apiClient: ApiClient = useMockApi ? mockApiClient : httpApiClient;
 const frameSource = new FrameSource();
-const temporaryLookbookVideoUrl = import.meta.env.VITE_LOOKBOOK_VIDEO_URL?.trim() ?? "";
+const configuredLookbookVideoUrl = actualLookbookConfig?.videoUrl ?? "";
 const configuredVisionMode = import.meta.env.VITE_VISION_MODE?.trim() || "replay";
 if (configuredVisionMode !== "replay" && configuredVisionMode !== "live") {
   throw new Error("VITE_VISION_MODE must be replay or live.");
@@ -803,30 +812,81 @@ function Calibration({
   );
 }
 
-function TimedPlaceholder({
-  message,
-  onComplete,
-  onHome,
-}: {
-  message: string;
-  onComplete: () => Promise<void>;
-  onHome: () => void;
-}) {
-  useEffect(() => {
-    const stepTimer = window.setTimeout(() => {
-      void onComplete();
-    }, 1800);
+type AnalysisStatus =
+  | "idle"
+  | "preparing"
+  | "requesting"
+  | "generating"
+  | "cancelled"
+  | "insufficient_data"
+  | "failed";
 
-    return () => window.clearTimeout(stepTimer);
-  }, [onComplete]);
+const ANALYSIS_STATUS_COPY: Record<Exclude<AnalysisStatus, "idle">, {
+  eyebrow: string;
+  title: string;
+  description: string;
+}> = {
+  preparing: {
+    eyebrow: "ANALYSIS PREPARING",
+    title: "분석 준비 중",
+    description: "이번 룩북의 시선 관찰을 안전하게 정리하고 있습니다.",
+  },
+  requesting: {
+    eyebrow: "RECOMMENDATION REQUEST",
+    title: "추천 요청 대기 중",
+    description: "관찰 데이터를 전달하고 추천 작업을 만들고 있습니다.",
+  },
+  generating: {
+    eyebrow: "RECOMMENDATION IN PROGRESS",
+    title: "추천 생성 중",
+    description: "결과를 기다리고 있습니다. 시간이 더 걸릴 수 있으며 언제든 취소할 수 있습니다.",
+  },
+  cancelled: {
+    eyebrow: "ANALYSIS CANCELLED",
+    title: "추천을 취소했습니다",
+    description: "이번 세션의 관찰 데이터는 폐기됐습니다. 다시 시작하면 새 세션으로 진행합니다.",
+  },
+  insufficient_data: {
+    eyebrow: "INSUFFICIENT SIGNAL",
+    title: "시선 신호가 충분하지 않아 추천을 만들지 못했습니다",
+    description: "다시 체험하려면 새 세션으로 시작해 주세요. 이전 관찰은 재사용하지 않습니다.",
+  },
+  failed: {
+    eyebrow: "RECOMMENDATION UNAVAILABLE",
+    title: "추천을 만들지 못했습니다",
+    description: "추천 작업을 종료했습니다. 다시 체험하려면 새 세션으로 시작해 주세요.",
+  },
+};
+
+function RecommendationWaitingScreen({
+  status,
+  onCancel,
+  onRestart,
+}: {
+  status: Exclude<AnalysisStatus, "idle">;
+  onCancel: () => void;
+  onRestart: () => void;
+}) {
+  const copy = ANALYSIS_STATUS_COPY[status];
+  const isPending = status === "preparing" || status === "requesting" || status === "generating";
 
   return (
-    <main className="store-screen placeholder-screen">
-      <button className="wordmark-button" type="button" onClick={onHome}>
-        <Wordmark />
-        <span className="sr-only">처음 화면으로 이동</span>
-      </button>
-      <p>{message}</p>
+    <main className="store-screen placeholder-screen analysis-status-screen" role="status">
+      <Wordmark />
+      <section className="analysis-status-screen__content" aria-live="polite">
+        <p className="section-label">{copy.eyebrow}</p>
+        <h1>{copy.title}</h1>
+        <p>{copy.description}</p>
+        {isPending ? (
+          <button className="store-button store-button--outline" type="button" onClick={onCancel}>
+            추천 취소
+          </button>
+        ) : (
+          <button className="store-button store-button--solid" type="button" onClick={onRestart}>
+            새 체험 시작
+          </button>
+        )}
+      </section>
     </main>
   );
 }
@@ -840,7 +900,7 @@ function ReportScreen({
   recommendation: RecommendationPresentation;
   product: Product | ProductRecommendationItemV2;
   onHome: () => void;
-  onRequestManager: () => Promise<void>;
+  onRequestManager?: () => Promise<void>;
 }) {
   const [imageFailed, setImageFailed] = useState(false);
   const [qrFailed, setQrFailed] = useState(false);
@@ -849,7 +909,7 @@ function ReportScreen({
   );
 
   const requestManager = async () => {
-    if (requestState === "sending" || requestState === "sent") return;
+    if (!onRequestManager || requestState === "sending" || requestState === "sent") return;
     setRequestState("sending");
     try {
       await onRequestManager();
@@ -859,42 +919,49 @@ function ReportScreen({
     }
   };
   const isCentralProduct = "controlled_tags" in product;
-  const imageUrl = isCentralProduct
-    ? product.approved_asset && product.image_asset_path
-      ? `/${product.image_asset_path}`
-      : null
-    : product.image_url;
-  const productUrl = isCentralProduct
-    ? (product.official_product_url ?? product.official_listing_url)
-    : product.product_url;
-  const qrUrl = isCentralProduct && product.approved_asset && product.qr_asset_path
-    ? `/${product.qr_asset_path}`
-    : null;
+  const displayPolicy = resolveProductDisplayPolicy(product);
+  const hasApprovedProductDetails = displayPolicy.showProductDetails;
 
   return (
     <main className="store-screen report-screen">
       <StoreChrome onHome={onHome} step="04" />
       <section className="report-layout">
         <div className="report-media">
-          <img
-            src={imageFailed || !imageUrl ? bagImage : imageUrl}
-            alt={product.display_name}
-            onError={() => setImageFailed(true)}
-          />
-          <span>TOP 1 · {product.product_id}</span>
+          {displayPolicy.imageUrl && !imageFailed ? (
+            <img
+              src={displayPolicy.imageUrl}
+              alt={product.display_name}
+              onError={() => setImageFailed(true)}
+            />
+          ) : (
+            <div className="report-media__pending" role="status">
+              <strong>상품 정보 준비 중</strong>
+              <span>승인된 이미지가 연결된 뒤 표시됩니다.</span>
+            </div>
+          )}
+          <span>{hasApprovedProductDetails ? `TOP 1 · ${product.product_id}` : "TOP 1 · PENDING"}</span>
         </div>
         <div className="report-copy">
           <p className="section-label">YOUR RECOMMENDATION</p>
-          <h1>말로 표현되지 않은 탐색 반응에서 발견한 추천</h1>
-          <p className="report-tendency">
-            이번 세션의 스타일 탐색 경향: {recommendation.tendency}
-          </p>
-          <h2>{product.display_name}</h2>
-          <p className="report-reason">{recommendation.reason}</p>
-          {qrUrl && !qrFailed && (
+          <h1>{hasApprovedProductDetails ? "이번 룩북의 관찰을 바탕으로 선정했습니다" : "상품 정보 준비 중"}</h1>
+          {hasApprovedProductDetails ? (
+            <>
+              <p className="report-tendency">
+                이번 세션의 스타일 탐색 경향: {recommendation.tendency}
+              </p>
+              <h2>{product.display_name}</h2>
+              {isCentralProduct && <p className="report-reason">{product.recommendation_summary}</p>}
+              <p className="report-reason">{recommendation.reason}</p>
+            </>
+          ) : (
+            <p className="report-reason">
+              선정된 상품의 공식 정보와 자산은 담당자 검수 후 표시됩니다. 임의의 이미지나 링크로 대체하지 않습니다.
+            </p>
+          )}
+          {displayPolicy.qrUrl && !qrFailed && (
             <div className="report-qr">
               <img
-                src={qrUrl}
+                src={displayPolicy.qrUrl}
                 alt="공식 상품 페이지 QR 코드"
                 onError={() => setQrFailed(true)}
               />
@@ -909,36 +976,37 @@ function ReportScreen({
               개발 검증용 replay 파생 신호 결과이며 실제 고객 분석 결과가 아닙니다.
             </p>
           )}
-          {isCentralProduct && !product.approved_asset && (
+          {displayPolicy.unavailableMessage && (
             <p className="report-disclaimer">
-              검수된 상품 이미지와 개별 QR은 아직 연결되지 않아 기본 이미지를 표시합니다.
+              {displayPolicy.unavailableMessage}
             </p>
           )}
           <p className="report-disclaimer">
-            시선·표정 관련 신호는 이번 세션의 비언어적 관찰값이며 감정·성격·구매
-            의도를 확정하지 않습니다.
+            시선 관련 신호는 이번 세션의 관찰값이며 감정·성격·구매 의도를 확정하지 않습니다.
           </p>
           <div className="report-actions">
-            <a
-              className="store-button store-button--solid"
-              href={productUrl}
-              rel="noreferrer"
-              target="_blank"
-            >
-              {isCentralProduct && !product.official_product_url
-                ? "공식 가방 목록 보기"
-                : "상품 정보 보기"}
-            </a>
-            <button
-              className="store-button store-button--outline"
-              type="button"
-              disabled={requestState === "sending" || requestState === "sent"}
-              onClick={() => void requestManager()}
-            >
-              {requestState === "sending" && "요청 전송 중"}
-              {requestState === "sent" && "매니저 요청 완료"}
-              {(requestState === "idle" || requestState === "failed") && "직접 보고 싶어요"}
-            </button>
+            {displayPolicy.officialProductUrl && (
+              <a
+                className="store-button store-button--solid"
+                href={displayPolicy.officialProductUrl}
+                rel="noreferrer"
+                target="_blank"
+              >
+                상품 정보 보기
+              </a>
+            )}
+            {displayPolicy.canRequestManager && onRequestManager && (
+              <button
+                className="store-button store-button--outline"
+                type="button"
+                disabled={requestState === "sending" || requestState === "sent"}
+                onClick={() => void requestManager()}
+              >
+                {requestState === "sending" && "요청 전송 중"}
+                {requestState === "sent" && "매니저 요청 완료"}
+                {(requestState === "idle" || requestState === "failed") && "직접 보고 싶어요"}
+              </button>
+            )}
           </div>
           {requestState === "failed" && (
             <p className="report-request-error" role="alert">
@@ -980,16 +1048,17 @@ function App() {
   const [consentIssue, setConsentIssue] = useState<ConsentIssue | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [cameraState, setCameraState] = useState<CameraDisplayState>("idle");
+  const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatus>("idle");
   const [latestGazeSample, setLatestGazeSample] = useState<GazeSample | null>(null);
   const [latestGazeLayout, setLatestGazeLayout] = useState<VideoLayout | null>(null);
   const [flowController] = useState(() => new AsyncFlowController());
   const gazeSamples = useRef<GazeSample[]>([]);
   const videoLayoutsByFrameId = useRef<Map<string, VideoLayout>>(new Map());
-  const expressionSamples = useRef<ExpressionSample[]>([]);
   const sessionStartAbortController = useRef<AbortController | null>(null);
   const recommendationAbortController = useRef<AbortController | null>(null);
   const calibrationPromise = useRef<ReturnType<typeof visionClient.startCalibration> | null>(null);
   const calibrationSequence = useRef(0);
+  const pollingSessionId = useRef<string | null>(null);
 
   const abortSessionStart = useCallback(() => {
     sessionStartAbortController.current?.abort();
@@ -1007,13 +1076,8 @@ function App() {
       setLatestGazeSample(sample);
       setLatestGazeLayout(layoutsByFrameId.get(sample.frame_id) ?? null);
     });
-    const removeExpressionListener = visionClient.onExpressionSample((sample) => {
-      expressionSamples.current.push(sample);
-    });
-
     return () => {
       removeGazeListener();
-      removeExpressionListener();
       flowController.invalidateCurrentFlow();
       abortSessionStart();
       recommendationAbortController.current?.abort();
@@ -1043,7 +1107,7 @@ function App() {
     }
     gazeSamples.current.length = 0;
     videoLayoutsByFrameId.current.clear();
-    expressionSamples.current.length = 0;
+    pollingSessionId.current = null;
     setSelectedCategory(null);
     setSession(null);
     setManifest(null);
@@ -1053,6 +1117,7 @@ function App() {
     setConsentIssue(null);
     setIsStarting(false);
     setCameraState("idle");
+    setAnalysisStatus("idle");
     setLatestGazeSample(null);
     setLatestGazeLayout(null);
     send("RESTART");
@@ -1076,7 +1141,7 @@ function App() {
     frameSource.stop();
     gazeSamples.current.length = 0;
     videoLayoutsByFrameId.current.clear();
-    expressionSamples.current.length = 0;
+    pollingSessionId.current = null;
     setSelectedCategory(null);
     setSession(null);
     setManifest(null);
@@ -1086,6 +1151,7 @@ function App() {
     setConsentIssue(null);
     setIsStarting(false);
     setCameraState("idle");
+    setAnalysisStatus("idle");
     setLatestGazeSample(null);
     setLatestGazeLayout(null);
     send("CANCEL");
@@ -1105,9 +1171,10 @@ function App() {
     frameSource.stop();
     gazeSamples.current.length = 0;
     videoLayoutsByFrameId.current.clear();
-    expressionSamples.current.length = 0;
+    pollingSessionId.current = null;
     setIsStarting(false);
     setCameraState("idle");
+    setAnalysisStatus("idle");
     setLatestGazeSample(null);
     setLatestGazeLayout(null);
     setConsentIssue("idle-timeout");
@@ -1124,7 +1191,7 @@ function App() {
 
     gazeSamples.current.length = 0;
     videoLayoutsByFrameId.current.clear();
-    expressionSamples.current.length = 0;
+    pollingSessionId.current = null;
     setLatestGazeSample(null);
     setLatestGazeLayout(null);
     const generation = flowController.invalidateCurrentFlow();
@@ -1133,6 +1200,7 @@ function App() {
     setIsStarting(true);
     setFlowError(null);
     setConsentIssue(null);
+    setAnalysisStatus("idle");
     setCameraState("requesting");
     let createdSessionId: string | null = null;
 
@@ -1298,20 +1366,24 @@ function App() {
 
   const completeLookbook = useCallback(async () => {
     const generation = flowController.captureGeneration();
-    recommendationAbortController.current?.abort();
-    const abortController = new AbortController();
-    recommendationAbortController.current = abortController;
-    frameSource.stop();
-    setCameraState("idle");
-
     if (!session || !manifest) {
       setFlowError("진행 중인 세션 정보를 찾지 못했습니다.");
       return;
     }
 
+    recommendationAbortController.current?.abort();
+    const abortController = new AbortController();
+    recommendationAbortController.current = abortController;
+    frameSource.stop();
+    setCameraState("idle");
+    pollingSessionId.current = null;
+    setAnalysisStatus("preparing");
+    send("LOOKBOOK_FINISHED");
+
     try {
       await flowController.runSerialized(() => visionClient.stopSession());
       if (!flowController.isCurrent(generation)) return;
+      setAnalysisStatus("requesting");
 
       if (useMockApi) {
         const batches = buildD1ReactionBatches({
@@ -1320,7 +1392,7 @@ function App() {
           sessionId: session.session_id,
           manifest,
           gazeSamples: gazeSamples.current,
-          expressionSamples: expressionSamples.current,
+          expressionSamples: [],
           videoLayoutsByFrameId: videoLayoutsByFrameId.current,
         });
         for (const batch of batches) {
@@ -1337,7 +1409,7 @@ function App() {
           sessionId: session.session_id,
           manifest,
           gazeSamples: gazeSamples.current,
-          expressionSamples: expressionSamples.current,
+          expressionSamples: [],
           videoLayoutsByFrameId: videoLayoutsByFrameId.current,
         });
         await submitCentralRecommendation(
@@ -1349,13 +1421,15 @@ function App() {
       }
 
       if (!flowController.isCurrent(generation)) return;
-      if (flowController.isCurrent(generation)) send("LOOKBOOK_FINISHED");
+      setAnalysisStatus("generating");
     } catch {
-      if (!useMockApi) {
+      if (useMockApi) {
+        void mockApiClient.discardSession(session.session_id);
+      } else {
         void discardCentralSessionBestEffort(httpApiClient, session.session_id);
       }
       if (flowController.isCurrent(generation) && !abortController.signal.aborted) {
-        setFlowError("룩북 분석을 완료하지 못했습니다.");
+        setAnalysisStatus("failed");
       }
     } finally {
       if (recommendationAbortController.current === abortController) {
@@ -1364,7 +1438,7 @@ function App() {
       if (flowController.isCurrent(generation)) {
         gazeSamples.current.length = 0;
         videoLayoutsByFrameId.current.clear();
-        expressionSamples.current.length = 0;
+        pollingSessionId.current = null;
         setLatestGazeSample(null);
         setLatestGazeLayout(null);
       }
@@ -1477,10 +1551,7 @@ function App() {
           throw new Error("Completed central recommendation has no selected product.");
         }
         product = await httpApiClient.getCentralProduct(decision.selected_product_id);
-        presentation = {
-          ...presentCentralRecommendation(decision, product),
-          mode: "replay_v2",
-        };
+        presentation = presentCentralRecommendation(decision, product);
       }
       if (!flowController.isCurrent(generation)) return;
 
@@ -1491,14 +1562,16 @@ function App() {
       }
     } catch (error: unknown) {
       if (abortController.signal.aborted) return;
-      if (!useMockApi) {
+      if (useMockApi) {
+        void mockApiClient.discardSession(session.session_id);
+      } else {
         void discardCentralSessionBestEffort(httpApiClient, session.session_id);
       }
       if (flowController.isCurrent(generation)) {
-        setFlowError(
-          error instanceof RecommendationPollingError
-            ? error.message
-            : "추천 결과를 불러오지 못했습니다.",
+        setAnalysisStatus(
+          error instanceof RecommendationPollingError && error.code === "insufficient_data"
+            ? "insufficient_data"
+            : "failed",
         );
       }
     } finally {
@@ -1507,6 +1580,37 @@ function App() {
       }
     }
   }, [flowController, send, session]);
+
+  useEffect(() => {
+    if (screen !== "finalizing" || analysisStatus !== "generating" || !session) return;
+    if (pollingSessionId.current === session.session_id) return;
+    pollingSessionId.current = session.session_id;
+    void loadRecommendation();
+  }, [analysisStatus, loadRecommendation, screen, session]);
+
+  const cancelRecommendation = useCallback(async () => {
+    const generation = flowController.invalidateCurrentFlow();
+    recommendationAbortController.current?.abort();
+    recommendationAbortController.current = null;
+    pollingSessionId.current = null;
+    frameSource.stop();
+    gazeSamples.current.length = 0;
+    videoLayoutsByFrameId.current.clear();
+    setLatestGazeSample(null);
+    setLatestGazeLayout(null);
+    setCameraState("idle");
+    setAnalysisStatus("cancelled");
+
+    if (session) {
+      if (useMockApi) void mockApiClient.discardSession(session.session_id);
+      else void discardCentralSessionBestEffort(httpApiClient, session.session_id);
+    }
+    try {
+      await flowController.runSerialized(() => visionClient.stopSession());
+    } catch {
+      if (flowController.isCurrent(generation)) setAnalysisStatus("cancelled");
+    }
+  }, [flowController, session]);
 
   if (flowError) {
     return <ErrorPlaceholder message={flowError} onHome={restart} />;
@@ -1579,7 +1683,7 @@ function App() {
         posterUrl={getLookbookPoster(selectedCategory)}
         sessionId={session.session_id}
         videoId={manifest.video_id}
-        videoUrl={temporaryLookbookVideoUrl}
+        videoUrl={configuredLookbookVideoUrl}
         onCameraRetry={retryCamera}
         onComplete={completeLookbook}
         onFrameCapture={captureCameraFrame}
@@ -1591,10 +1695,10 @@ function App() {
 
   if (screen === "finalizing") {
     return (
-      <TimedPlaceholder
-        message="시선과 표정 관련 관찰 신호를 바탕으로 추천을 준비하고 있습니다."
-        onComplete={loadRecommendation}
-        onHome={restart}
+      <RecommendationWaitingScreen
+        status={analysisStatus === "idle" ? "preparing" : analysisStatus}
+        onCancel={() => void cancelRecommendation()}
+        onRestart={() => void restart()}
       />
     );
   }

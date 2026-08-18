@@ -10,6 +10,7 @@ import {
 import { mapGazeToVideoPoint } from "../app/reaction-batch.ts";
 import type { GazeSample } from "../app/kiosk-types.ts";
 import {
+  advancePlaybackEpoch,
   calculateContainedVideoLayout,
   createFrameContext,
   type FrameContext,
@@ -96,7 +97,7 @@ export function LookbookPlayer({
   const [stageRect, setStageRect] = useState<PixelRect | null>(null);
 
   const incrementPlaybackEpoch = () => {
-    playbackEpochRef.current += 1;
+    playbackEpochRef.current = advancePlaybackEpoch(playbackEpochRef.current);
     setPlaybackEpoch(playbackEpochRef.current);
   };
 
@@ -107,7 +108,7 @@ export function LookbookPlayer({
     // A changed source starts a new playback epoch before any frame from the
     // replacement media can be captured. Sequence remains session-monotonic.
     sourceIdentityRef.current = nextIdentity;
-    playbackEpochRef.current += 1;
+    playbackEpochRef.current = advancePlaybackEpoch(playbackEpochRef.current);
     setPlaybackEpoch(playbackEpochRef.current);
     didCompleteRef.current = false;
     setIsPlaying(false);

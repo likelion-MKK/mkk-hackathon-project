@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from hashlib import sha256
 from pathlib import Path
+from struct import pack, pack_into
 from tempfile import TemporaryDirectory
 
 import pytest
@@ -12,6 +13,7 @@ from apps.api.app.v2_aoi import (
     MediaIdentityV2,
     load_aoi_metadata,
     map_frame_to_aoi,
+    probe_mp4_media,
     validate_aoi_metadata_for_catalog,
     verify_media_file,
 )
@@ -36,6 +38,57 @@ PENDING_METADATA = load_aoi_metadata(
 CATALOG = load_canonical_catalog(
     REPOSITORY_ROOT / "data" / "products" / "mcm-demo-recommendation-profile-v2.json"
 )
+
+
+def _mp4_box(kind: bytes, payload: bytes) -> bytes:
+    return pack(">I4s", len(payload) + 8, kind) + payload
+
+
+def _minimal_video_mp4(
+    *,
+    duration_ms: int = 33_500,
+    width_px: int = 1_280,
+    height_px: int = 720,
+    fps: int = 24,
+) -> bytes:
+    """Small ISO BMFF fixture containing the boxes our readiness probe needs."""
+
+    frame_count = duration_ms * fps // 1_000
+    if frame_count * 1_000 != duration_ms * fps:
+        raise ValueError("fixture duration must align to its FPS")
+
+    mvhd = bytearray(20)
+    pack_into(">I", mvhd, 12, 1_000)
+    pack_into(">I", mvhd, 16, duration_ms)
+
+    tkhd = bytearray(84)
+    pack_into(">I", tkhd, 76, width_px << 16)
+    pack_into(">I", tkhd, 80, height_px << 16)
+
+    hdlr = bytearray(12)
+    hdlr[8:12] = b"vide"
+
+    mdhd = bytearray(24)
+    pack_into(">I", mdhd, 12, fps)
+    pack_into(">I", mdhd, 16, frame_count)
+
+    stts = bytearray(16)
+    pack_into(">I", stts, 4, 1)
+    pack_into(">I", stts, 8, frame_count)
+    pack_into(">I", stts, 12, 1)
+
+    stbl = _mp4_box(b"stbl", _mp4_box(b"stts", bytes(stts)))
+    minf = _mp4_box(b"minf", stbl)
+    mdia = _mp4_box(
+        b"mdia",
+        _mp4_box(b"hdlr", bytes(hdlr))
+        + _mp4_box(b"mdhd", bytes(mdhd))
+        + minf,
+    )
+    trak = _mp4_box(b"trak", _mp4_box(b"tkhd", bytes(tkhd)) + mdia)
+    return _mp4_box(b"ftyp", b"isom\x00\x00\x02\x00isom") + _mp4_box(
+        b"moov", _mp4_box(b"mvhd", bytes(mvhd)) + trak
+    )
 
 
 def _frame(
@@ -239,10 +292,10 @@ def test_unknown_catalog_product_or_visual_tag_rejects_metadata() -> None:
         )
 
 
-def test_media_readiness_requires_exact_byte_length_and_sha256() -> None:
+def test_media_readiness_requires_exact_file_and_stream_metadata() -> None:
     with TemporaryDirectory(prefix="mcm-aoi-test-") as temp_directory:
         media = Path(temp_directory) / "lookbook.mp4"
-        content = b"verified-lookbook-bytes"
+        content = _minimal_video_mp4()
         media.write_bytes(content)
         identity = MediaIdentityV2(
             source_kind="video_file",
@@ -255,6 +308,14 @@ def test_media_readiness_requires_exact_byte_length_and_sha256() -> None:
         )
 
         verify_media_file(media, identity)
+        probe = probe_mp4_media(media)
+        assert probe.duration_ms == 33_500
+        assert (probe.width_px, probe.height_px) == (1_280, 720)
+        assert probe.fps == pytest.approx(24.0)
+
+        wrong_fps = identity.model_copy(update={"fps": 30})
+        with pytest.raises(RuntimeError, match="duration, resolution or FPS"):
+            verify_media_file(media, wrong_fps)
 
         media.write_bytes(content + b"changed")
         with pytest.raises(RuntimeError, match="byte length"):

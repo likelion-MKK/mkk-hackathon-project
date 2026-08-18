@@ -40,9 +40,11 @@ Supabase 연결은 역할별로 분리한다.
 - migration·catalog seed·backup/restore의 `MIGRATION_DATABASE_URL`: direct PostgreSQL 전용
 - direct URL은 Docker Compose, Vite 또는 브라우저 환경에 주입하지 않는다.
 
-기존 `0001`, `0002`는 수정하지 않는다. `0003_api_db_operations.sql`은 내부 job 상태
+기존 `0001`, `0002`, `0003`은 수정하지 않는다. `0003_api_db_operations.sql`은 내부 job 상태
 `pending|running|completed|failed|cancelled|insufficient_data`, 원자적 claim, active-session
-unique index, migration marker와 cleanup index를 추가한다. observation/timeline 테이블은
+unique index, migration marker와 cleanup index를 추가한다. `0004_supabase_backend_rls.sql`은
+browser-facing `anon`/`authenticated` role의 public table 접근을 차단하고 backend role만
+허용한다. observation/timeline 테이블은
 의도적으로 없으며 이전 revision이 저장했을 수 있는 자유형 explanation/evidence/style/
 data_quality도 정확히 `recommendation_job_v2`에서 비운다.
 
@@ -81,8 +83,8 @@ Actual `mcm-lookbook-v2` media identity는 SHA-256
 
 ## 환경 변수
 
-- `DATABASE_URL`: 실행 API의 Supabase IPv4 session pooler URL.
-- `MIGRATION_DATABASE_URL`: migration·seed·backup/restore shell에서만 쓰는 direct URL.
+- `DATABASE_URL`: 실행 API의 Supabase IPv4 **session pooler** URL(기본 포트 `5432`)만 허용한다.
+- `MIGRATION_DATABASE_URL`: migration·seed·backup/restore shell에서만 쓰는 Supabase **direct** URL(기본 포트 `5432`)만 허용한다.
 - `DB_CONNECT_TIMEOUT_SECONDS`: readiness 연결 제한, 기본 5초.
 - `CENTRAL_AI_PROVIDER`: production은 `openai_luna`로 고정한다. 미설정은 mock 성공이 아니라
   `model_unavailable`로 종료한다.
@@ -93,7 +95,8 @@ Actual `mcm-lookbook-v2` media identity는 SHA-256
 - `LOOKBOOK_VIDEO_PATH`, `REQUIRE_LOOKBOOK_MEDIA_READINESS`: actual MP4의 exact SHA/byte readiness. 배포 Compose는 검증을 필수로 한다.
 - `KIOSK_CORS_ORIGINS`: 쉼표로 구분한 명시적 origin. wildcard는 거부한다.
 - `V2_COLLECTING_TTL_SECONDS`, `V2_PENDING_TTL_SECONDS`, `V2_DECISION_TTL_SECONDS`:
-  메모리 수명, 기본 300/1800/900초. pending job은 30분 orphan cleanup 대상이다.
+  메모리 수명, 기본 300/1800/900초. `V2_PENDING_TTL_SECONDS`는 orphan 기준보다 길게
+  설정할 수 없으므로 pending evidence가 DB orphan cleanup 뒤에도 메모리에 남지 않는다.
 - `V2_ORPHAN_JOB_SECONDS`: DB `pending|running` orphan 기준, 기본 1800초.
 - `V2_JOB_RETENTION_SECONDS`: terminal job metadata 보유 기간, 기본 86400초(24시간).
 - `V2_MAINTENANCE_INTERVAL_SECONDS`: 단일 API worker cleanup 주기, 기본 60초.
@@ -112,7 +115,7 @@ explanation/input/output은 저장하지 않는다. cancel 뒤 늦은 결과는 
 ## Health, cleanup과 단일 worker
 
 - `GET /healthz`: DB와 분리된 process liveness
-- `GET /readyz`: DB, `0003` migration, canonical catalog 10개와 job intake readiness
+- `GET /readyz`: DB, `0004` migration, canonical catalog 10개와 job intake readiness
 - `GET /api/v1/health`: 호환용 deprecated combined view
 
 Compose와 Dockerfile은 API `--workers 1`, 중앙 job concurrency 2로 고정한다. DB claim은

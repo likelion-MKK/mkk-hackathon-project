@@ -490,8 +490,27 @@ def test_database_url_roles_reject_supabase_connection_mixups() -> None:
     assert require_direct_database_url(direct) == direct
     with pytest.raises(ValueError, match="direct"):
         require_direct_database_url(runtime)
-    with pytest.raises(ValueError, match="runtime pooler"):
+    with pytest.raises(ValueError, match="session pooler"):
         require_runtime_database_url(direct)
+    with pytest.raises(ValueError, match="direct connection"):
+        require_direct_database_url("postgresql://postgres:placeholder@localhost:5432/postgres")
+    with pytest.raises(ValueError, match="session pooler"):
+        require_runtime_database_url(
+            "postgresql://postgres.project:placeholder@"
+            "aws-0-ap-northeast-2.pooler.supabase.com:6543/postgres"
+        )
+
+
+def test_pending_memory_ttl_cannot_outlive_database_orphan_cleanup() -> None:
+    repository = MemoryStoreRecommendationRepository(
+        MemoryStore(REPOSITORY_ROOT), catalog=CATALOG
+    )
+    with pytest.raises(ValueError, match="pending_ttl_seconds"):
+        V2RecommendationStore(
+            repository,
+            pending_ttl_seconds=1_801.0,
+            orphan_job_seconds=1_800.0,
+        )
 
 
 def test_browser_sources_do_not_receive_database_credentials_or_supabase_client() -> None:

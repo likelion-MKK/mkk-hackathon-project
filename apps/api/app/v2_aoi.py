@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
+from struct import unpack_from
 from typing import Literal, Self
 
 from pydantic import Field, StrictInt, field_validator, model_validator
@@ -157,6 +158,211 @@ class AoiMappingResultV2:
         return self.status == "matched"
 
 
+@dataclass(frozen=True, slots=True)
+class MediaProbeV2:
+    """Container metadata read from the canonical MP4 without decoding frames."""
+
+    duration_ms: int
+    width_px: int
+    height_px: int
+    fps: float
+
+
+@dataclass(frozen=True, slots=True)
+class _Mp4Box:
+    kind: bytes
+    payload_start: int
+    end: int
+
+
+def _mp4_error() -> RuntimeError:
+    return RuntimeError("canonical lookbook media stream metadata is unavailable")
+
+
+def _mp4_boxes(payload: bytes, start: int, end: int) -> list[_Mp4Box]:
+    """Read a bounded ISO BMFF box list, rejecting malformed atom lengths."""
+
+    boxes: list[_Mp4Box] = []
+    offset = start
+    while offset < end:
+        if end - offset < 8:
+            raise _mp4_error()
+        size = unpack_from(">I", payload, offset)[0]
+        kind = payload[offset + 4 : offset + 8]
+        header_size = 8
+        if size == 1:
+            if end - offset < 16:
+                raise _mp4_error()
+            size = unpack_from(">Q", payload, offset + 8)[0]
+            header_size = 16
+        elif size == 0:
+            size = end - offset
+
+        box_end = offset + size
+        if size < header_size or box_end > end:
+            raise _mp4_error()
+        boxes.append(_Mp4Box(kind=kind, payload_start=offset + header_size, end=box_end))
+        offset = box_end
+    if offset != end:
+        raise _mp4_error()
+    return boxes
+
+
+def _mp4_child(payload: bytes, parent: _Mp4Box, kind: bytes) -> _Mp4Box | None:
+    return next(
+        (box for box in _mp4_boxes(payload, parent.payload_start, parent.end) if box.kind == kind),
+        None,
+    )
+
+
+def _mp4_children(payload: bytes, parent: _Mp4Box, kind: bytes) -> list[_Mp4Box]:
+    return [box for box in _mp4_boxes(payload, parent.payload_start, parent.end) if box.kind == kind]
+
+
+def _u32(payload: bytes, offset: int, end: int) -> int:
+    if offset < 0 or end - offset < 4:
+        raise _mp4_error()
+    return unpack_from(">I", payload, offset)[0]
+
+
+def _u64(payload: bytes, offset: int, end: int) -> int:
+    if offset < 0 or end - offset < 8:
+        raise _mp4_error()
+    return unpack_from(">Q", payload, offset)[0]
+
+
+def _duration_from_mvhd(payload: bytes, box: _Mp4Box) -> tuple[int, int]:
+    if box.payload_start >= box.end:
+        raise _mp4_error()
+    version = payload[box.payload_start]
+    if version == 0:
+        time_scale = _u32(payload, box.payload_start + 12, box.end)
+        duration = _u32(payload, box.payload_start + 16, box.end)
+    elif version == 1:
+        time_scale = _u32(payload, box.payload_start + 20, box.end)
+        duration = _u64(payload, box.payload_start + 24, box.end)
+    else:
+        raise _mp4_error()
+    if time_scale <= 0 or duration <= 0:
+        raise _mp4_error()
+    return time_scale, duration
+
+
+def _duration_from_mdhd(payload: bytes, box: _Mp4Box) -> tuple[int, int]:
+    if box.payload_start >= box.end:
+        raise _mp4_error()
+    version = payload[box.payload_start]
+    if version == 0:
+        time_scale = _u32(payload, box.payload_start + 12, box.end)
+        duration = _u32(payload, box.payload_start + 16, box.end)
+    elif version == 1:
+        time_scale = _u32(payload, box.payload_start + 20, box.end)
+        duration = _u64(payload, box.payload_start + 24, box.end)
+    else:
+        raise _mp4_error()
+    if time_scale <= 0 or duration <= 0:
+        raise _mp4_error()
+    return time_scale, duration
+
+
+def _video_dimensions_from_tkhd(payload: bytes, box: _Mp4Box) -> tuple[int, int]:
+    if box.payload_start >= box.end:
+        raise _mp4_error()
+    version = payload[box.payload_start]
+    if version == 0:
+        width_offset = box.payload_start + 76
+        height_offset = box.payload_start + 80
+    elif version == 1:
+        width_offset = box.payload_start + 88
+        height_offset = box.payload_start + 92
+    else:
+        raise _mp4_error()
+    width = _u32(payload, width_offset, box.end) / 65_536
+    height = _u32(payload, height_offset, box.end) / 65_536
+    if width <= 0 or height <= 0:
+        raise _mp4_error()
+    return round(width), round(height)
+
+
+def _is_video_handler(payload: bytes, box: _Mp4Box) -> bool:
+    return box.end - box.payload_start >= 12 and payload[
+        box.payload_start + 8 : box.payload_start + 12
+    ] == b"vide"
+
+
+def _fps_from_stts(payload: bytes, box: _Mp4Box, time_scale: int) -> float:
+    entry_count = _u32(payload, box.payload_start + 4, box.end)
+    offset = box.payload_start + 8
+    total_samples = 0
+    total_ticks = 0
+    for _ in range(entry_count):
+        sample_count = _u32(payload, offset, box.end)
+        sample_delta = _u32(payload, offset + 4, box.end)
+        offset += 8
+        if sample_count <= 0 or sample_delta <= 0:
+            raise _mp4_error()
+        total_samples += sample_count
+        total_ticks += sample_count * sample_delta
+    if total_samples <= 0 or total_ticks <= 0 or time_scale <= 0:
+        raise _mp4_error()
+    return total_samples * time_scale / total_ticks
+
+
+def probe_mp4_media(path: Path) -> MediaProbeV2:
+    """Read duration, dimensions and average FPS from a normal ISO BMFF MP4.
+
+    This deliberately avoids a platform-specific `ffprobe` dependency: media
+    readiness has to work in the API image as well as on a Windows developer
+    machine. The canonical file is size-bounded before it is read by
+    ``verify_media_file``.
+    """
+
+    try:
+        payload = path.read_bytes()
+    except OSError as exc:
+        raise _mp4_error() from exc
+
+    roots = _mp4_boxes(payload, 0, len(payload))
+    moov = next((box for box in roots if box.kind == b"moov"), None)
+    if moov is None:
+        raise _mp4_error()
+    mvhd = _mp4_child(payload, moov, b"mvhd")
+    if mvhd is None:
+        raise _mp4_error()
+    movie_time_scale, movie_duration = _duration_from_mvhd(payload, mvhd)
+
+    candidates: list[tuple[int, int, int, float]] = []
+    for track in _mp4_children(payload, moov, b"trak"):
+        tkhd = _mp4_child(payload, track, b"tkhd")
+        mdia = _mp4_child(payload, track, b"mdia")
+        if tkhd is None or mdia is None:
+            continue
+        hdlr = _mp4_child(payload, mdia, b"hdlr")
+        mdhd = _mp4_child(payload, mdia, b"mdhd")
+        minf = _mp4_child(payload, mdia, b"minf")
+        stbl = _mp4_child(payload, minf, b"stbl") if minf is not None else None
+        stts = _mp4_child(payload, stbl, b"stts") if stbl is not None else None
+        if hdlr is None or mdhd is None or stts is None or not _is_video_handler(payload, hdlr):
+            continue
+        width, height = _video_dimensions_from_tkhd(payload, tkhd)
+        track_time_scale, track_duration = _duration_from_mdhd(payload, mdhd)
+        fps = _fps_from_stts(payload, stts, track_time_scale)
+        candidates.append((width, height, track_duration * 1_000 // track_time_scale, fps))
+
+    if not candidates:
+        raise _mp4_error()
+    width, height, _track_duration_ms, fps = max(
+        candidates,
+        key=lambda item: item[0] * item[1],
+    )
+    return MediaProbeV2(
+        duration_ms=round(movie_duration * 1_000 / movie_time_scale),
+        width_px=width,
+        height_px=height,
+        fps=fps,
+    )
+
+
 def load_aoi_metadata(path: Path) -> LookbookAoiMetadataV2:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -183,7 +389,7 @@ def validate_aoi_metadata_for_catalog(
 
 
 def verify_media_file(path: Path, identity: MediaIdentityV2) -> None:
-    """Bind inspected dimensions/duration to the exact file by size and SHA-256."""
+    """Bind reviewed file, duration, dimensions and FPS to one exact MP4."""
 
     if identity.source_kind != "video_file":
         raise RuntimeError("only video_file media identities can be checked against a file")
@@ -203,6 +409,16 @@ def verify_media_file(path: Path, identity: MediaIdentityV2) -> None:
         raise RuntimeError("canonical lookbook media could not be verified") from exc
     if digest.hexdigest() != identity.sha256:
         raise RuntimeError("canonical lookbook media SHA-256 does not match metadata")
+    probe = probe_mp4_media(path)
+    if (
+        probe.duration_ms != identity.duration_ms
+        or probe.width_px != identity.width_px
+        or probe.height_px != identity.height_px
+        or abs(probe.fps - identity.fps) > 0.001
+    ):
+        raise RuntimeError(
+            "canonical lookbook media duration, resolution or FPS does not match metadata"
+        )
 
 
 def _point_on_segment(

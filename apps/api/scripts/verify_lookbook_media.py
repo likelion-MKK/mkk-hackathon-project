@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify that the staged canonical MP4 exactly matches reviewed AOI metadata."""
+"""Verify one or more copies of the canonical MP4 against reviewed metadata."""
 
 from __future__ import annotations
 
@@ -15,7 +15,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--media",
         type=Path,
-        default=root / "apps" / "kiosk" / "public" / "media" / "mcm-lookbook-v2.mp4",
+        action="append",
+        help=(
+            "MP4 to verify. May be repeated; defaults to the staged Kiosk media copy."
+        ),
     )
     parser.add_argument(
         "--metadata",
@@ -34,17 +37,22 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     metadata = load_aoi_metadata(args.metadata.resolve())
-    verify_media_file(args.media.resolve(), metadata.media_identity)
     identity = metadata.media_identity
-    print(
-        "lookbook_media_verified "
-        f"video_id={metadata.video_id} "
-        f"sha256={identity.sha256} "
-        f"bytes={identity.byte_length} "
-        f"duration_ms={identity.duration_ms} "
-        f"resolution={identity.width_px}x{identity.height_px} "
-        f"fps={identity.fps:g}"
-    )
+    root = Path(__file__).resolve().parents[3]
+    media_paths = args.media or [
+        root / "apps" / "kiosk" / "public" / "media" / "mcm-lookbook-v2.mp4"
+    ]
+    for media_path in media_paths:
+        verify_media_file(media_path.resolve(), identity)
+        print(
+            "lookbook_media_verified "
+            f"video_id={metadata.video_id} "
+            f"sha256={identity.sha256} "
+            f"bytes={identity.byte_length} "
+            f"duration_ms={identity.duration_ms} "
+            f"resolution={identity.width_px}x{identity.height_px} "
+            f"fps={identity.fps:g}"
+        )
     return 0
 
 

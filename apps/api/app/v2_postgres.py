@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Literal, Protocol, Sequence
@@ -22,7 +23,7 @@ from apps.api.app.v2_models import (
 )
 
 
-REQUIRED_MIGRATION_ID = "0003_api_db_operations"
+REQUIRED_MIGRATION_ID = "0004_supabase_backend_rls"
 TERMINAL_JOB_STATUSES = (
     "completed",
     "failed",
@@ -288,7 +289,16 @@ def require_direct_database_url(database_url: str) -> str:
     if parsed.scheme not in {"postgres", "postgresql"} or not parsed.hostname:
         raise ValueError("MIGRATION_DATABASE_URL must be a PostgreSQL connection string")
     hostname = parsed.hostname.lower()
-    if "pooler.supabase.com" in hostname:
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError(
+            "MIGRATION_DATABASE_URL must use the Supabase direct connection"
+        ) from exc
+    if (
+        re.fullmatch(r"db\.[a-z0-9-]+\.supabase\.co", hostname) is None
+        or port not in {None, 5432}
+    ):
         raise ValueError("MIGRATION_DATABASE_URL must use the Supabase direct connection")
     return value
 
@@ -301,8 +311,14 @@ def require_runtime_database_url(database_url: str) -> str:
     if parsed.scheme not in {"postgres", "postgresql"} or not parsed.hostname:
         raise ValueError("DATABASE_URL must be a PostgreSQL connection string")
     hostname = parsed.hostname.lower()
-    if hostname.endswith("supabase.co") and "pooler.supabase.com" not in hostname:
-        raise ValueError("DATABASE_URL must use the Supabase runtime pooler")
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError(
+            "DATABASE_URL must use the Supabase IPv4 session pooler"
+        ) from exc
+    if not hostname.endswith(".pooler.supabase.com") or port not in {None, 5432}:
+        raise ValueError("DATABASE_URL must use the Supabase IPv4 session pooler")
     return value
 
 

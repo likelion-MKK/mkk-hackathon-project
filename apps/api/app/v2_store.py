@@ -541,6 +541,14 @@ class V2RecommendationStore:
             job_retention_seconds,
         ) <= 0:
             raise ValueError("v2 TTL values must be positive")
+        # A database orphan is terminal by policy.  Do not permit a separate
+        # memory timer to keep its frame-derived state alive after that point.
+        # Equality is intentional: the normal 30-minute path clears both
+        # representations in the same maintenance pass.
+        if pending_ttl_seconds > orphan_job_seconds:
+            raise ValueError(
+                "pending_ttl_seconds cannot exceed orphan_job_seconds"
+            )
         if input_variant not in {"A", "B", "C"}:
             raise ValueError("v2 input_variant must be A, B or C")
         self._repository = repository
