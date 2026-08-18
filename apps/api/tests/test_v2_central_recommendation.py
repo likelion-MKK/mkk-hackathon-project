@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 from apps.api.app.main import _configured_input_variant, create_app
-from apps.api.app.schemas import SessionCreate
+from apps.api.app.schemas import (
+    ManifestExposure,
+    ProductAttentionCandidate,
+    SessionCreate,
+)
 from apps.api.app.store import MemoryStore
 from apps.api.app.v2_central import (
     APPROVED_PROMPT_VERSION,
@@ -29,12 +34,14 @@ from apps.api.app.v2_postgres import load_canonical_catalog, seed_catalog
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 PRODUCT_1 = "mcm-toni-medium-disco-visetos"
-PRODUCT_2 = "mcm-diamant-3d-small-calfskin"
+PRODUCT_2 = "mcm-pina-vanity-case-studded-calfskin"
 VIDEO_ID = "mcm-central-ai-replay-v2"
-MANIFEST_VERSION = "mcm-central-ai-replay-v2-2026-08-16"
+MANIFEST_VERSION = "mcm-central-ai-replay-v2-2026-08-18"
+DEMO_VIDEO_ID = "lookbook-demo-v1"
+DEMO_MANIFEST_VERSION = "lookbook-demo-v1-grid-details-v2-2026-08-18"
 EXPOSURES = {
     PRODUCT_1: "replay-scene-01-toni",
-    PRODUCT_2: "replay-scene-02-diamant",
+    PRODUCT_2: "replay-scene-02-pina-vanity",
 }
 
 
@@ -535,10 +542,35 @@ def test_failure_cancel_and_ttl_clear_transient_state() -> None:
     assert store.cleanup_expired() == 1
     assert store.buffered_observation_count(session_id) == 0
 
+    class CountingStub(DeterministicCentralStub):
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def recommend(self, request: CentralRecommendationRequestV2) -> object:
+            self.calls += 1
+            return super().recommend(request)
+
+    model = CountingStub()
+    dispatcher = ManualJobDispatcher()
+
     now[0] = 200.0
     store.append_batch(session_id, batch.model_copy(update={"batch_id": "batch-cancel"}))
+    store.complete(session_id, model, dispatcher)
     store.cancel(session_id)
     assert store.buffered_observation_count(session_id) == 0
+    dispatcher.run_next()
+    assert model.calls == 0
+
+    now[0] = 300.0
+    store.append_batch(
+        session_id,
+        batch.model_copy(update={"batch_id": "batch-pending-ttl"}),
+    )
+    store.complete(session_id, model, dispatcher)
+    now[0] = 306.0
+    assert store.cleanup_expired() == 1
+    dispatcher.run_next()
+    assert model.calls == 0
 
 
 def test_pending_persistence_failure_is_terminal_and_never_dispatched() -> None:
@@ -720,9 +752,123 @@ def test_v2_manifest_and_product_routes_use_canonical_ids(
     product = client.get(f"/api/v2/products/{PRODUCT_1}")
     assert manifest.status_code == product.status_code == 200
     assert manifest.json()["exposures"][0]["product_id"] == PRODUCT_1
+    assert "product_part" not in manifest.json()["exposures"][0]
     assert product.json()["product_id"] == PRODUCT_1
     assert product.json()["official_product_url"] is None
     assert product.json()["official_product_url_reason"]
+
+
+def test_legacy_product_part_omission_never_serializes_as_null() -> None:
+    exposure = ManifestExposure.model_validate(
+        {
+            "exposure_id": "legacy-exposure",
+            "product_id": PRODUCT_1,
+            "start_ms": 0,
+            "end_ms": 100,
+            "priority": 0,
+            "shape": {
+                "type": "polygon",
+                "points": [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]],
+            },
+        }
+    )
+    candidate = ProductAttentionCandidate.model_validate(
+        {
+            "exposure_id": "legacy-exposure",
+            "product_id": PRODUCT_1,
+            "priority": 0,
+        }
+    )
+    assert exposure.product_part is candidate.product_part is None
+    assert "product_part" not in exposure.model_dump(mode="json")
+    assert "product_part" not in candidate.model_dump(mode="json")
+
+    central_json = json.loads(_central_request().model_dump_json())
+    windows = central_json["evidence"]["evidence_windows"]
+    assert windows
+    assert all("product_part" not in window for window in windows)
+
+
+def test_source_sessions_strip_client_candidates_before_central_json() -> None:
+    class CapturingStub(DeterministicCentralStub):
+        def __init__(self) -> None:
+            self.request: CentralRecommendationRequestV2 | None = None
+
+        def recommend(self, request: CentralRecommendationRequestV2) -> object:
+            self.request = request
+            return super().recommend(request)
+
+    model = CapturingStub()
+    dispatcher = ManualJobDispatcher()
+    memory = MemoryStore(REPOSITORY_ROOT)
+    app = create_app(memory, central_client=model, job_dispatcher=dispatcher)
+
+    with TestClient(app) as client:
+        manifest_response = client.get(f"/api/v2/lookbooks/{DEMO_VIDEO_ID}/manifest")
+        assert manifest_response.status_code == 200
+        manifest = manifest_response.json()
+        assert manifest["manifest_version"] == DEMO_MANIFEST_VERSION
+
+        session_response = client.post(
+            "/api/v1/sessions",
+            json={
+                "kiosk_id": "kiosk-source-authority",
+                "lookbook_id": DEMO_VIDEO_ID,
+                "consent_version": "consent-v1",
+            },
+        )
+        assert session_response.status_code == 201, session_response.text
+        session_id = session_response.json()["session_id"]
+
+        frames: list[dict[str, object]] = []
+        for sequence, video_time_ms in enumerate((5_100, 5_200, 5_300)):
+            frame = _valid_frame(
+                sequence,
+                float(sequence * 100),
+                product_id=PRODUCT_2,
+                video_time_ms=video_time_ms,
+            )
+            attention = frame["attention"]
+            assert isinstance(attention, dict)
+            attention["manifest_version"] = DEMO_MANIFEST_VERSION
+            attention["video_x_norm"] = 0.18
+            attention["video_y_norm"] = 0.30
+            candidates = attention["candidates"]
+            assert isinstance(candidates, list)
+            candidate = candidates[0]
+            assert isinstance(candidate, dict)
+            candidate["exposure_id"] = "client-forged-exposure"
+            candidate["product_part"] = "accessory"
+            frames.append(frame)
+
+        batch = _batch(session_id, "batch-source-authority", 0, frames)
+        batch["video_id"] = DEMO_VIDEO_ID
+        accepted = client.post(
+            f"/api/v2/sessions/{session_id}/observations", json=batch
+        )
+        assert accepted.status_code == 202, accepted.text
+        complete = client.post(f"/api/v2/sessions/{session_id}/complete")
+        assert complete.status_code == 202
+        assert app.state.v2_store.buffered_observation_count(session_id) == 0
+        dispatcher.run_next()
+
+        assert model.request is not None
+        assert model.request.evidence.input_variant == "B"
+        assert model.request.evidence.evidence_windows is None
+        assert model.request.evidence.timeline is not None
+        assert all(
+            frame.attention is None or frame.attention.candidates == []
+            for frame in model.request.evidence.timeline
+        )
+        assert all(item.gaze is None for item in model.request.evidence.summary)
+        assert model.request.source_visual_evidence is not None
+        assert model.request.matching_products is not None
+        assert len(model.request.matching_products) == 10
+
+        decision = client.get(f"/api/v2/sessions/{session_id}/recommendation").json()
+        assert decision["status"] == "completed"
+        assert decision["version"]["input_variant"] == "B"
+        assert decision["evidence"][0]["evidence_refs"][0]["kind"] == "frame"
 
 
 def test_unknown_evidence_window_reference_is_rejected() -> None:

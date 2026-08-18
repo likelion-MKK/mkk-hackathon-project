@@ -5,7 +5,11 @@ import type {
   GazeSample,
   LookbookManifest,
 } from "./kiosk-types.ts";
-import { buildObservationBatchesV2 } from "./observation-batch-v2.ts";
+import {
+  buildObservationBatchesV2,
+  resolveObservationAttentionAuthority,
+} from "./observation-batch-v2.ts";
+import { calculateContainedVideoLayout } from "./video-context.ts";
 
 const manifest: LookbookManifest = {
   schema_version: "1.0",
@@ -16,6 +20,7 @@ const manifest: LookbookManifest = {
     {
       exposure_id: "exposure-a",
       product_id: "MCM-DEMO-BAG-001",
+      product_part: "body",
       start_ms: 0,
       end_ms: 10_000,
       priority: 0,
@@ -31,6 +36,14 @@ const manifest: LookbookManifest = {
     },
   ],
 };
+
+const fullFrameVideoLayout = calculateContainedVideoLayout({
+  viewport_width_px: 1_000,
+  viewport_height_px: 1_000,
+  source_width_px: 1_000,
+  source_height_px: 1_000,
+  element_rect: { x_px: 0, y_px: 0, width_px: 1_000, height_px: 1_000 },
+});
 
 function gaze(
   frame: number,
@@ -136,16 +149,48 @@ function build(
   gazeSamples: readonly GazeSample[],
   expressionSamples: readonly ExpressionSample[],
   lookbookManifest = manifest,
+  videoLayoutsByFrameId = new Map(
+    gazeSamples
+      .filter((sample) => sample.valid)
+      .map((sample) => [sample.frame_id, fullFrameVideoLayout] as const),
+  ),
+  attentionAuthority: "backend_source_aoi" | "kiosk_manifest" = "backend_source_aoi",
 ) {
   return buildObservationBatchesV2({
     batchId: "observation-batch-001",
     batchSequence: 0,
     sessionId: "session-v2-001",
     manifest: lookbookManifest,
+    attentionAuthority,
     gazeSamples,
     expressionSamples,
+    videoLayoutsByFrameId,
   });
 }
+
+test("승인된 source manifest pair만 Backend AOI authority를 사용한다", () => {
+  assert.equal(
+    resolveObservationAttentionAuthority({
+      video_id: "lookbook-demo-v1",
+      manifest_version: "lookbook-demo-v1-grid-details-v2-2026-08-18",
+    }),
+    "backend_source_aoi",
+  );
+  assert.equal(
+    resolveObservationAttentionAuthority({
+      video_id: "mcm-central-ai-replay-v2",
+      manifest_version: "mcm-central-ai-replay-v2-2026-08-18",
+    }),
+    "kiosk_manifest",
+  );
+  assert.equal(
+    resolveObservationAttentionAuthority({
+      video_id: "lookbook-demo-v1",
+      manifest_version: "unapproved-revision",
+    }),
+    "kiosk_manifest",
+  );
+});
 
 test("동일 frame_id의 시선과 표정을 하나의 v2 observation으로 결합한다", () => {
   const batches = build([gaze(1)], [expression(1)]);
@@ -158,10 +203,76 @@ test("동일 frame_id의 시선과 표정을 하나의 v2 observation으로 결�
   assert.equal(observation.gaze?.producer_id, "eye-producer");
   assert.equal(observation.expression?.producer_id, "face-producer");
   assert.equal(observation.attention?.producer_id, "kiosk-aoi-mapper-v1");
-  assert.equal(observation.attention?.candidates[0]?.product_id, "MCM-DEMO-BAG-001");
+  assert.equal(observation.attention?.model_revision, "aoi-mapper-v2");
+  assert.deepEqual(observation.attention?.candidates, []);
+  assert.equal(observation.attention?.video_x_norm, 0.25);
+  assert.equal(observation.attention?.video_y_norm, 0.5);
   assert.equal(observation.gaze_reason, null);
   assert.equal(observation.expression_reason, null);
   assert.equal(observation.derived_reason, null);
+});
+
+test("legacy manifest는 기존 Kiosk candidate mapping을 유지한다", () => {
+  const legacyManifest: LookbookManifest = {
+    ...manifest,
+    exposures: [
+      {
+        exposure_id: "legacy-exposure-handle",
+        product_id: "MCM-DEMO-BAG-001",
+        start_ms: 0,
+        end_ms: 10_000,
+        priority: 0,
+        shape: manifest.exposures[0].shape,
+      },
+    ],
+  };
+  const attention = build(
+    [gaze(1)],
+    [],
+    legacyManifest,
+    new Map([["frame-1", fullFrameVideoLayout]]),
+    "kiosk_manifest",
+  )[0].observations[0].attention;
+
+  assert.equal(attention?.candidates.length, 1);
+  assert.equal(attention?.candidates[0].exposure_id, "legacy-exposure-handle");
+  assert.equal(attention?.candidates[0].product_id, "MCM-DEMO-BAG-001");
+  assert.equal(attention?.video_x_norm, 0.25);
+  assert.equal(attention?.video_y_norm, 0.5);
+});
+
+test("유효한 real v2 gaze frame의 layout이 없으면 fail closed한다", () => {
+  assert.throws(
+    () => build([gaze(1)], [], manifest, new Map()),
+    /Missing video layout for valid gaze frame_id "frame-1"/,
+  );
+});
+
+test("real v2에서 캡처 layout으로 viewport 좌표를 매핑하고 letterbox를 제외한다", () => {
+  const letterboxedLayout = calculateContainedVideoLayout({
+    viewport_width_px: 1_000,
+    viewport_height_px: 1_000,
+    source_width_px: 1_920,
+    source_height_px: 1_080,
+    element_rect: { x_px: 0, y_px: 0, width_px: 1_000, height_px: 1_000 },
+  });
+  const insideSample = gaze(1);
+  const letterboxSample = gaze(2, { screen_y_norm: 0.05 });
+  const observations = build(
+    [insideSample, letterboxSample],
+    [],
+    manifest,
+    new Map([
+      [insideSample.frame_id, letterboxedLayout],
+      [letterboxSample.frame_id, letterboxedLayout],
+    ]),
+  )[0].observations;
+
+  assert.equal(observations[0].attention?.outside_video, false);
+  assert.equal(observations[0].attention?.video_x_norm, 0.25);
+  assert.equal(observations[0].attention?.video_y_norm, 0.5);
+  assert.equal(observations[1].attention?.outside_video, true);
+  assert.deepEqual(observations[1].attention?.candidates, []);
 });
 
 test("frame_id가 다른 모든 시선·표정 샘플을 보존하고 누락을 null+reason으로 표현한다", () => {
@@ -191,7 +302,7 @@ test("frame drop의 source sequence gap을 재번호화하지 않고 보존한�
   );
 });
 
-test("이탈 후 같은 단일 AOI로 돌아온 경우만 return 후보로 표시한다", () => {
+test("return 후보는 Backend source AOI 판정 전까지 미결 상태로 보존한다", () => {
   const observations = build(
     [
       gaze(1),
@@ -206,8 +317,12 @@ test("이탈 후 같은 단일 AOI로 돌아온 경우만 return 후보로 표�
     observations[0].derived?.gaze?.movement_reason,
     "no_previous_observation",
   );
-  assert.equal(observations[1].attention?.candidates.length, 0);
-  assert.equal(observations[2].derived?.gaze?.return_candidate, true);
+  assert.deepEqual(observations[1].attention?.candidates, []);
+  assert.equal(observations[2].derived?.gaze?.return_candidate, null);
+  assert.equal(
+    observations[2].derived?.gaze?.return_candidate_reason,
+    "backend_aoi_mapping_required",
+  );
   assert.ok((observations[2].derived?.gaze?.movement?.distance_norm ?? 0) > 0);
 });
 
@@ -328,7 +443,7 @@ test("v2 batch 상한을 넘는 모든 frame을 순서대로 분할 보존한다
   assert.equal(batches[1].observations[0].sequence, 257);
 });
 
-test("겹치는 AOI는 특정 상품의 복귀 근거로 임의 귀속하지 않는다", () => {
+test("겹치는 local AOI도 Kiosk가 candidate로 임의 귀속하지 않는다", () => {
   const overlappingManifest: LookbookManifest = {
     ...manifest,
     exposures: [
@@ -342,11 +457,11 @@ test("겹치는 AOI는 특정 상품의 복귀 근거로 임의 귀속하지 않
   };
   const observation = build([gaze(1)], [expression(1)], overlappingManifest)[0]
     .observations[0];
-  assert.equal(observation.attention?.candidates.length, 2);
+  assert.deepEqual(observation.attention?.candidates, []);
   assert.equal(observation.derived?.gaze?.return_candidate, null);
   assert.equal(
     observation.derived?.gaze?.return_candidate_reason,
-    "no_previous_observation",
+    "backend_aoi_mapping_required",
   );
 });
 

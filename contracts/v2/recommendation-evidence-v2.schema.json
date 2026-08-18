@@ -355,6 +355,10 @@
       "properties": {
         "window_id": { "$ref": "#/$defs/id" },
         "product_id": { "$ref": "#/$defs/id" },
+        "product_part": {
+          "type": "string",
+          "enum": ["handle", "body", "accessory"]
+        },
         "start_offset_ms": { "type": "number", "minimum": 0 },
         "end_offset_ms": { "type": "number", "minimum": 0 },
         "video_start_ms": { "type": "integer", "minimum": 0 },

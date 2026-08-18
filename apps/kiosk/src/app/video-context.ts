@@ -69,6 +69,12 @@ function requireNonNegativeInteger(value: number, name: string): void {
   }
 }
 
+/** Advance before seek, replay, or source replacement captures any new frame. */
+export function advancePlaybackEpoch(playbackEpoch: number): number {
+  requireNonNegativeInteger(playbackEpoch, "playbackEpoch");
+  return playbackEpoch + 1;
+}
+
 function requireIdentifier(value: string, name: string): void {
   if (value.trim().length === 0) {
     throw new TypeError(`${name} must not be empty.`);

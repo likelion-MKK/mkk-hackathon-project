@@ -20,6 +20,7 @@ from apps.api.app.schemas import (
     ManagerProductRequest,
     ManagerProductRequestAccepted,
     Product,
+    ProductAttentionEvent,
     ProductCatalog,
     ReactionBatch,
     ReactionBatchAccepted,
@@ -67,6 +68,7 @@ class MemoryStore:
         self.catalog = self._load_catalog()
         self.manifest = self._load_manifest()
         self.central_v2_manifest = self._load_central_v2_manifest()
+        self.demo_manifest = self._load_demo_manifest()
         self.products = {product.product_id: product for product in self.catalog.products}
         self.sessions: dict[str, SessionRecord] = {}
         self.manager_events: list[ManagerEvent] = []
@@ -92,13 +94,25 @@ class MemoryStore:
         )
         return LookbookManifest.model_validate(json.loads(path.read_text(encoding="utf-8")))
 
-    def _new_recommendation(self, session_id: str) -> RecommendationResult:
+    def _load_demo_manifest(self) -> LookbookManifest:
+        path = (
+            self.repository_root
+            / "data"
+            / "lookbooks"
+            / "lookbook-demo-v1"
+            / "manifest.json"
+        )
+        return LookbookManifest.model_validate(json.loads(path.read_text(encoding="utf-8")))
+
+    def _new_recommendation(
+        self, session_id: str, manifest: LookbookManifest
+    ) -> RecommendationResult:
         return RecommendationResult(
             schema_version="1.0",
             recommendation_id=f"recommendation-{session_id}-001",
             session_id=session_id,
-            video_id=self.manifest.video_id,
-            manifest_version=self.manifest.manifest_version,
+            video_id=manifest.video_id,
+            manifest_version=manifest.manifest_version,
             algorithm_version="mock-v1",
             engine_mode="mock",
             status="pending",
@@ -141,6 +155,8 @@ class MemoryStore:
             "mcm-central-ai-replay-v2",
         }:
             return self.central_v2_manifest
+        if lookbook_id in {self.demo_manifest.video_id, "lookbook-demo-v1"}:
+            return self.demo_manifest
         supported_ids = {self.manifest.video_id, "example", "mcm-lookbook-example"}
         if lookbook_id not in supported_ids:
             raise DomainError(404, "lookbook_not_found", f"lookbook '{lookbook_id}' was not found")
@@ -160,7 +176,7 @@ class MemoryStore:
                 created_at=created_at,
                 display_code=f"MKK-{session_number:04d}",
                 reaction_features=ProductFeatureAccumulator(self.products.keys()),
-                recommendation=self._new_recommendation(session_id),
+                recommendation=self._new_recommendation(session_id, manifest),
             )
             self.sessions[session_id] = record
             return SessionCreated(
@@ -184,10 +200,34 @@ class MemoryStore:
     def append_batch(self, session_id: str, batch: ReactionBatch) -> ReactionBatchAccepted:
         with self._lock:
             session = self._require_session(session_id)
+            manifest = self._require_lookbook(session.lookbook_id)
             if batch.session_id != session_id:
                 raise DomainError(400, "session_mismatch", "batch session_id does not match the URL")
-            if batch.video_id != self.manifest.video_id:
+            if batch.video_id != manifest.video_id:
                 raise DomainError(400, "video_mismatch", "batch video_id does not match the session manifest")
+            for event in batch.events:
+                if not isinstance(event, ProductAttentionEvent):
+                    continue
+                if event.manifest_version != manifest.manifest_version:
+                    raise DomainError(
+                        400,
+                        "manifest_mismatch",
+                        "attention manifest_version does not match the session manifest",
+                    )
+                manifest_candidates = {
+                    (exposure.exposure_id, exposure.product_id, exposure.product_part)
+                    for exposure in manifest.exposures
+                }
+                if any(
+                    (candidate.exposure_id, candidate.product_id, candidate.product_part)
+                    not in manifest_candidates
+                    for candidate in event.candidates
+                ):
+                    raise DomainError(
+                        400,
+                        "manifest_mismatch",
+                        "attention candidate does not match a manifest exposure",
+                    )
             if session.completed:
                 raise DomainError(409, "session_completed", "completed sessions cannot accept more batches")
             if batch.batch_id in session.batch_ids:
@@ -231,11 +271,12 @@ class MemoryStore:
             if session.reaction_features is None:
                 raise DomainError(500, "reaction_state_missing", "session reaction state is missing")
 
+            manifest = self._require_lookbook(session.lookbook_id)
             engine_result = engine.run(
                 recommendation_id=session.recommendation.recommendation_id,
                 session_id=session.session_id,
-                video_id=self.manifest.video_id,
-                manifest_version=self.manifest.manifest_version,
+                video_id=manifest.video_id,
+                manifest_version=manifest.manifest_version,
                 features=session.reaction_features.snapshot(),
                 products=[product.model_dump(mode="json") for product in self.products.values()],
             )

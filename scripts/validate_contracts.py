@@ -370,6 +370,8 @@ def example_aliases(path: Path, root: Path) -> list[str]:
         aliases.extend(["lookbook-manifest", "manifest"])
     elif relative == "data/lookbooks/mcm-central-ai-replay-v2/manifest.json":
         aliases.extend(["lookbook-manifest", "manifest"])
+    elif relative == "data/lookbooks/lookbook-demo-v1/manifest.json":
+        aliases.extend(["lookbook-manifest", "manifest"])
     elif relative == "data/products/catalog.example.json":
         aliases.extend(["product-catalog", "catalog"])
     elif relative == "data/products/mcm-demo-recommendation-profile-v2.json":
@@ -686,8 +688,194 @@ def validate_cross_document_invariants(root: Path, issues: list[Issue]) -> None:
             )
 
 
+def validate_demo_lookbook_manifest(root: Path, issues: list[Issue]) -> None:
+    """Validate completeness and references for the typed demo AOI fixture."""
+
+    manifest_path = root / "data" / "lookbooks" / "lookbook-demo-v1" / "manifest.json"
+    catalog_path = root / "data" / "products" / "mcm-demo-recommendation-profile-v2.json"
+    manifest = read_json(manifest_path, issues)
+    catalog = read_json(catalog_path, issues)
+
+    catalog_ids: set[str] = set()
+    if isinstance(catalog, dict) and isinstance(catalog.get("products"), list):
+        catalog_ids = {
+            product["product_id"]
+            for product in catalog["products"]
+            if isinstance(product, dict) and isinstance(product.get("product_id"), str)
+        }
+    if not isinstance(manifest, dict) or not isinstance(manifest.get("exposures"), list):
+        return
+
+    exposures = manifest["exposures"]
+    if len(exposures) != 86:
+        issues.append(Issue(manifest_path, "demo manifest must contain exactly 86 exposures"))
+
+    exposure_ids: list[str] = []
+    allowed_parts = {"handle", "body", "accessory"}
+    for index, exposure in enumerate(exposures):
+        if not isinstance(exposure, dict):
+            continue
+
+        exposure_id = exposure.get("exposure_id")
+        if isinstance(exposure_id, str):
+            exposure_ids.append(exposure_id)
+
+        product_part = exposure.get("product_part")
+        if product_part not in allowed_parts:
+            issues.append(
+                Issue(
+                    manifest_path,
+                    f"/exposures/{index}: product_part must be handle, body or accessory",
+                )
+            )
+
+        expected_part: str | None = None
+        if isinstance(exposure_id, str):
+            if re.search(r"\.handle(?:-[^.]+)?$", exposure_id):
+                expected_part = "handle"
+            elif re.search(r"\.body(?:-[^.]+)?$", exposure_id):
+                expected_part = "body"
+            elif re.search(r"\.accessory(?:-[^.]+)?$", exposure_id):
+                expected_part = "accessory"
+            else:
+                issues.append(
+                    Issue(
+                        manifest_path,
+                        f"/exposures/{index}: unsupported demo exposure_id part suffix",
+                    )
+                )
+        if expected_part is not None and product_part != expected_part:
+            issues.append(
+                Issue(
+                    manifest_path,
+                    f"/exposures/{index}: product_part '{product_part}' does not match "
+                    f"exposure_id suffix '{expected_part}'",
+                )
+            )
+
+        start_ms = exposure.get("start_ms")
+        end_ms = exposure.get("end_ms")
+        if isinstance(start_ms, (int, float)) and isinstance(end_ms, (int, float)):
+            if start_ms >= end_ms:
+                issues.append(
+                    Issue(
+                        manifest_path,
+                        f"/exposures/{index}: start_ms must be less than end_ms",
+                    )
+                )
+
+        product_id = exposure.get("product_id")
+        if isinstance(product_id, str) and catalog_ids and product_id not in catalog_ids:
+            issues.append(
+                Issue(
+                    manifest_path,
+                    f"/exposures/{index}: unknown catalog product_id '{product_id}'",
+                )
+            )
+
+    duplicates = duplicate_values(exposure_ids)
+    if duplicates:
+        issues.append(
+            Issue(manifest_path, f"duplicate demo exposure_id values: {sorted(duplicates)}")
+        )
+
+
+def validate_source_aoi_matching_invariants(root: Path, issues: list[Issue]) -> None:
+    """Validate approved source geometry bindings and the separate 10-item matcher."""
+
+    manifest_path = root / "data" / "lookbooks" / "lookbook-demo-v1" / "manifest.json"
+    metadata_path = root / "data" / "lookbooks" / "lookbook-demo-v1" / "aoi-metadata-v1.json"
+    canonical_path = root / "data" / "products" / "mcm-demo-recommendation-profile-v2.json"
+    matching_path = (
+        root / "data" / "products" / "mcm-recommendation-matching-profiles-v1.json"
+    )
+    manifest = read_json(manifest_path, issues)
+    metadata = read_json(metadata_path, issues)
+    canonical = read_json(canonical_path, issues)
+    matching = read_json(matching_path, issues)
+    if not all(isinstance(item, dict) for item in (manifest, metadata, canonical, matching)):
+        return
+
+    if metadata.get("video_id") != manifest.get("video_id"):
+        issues.append(Issue(metadata_path, "source AOI video_id must match the manifest"))
+    if metadata.get("manifest_version") != manifest.get("manifest_version"):
+        issues.append(Issue(metadata_path, "source AOI manifest_version must match the manifest"))
+    approval = metadata.get("approval")
+    if not isinstance(approval, dict) or approval.get("status") not in {"approved", "pending"}:
+        issues.append(Issue(metadata_path, "source AOI approval status must be approved or pending"))
+    elif approval.get("status") == "approved" and (
+        not approval.get("approved_by") or not approval.get("approved_at")
+    ):
+        issues.append(Issue(metadata_path, "approved source AOI metadata needs provenance"))
+
+    source_aois = metadata.get("source_aois")
+    exposures = manifest.get("exposures")
+    if not isinstance(source_aois, list) or not isinstance(exposures, list):
+        return
+    source_ids: list[str] = []
+    prefixes: list[str] = []
+    for index, source in enumerate(source_aois):
+        if not isinstance(source, dict):
+            continue
+        source_id = source.get("source_aoi_id")
+        if isinstance(source_id, str):
+            source_ids.append(source_id)
+        source_prefixes = source.get("exposure_id_prefixes")
+        if not isinstance(source_prefixes, list) or not source_prefixes:
+            issues.append(Issue(metadata_path, f"/source_aois/{index}: prefixes are required"))
+            continue
+        for prefix in source_prefixes:
+            if not isinstance(prefix, str) or not prefix.endswith("."):
+                issues.append(
+                    Issue(metadata_path, f"/source_aois/{index}: every prefix must end in '.'")
+                )
+            else:
+                prefixes.append(prefix)
+    if duplicate_values(source_ids):
+        issues.append(Issue(metadata_path, "source_aoi_id values must be unique"))
+    if duplicate_values(prefixes):
+        issues.append(Issue(metadata_path, "source AOI exposure prefixes must be unique"))
+
+    for index, exposure in enumerate(exposures):
+        exposure_id = exposure.get("exposure_id") if isinstance(exposure, dict) else None
+        if not isinstance(exposure_id, str):
+            continue
+        match_count = sum(exposure_id.startswith(prefix) for prefix in prefixes)
+        if match_count != 1:
+            issues.append(
+                Issue(
+                    metadata_path,
+                    f"manifest exposure '{exposure_id}' must match exactly one source AOI prefix",
+                )
+            )
+
+    canonical_products = canonical.get("products")
+    matching_products = matching.get("products")
+    if not isinstance(canonical_products, list) or not isinstance(matching_products, list):
+        return
+    canonical_ids = {
+        item.get("product_id") for item in canonical_products if isinstance(item, dict)
+    }
+    matching_ids = {
+        item.get("product_id") for item in matching_products if isinstance(item, dict)
+    }
+    if len(matching_products) != 10 or len(matching_ids) != 10:
+        issues.append(Issue(matching_path, "matching catalog must contain exactly 10 unique products"))
+    if matching_ids != canonical_ids:
+        issues.append(Issue(matching_path, "matching and canonical catalog IDs must be identical"))
+    if matching.get("catalog_version") != canonical.get("catalog_version"):
+        issues.append(Issue(matching_path, "matching catalog_version must match canonical catalog"))
+    if metadata.get("feature_taxonomy_version") != matching.get("feature_taxonomy_version"):
+        issues.append(Issue(matching_path, "source AOI and matching taxonomies must be identical"))
+    if set(source_ids) & canonical_ids:
+        issues.append(Issue(metadata_path, "source_aoi_id must not reuse a catalog product_id"))
+
+
 def validate_v2_cross_document_invariants(root: Path, issues: list[Issue]) -> None:
     """Validate the exactly-10 catalog, 60-second replay and grounded v2 result."""
+
+    validate_demo_lookbook_manifest(root, issues)
+    validate_source_aoi_matching_invariants(root, issues)
 
     catalog_path = root / "data" / "products" / "mcm-demo-recommendation-profile-v2.json"
     manifest_path = (
@@ -1095,6 +1283,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     required_data_documents = [
         root / "data" / "lookbooks" / "example" / "manifest.json",
         root / "data" / "lookbooks" / "mcm-central-ai-replay-v2" / "manifest.json",
+        root / "data" / "lookbooks" / "lookbook-demo-v1" / "manifest.json",
         root / "data" / "products" / "catalog.example.json",
         root / "data" / "products" / "mcm-demo-recommendation-profile-v2.json",
     ]

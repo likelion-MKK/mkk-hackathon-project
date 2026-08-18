@@ -8,16 +8,19 @@
 
 ## 1. 목표
 
-약 60초 룩북에서 관찰된 시선·표정의 저수준 파생 신호를 시간과 상품 장면에 맞춰 결합하고, self-hosted 중앙 판단 AI가 MCM 가방 10개 중 한 개를 추천한다. 고객에게는 상품과 함께 “이번 세션에서 무엇이 관찰되어 추천했는지”를 비진단적으로 설명한다.
+약 60초 룩북에서 관찰된 시선·표정의 저수준 파생 신호를 시간과 source AOI에 맞춰 결합하고, 응시한 영상 가방의 검수된 색상·형태·패턴·가방 액세서리 특징을 정형화한다. self-hosted 중앙 판단 AI는 이 관찰 evidence를 DB의 MCM 가방 10개 특징과 비교해 한 개를 추천한다. 영상 속 가방은 catalog 상품일 필요가 없고, source AOI 식별자와 catalog `product_id`는 서로 다른 namespace다. 고객에게는 상품과 함께 “이번 세션에서 무엇이 관찰되어 추천했는지”를 비진단적으로 설명한다.
 
 MVP의 성공 조건은 다음과 같다.
 
-1. Eye·Face 생산자 결과가 동일한 capture time·video time·상품 구간 기준으로 결합된다.
-2. 원본 frame 없이 bounded JSON evidence만 중앙 AI에 전달된다.
-3. 룩북 종료 후 세션당 중앙 AI를 한 번 호출한다.
-4. DB의 검수된 MCM 가방 정확히 10개만 후보이며 결과는 Top 1이다.
-5. frame 단위 파생 evidence는 세션 메모리에서 사용한 뒤 폐기한다.
-6. 추천 설명은 관찰 사실과 카탈로그 사실에 근거하며 감정·성격·구매 의도를 단정하지 않는다.
+1. Eye·Face 생산자 결과가 동일한 capture time·video time·source AOI 기준으로 결합된다.
+2. source AOI의 검수된 시각 특징과 시선 hit가 catalog ID에 선행해 결합되며, 영상 항목과 catalog 항목의 동일성을 요구하지 않는다.
+3. 원본 frame 없이 bounded JSON evidence만 중앙 AI에 전달된다.
+4. 룩북 종료 후 세션당 중앙 AI를 한 번 호출한다.
+5. DB의 검수된 MCM 가방 정확히 10개만 후보이며 결과는 Top 1이다.
+6. frame 단위 파생 evidence는 세션 메모리에서 사용한 뒤 폐기한다.
+7. 추천 설명은 세션 관찰 특징과 카탈로그 사실에 근거하며 감정·성격·구매 의도를 단정하지 않는다.
+
+`lookbook-demo-v1`의 source 경로는 이 목표대로 연결되어 있다. Kiosk는 capture context와 영상 정규화 좌표만 전송하고 Backend가 승인 metadata의 `video_time_ms`·polygon으로 source hit를 권위 판정한다. frame당 source item을 한 번만 집계해 색상·형태·패턴·액세서리 점수를 만들고 별도 catalog 10개 profile과 비교한다. 기존 catalog candidate 기반 replay는 회귀 호환 경로로 남는다. standalone JSON Schema 공동 승인, 실제 Browser·Vision producer·self-hosted model 검증 전에는 production 완료로 간주하지 않는다.
 
 ## 2. MVP 범위와 Deferred
 

@@ -31,6 +31,7 @@ LABEL_PATTERN = r"^[a-z][a-z0-9_]{0,63}$"
 Identifier = str
 Revision = str
 Reason = str
+ProductPart = Literal["handle", "body", "accessory"]
 
 
 class ContractModel(BaseModel):
@@ -128,6 +129,9 @@ class ManifestExposureShape(ContractModel):
 class ManifestExposure(ContractModel):
     exposure_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
     product_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
+    product_part: ProductPart | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     start_ms: int = Field(ge=0)
     end_ms: int = Field(ge=1)
     priority: int = Field(ge=0)
@@ -210,6 +214,9 @@ class ExpressionSample(ContractModel):
 class ProductAttentionCandidate(ContractModel):
     exposure_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
     product_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
+    product_part: ProductPart | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     priority: StrictInt = Field(ge=0)
 
 

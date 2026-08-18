@@ -101,6 +101,14 @@
         "product_id": {
           "$ref": "#/$defs/id"
         },
+        "product_part": {
+          "type": "string",
+          "enum": [
+            "handle",
+            "body",
+            "accessory"
+          ]
+        },
         "start_ms": {
           "type": "integer",
           "minimum": 0

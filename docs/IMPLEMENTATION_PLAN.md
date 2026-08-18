@@ -21,6 +21,19 @@
 | W5 Frontend 연결 | vertical slice 완료 | Kiosk v2 HTTP Top 1·template·cleanup, Manager v2 REST polling | 승인 영상·상품 자산의 실제 Browser E2E |
 | W6 통합 검증 | 자동화 일부 완료 | Contract/API/Kiosk/Manager unit·replay·build | Node 24, live PostgreSQL, 실모델, 로그/APM·browser 잔존 감사 |
 
+2026-08-18 사용자 결정에 따라 `lookbook-demo-v1` source 경로에서 영상 AOI와 추천 catalog를 분리했다. Kiosk는 candidate 없이 좌표·capture context를 보내며 Backend는 승인 metadata의 시간·polygon으로 source hit를 재판정한다. frame당 source item을 한 번만 집계한 색상·형태·패턴·가방 액세서리 evidence를 별도 DB 10개 matching profile과 비교하고, 표정이 비활성화되어도 유효 gaze·source hit가 있으면 중앙 Top 1 호출을 진행한다. 기존 `mcm-central-ai-replay-v2`의 product candidate 흐름은 회귀 호환으로 보존한다.
+
+```text
+공통 시각 특징 Pydantic 계약·승인 metadata·10개 matching profile
+  → Kiosk coordinate-only Producer
+  → Backend 권위 polygon 판정·세션 메모리 집계
+  → 중앙 request·prompt v2·strict Top 1 검증
+```
+
+standalone source-AOI/matching JSON Schema의 공유 계약 승인과 실제 Browser·Vision producer·self-hosted model 검증은 열린 production gate다.
+
+초반 `0~5,000ms`와 `29,400ms` 이후는 영상에 제품이 없으므로 빈 AOI가 정상이다. 유효 시선이 이 구간에 있으면 `valid=true`, 빈 candidate로 보존하며 임의 특징·상품이나 invalid reason을 만들지 않는다.
+
 ## 1. 고정 범위
 
 | 항목 | MVP 결정 |

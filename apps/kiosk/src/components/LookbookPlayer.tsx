@@ -13,6 +13,7 @@ import {
 } from "../app/reaction-batch.ts";
 import type { GazeSample, LookbookManifest } from "../app/kiosk-types.ts";
 import {
+  advancePlaybackEpoch,
   calculateContainedVideoLayout,
   createFrameContext,
   type FrameContext,
@@ -43,7 +44,7 @@ type LookbookPlayerProps = {
   videoUrl: string;
   onCameraRetry: () => Promise<void>;
   onComplete: () => Promise<void>;
-  onFrameCapture: (context: FrameContext) => Promise<void>;
+  onFrameCapture: (contextFactory: () => FrameContext) => Promise<void>;
   onHome: () => void;
   onPlaybackUnavailable: () => void;
 };
@@ -100,6 +101,7 @@ export function LookbookPlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const stageRef = useRef<HTMLElement>(null);
   const playbackEpochRef = useRef(0);
+  const sourceIdentityRef = useRef(`${videoId}\u0000${videoUrl}`);
   const frameSequenceRef = useRef(0);
   const didCompleteRef = useRef(false);
   const [mediaState, setMediaState] = useState<MediaState>(
@@ -113,9 +115,24 @@ export function LookbookPlayer({
   const [stageRect, setStageRect] = useState<PixelRect | null>(null);
 
   const incrementPlaybackEpoch = () => {
-    playbackEpochRef.current += 1;
+    playbackEpochRef.current = advancePlaybackEpoch(playbackEpochRef.current);
     setPlaybackEpoch(playbackEpochRef.current);
   };
+  useEffect(() => {
+    const nextIdentity = `${videoId}\u0000${videoUrl}`;
+    if (sourceIdentityRef.current === nextIdentity) return;
+
+    // A changed source starts a new playback epoch before any frame from the
+    // replacement media can be captured. Sequence remains session-monotonic.
+    sourceIdentityRef.current = nextIdentity;
+    playbackEpochRef.current = advancePlaybackEpoch(playbackEpochRef.current);
+    setPlaybackEpoch(playbackEpochRef.current);
+    didCompleteRef.current = false;
+    setIsPlaying(false);
+    setCurrentTimeMs(0);
+    setDurationMs(0);
+    setMediaState(videoUrl ? "loading" : "missing");
+  }, [videoId, videoUrl]);
 
   const readFrameContext = useCallback((sequence: number, frameId: string) => {
     const video = videoRef.current;
@@ -203,14 +220,13 @@ export function LookbookPlayer({
       if (!isActive) return;
 
       const sequence = frameSequenceRef.current;
-      const context = readFrameContext(
-        sequence,
-        `frame-${String(sequence).padStart(8, "0")}`,
-      );
-      if (!context) return;
-
+      const frameId = `frame-${String(sequence).padStart(8, "0")}`;
       frameSequenceRef.current += 1;
-      void onFrameCapture(context).catch(() => undefined);
+      void onFrameCapture(() => {
+        const context = readFrameContext(sequence, frameId);
+        if (!context) throw new Error("Lookbook frame context is unavailable.");
+        return context;
+      }).catch(() => undefined);
     };
 
     captureCurrentFrame();

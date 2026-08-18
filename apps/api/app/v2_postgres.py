@@ -7,13 +7,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Callable, Protocol
+from typing import Any, Callable, Literal, Protocol
 
 from apps.api.app.v2_models import (
     ProductRecommendationProfileV2,
     RecommendationAcceptedV2,
     RecommendationDecisionV2,
-    RecommendationEvidenceV2,
     RecommendationVersionV2,
 )
 
@@ -131,7 +130,7 @@ class PostgresDecisionPersistence:
         self,
         session_id: str,
         accepted: RecommendationAcceptedV2,
-        evidence: RecommendationEvidenceV2,
+        input_variant: Literal["A", "B", "C"],
         version: RecommendationVersionV2,
     ) -> None:
         query = """
@@ -146,7 +145,7 @@ class PostgresDecisionPersistence:
             accepted.decision_request_id,
             accepted.recommendation_id,
             session_id,
-            evidence.input_variant,
+            input_variant,
             version.catalog_version,
             version.model_id,
             version.model_revision,

@@ -1,9 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  advancePlaybackEpoch,
   calculateContainedVideoLayout,
   createFrameContext,
 } from "./video-context.ts";
+
+test("seek, replay, source replacement each advance playback epoch", () => {
+  let playbackEpoch = 0;
+  playbackEpoch = advancePlaybackEpoch(playbackEpoch); // seek
+  playbackEpoch = advancePlaybackEpoch(playbackEpoch); // replay
+  playbackEpoch = advancePlaybackEpoch(playbackEpoch); // source replacement
+
+  assert.equal(playbackEpoch, 3);
+  assert.throws(() => advancePlaybackEpoch(-1), /non-negative integer/);
+});
 
 test("16:9 영상을 정사각형 element 안에 contain으로 배치한다", () => {
   const layout = calculateContainedVideoLayout({

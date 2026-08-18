@@ -149,6 +149,47 @@ test("FrameSource가 frame과 FrameContext를 전달한 뒤 원본 frame을 해�
   assert.equal(closeCount, 1);
 });
 
+test("캡처 직전에 만든 context는 inference가 지연돼도 최초 video_time_ms를 유지한다", async () => {
+  const fixture = createCameraFixture();
+  let videoTimeMs = 4_200;
+  let factoryCallCount = 0;
+  let markConsumerStarted: (() => void) | undefined;
+  let finishConsumer: (() => void) | undefined;
+  const consumerStarted = new Promise<void>((resolve) => {
+    markConsumerStarted = resolve;
+  });
+  const consumerFinished = new Promise<void>((resolve) => {
+    finishConsumer = resolve;
+  });
+  const source = new FrameSource({
+    mediaDevices: { getUserMedia: async () => fixture.stream },
+    createVideoElement: () => fixture.video,
+    createFrame: async () => ({ width: 640, height: 360, close: () => undefined }),
+  });
+  let receivedContext: FrameContext | undefined;
+
+  await source.open();
+  const capture = source.capture(
+    () => {
+      factoryCallCount += 1;
+      return { ...createContext(), video_time_ms: videoTimeMs };
+    },
+    async (_frame, context) => {
+      receivedContext = context;
+      markConsumerStarted?.();
+      await consumerFinished;
+    },
+  );
+  await consumerStarted;
+
+  videoTimeMs = 9_000;
+  finishConsumer?.();
+
+  assert.equal(await capture, "delivered");
+  assert.equal(factoryCallCount, 1);
+  assert.equal(receivedContext?.video_time_ms, 4_200);
+});
+
 test("이전 frame 처리 중에는 새 frame을 쌓지 않고 drop한다", async () => {
   const fixture = createCameraFixture();
   let finishConsumer: (() => void) | undefined;
@@ -171,10 +212,18 @@ test("이전 frame 처리 중에는 새 frame을 쌓지 않고 drop한다", asyn
     await consumerFinished;
   });
   await consumerStarted;
-  const secondOutcome = await source.capture(createContext(), async () => undefined);
+  let droppedContextFactoryCalls = 0;
+  const secondOutcome = await source.capture(
+    () => {
+      droppedContextFactoryCalls += 1;
+      return createContext();
+    },
+    async () => undefined,
+  );
   finishConsumer?.();
 
   assert.equal(secondOutcome, "dropped");
+  assert.equal(droppedContextFactoryCalls, 0);
   assert.equal(await firstCapture, "delivered");
 });
 

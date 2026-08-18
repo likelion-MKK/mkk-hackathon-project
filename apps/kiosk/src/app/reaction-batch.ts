@@ -38,7 +38,7 @@ type BuildD1ReactionBatchOptions = {
 };
 
 const AOI_PRODUCER_ID = "kiosk-aoi-mapper-v1";
-const AOI_MAPPER_REVISION = "aoi-mapper-v1";
+const AOI_MAPPER_REVISION = "aoi-mapper-v2";
 const MAX_ATTENTION_CANDIDATES = 32;
 const MAX_EVENTS_PER_BATCH = 256;
 const POINT_EPSILON = 1e-9;
@@ -256,9 +256,10 @@ export function createProductAttentionEvent(
           exposure.shape.points,
         ),
     )
-    .map(({ exposure_id, product_id, priority }) => ({
+    .map(({ exposure_id, product_id, product_part, priority }) => ({
       exposure_id,
       product_id,
+      ...(product_part === undefined ? {} : { product_part }),
       priority,
     }));
 
@@ -272,6 +273,58 @@ export function createProductAttentionEvent(
     video_x_norm: videoPoint.video_x_norm,
     video_y_norm: videoPoint.video_y_norm,
     candidates,
+    valid: true,
+    reason: null,
+  };
+}
+
+export function createCoordinateOnlyAttentionEvent(
+  gazeSample: GazeSample,
+  manifest: LookbookManifest,
+  sequence: number,
+  videoPoint: VideoPointMapping,
+): ProductAttentionEvent {
+  if (gazeSample.video_id !== manifest.video_id) {
+    throw new Error("Gaze sample and lookbook manifest must use the same video_id.");
+  }
+
+  const base = {
+    schema_version: gazeSample.schema_version,
+    session_id: gazeSample.session_id,
+    event_id: `attention-${String(sequence).padStart(4, "0")}`,
+    sequence,
+    frame_id: gazeSample.frame_id,
+    captured_at_mono_ms: gazeSample.captured_at_mono_ms,
+    video_id: gazeSample.video_id,
+    video_time_ms: gazeSample.video_time_ms,
+    playback_epoch: gazeSample.playback_epoch,
+    producer_id: AOI_PRODUCER_ID,
+    model_revision: AOI_MAPPER_REVISION,
+    manifest_version: manifest.manifest_version,
+    source_gaze_event_id: gazeSample.event_id,
+    confidence: gazeSample.confidence,
+    candidates: [] as [],
+  };
+
+  if (!videoPoint.valid) {
+    return {
+      ...base,
+      outside_video: videoPoint.outside_video,
+      valid: false,
+      reason: videoPoint.reason,
+    };
+  }
+  if (videoPoint.outside_video) {
+    return { ...base, outside_video: true, valid: true, reason: null };
+  }
+
+  requireNormalizedCoordinate(videoPoint.video_x_norm, "video_x_norm");
+  requireNormalizedCoordinate(videoPoint.video_y_norm, "video_y_norm");
+  return {
+    ...base,
+    outside_video: false,
+    video_x_norm: videoPoint.video_x_norm,
+    video_y_norm: videoPoint.video_y_norm,
     valid: true,
     reason: null,
   };

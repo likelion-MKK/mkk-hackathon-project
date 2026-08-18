@@ -14,6 +14,10 @@ import screensaverHeritageCartImage from "./assets/screensaver/mcm-heritage-cart
 import screensaverLifestyleImage from "./assets/screensaver/mcm-lifestyle.png";
 import screensaverLifestyleWideImage from "./assets/screensaver/mcm-lifestyle-wide.jpg";
 import screensaverMilanStreetImage from "./assets/screensaver/mcm-milan-street.jpg";
+import {
+  ACTUAL_LOOKBOOK_ID,
+  resolveActualLookbookConfig,
+} from "./app/actual-lookbook-config.ts";
 import { AsyncFlowController } from "./app/async-flow-controller.ts";
 import {
   discardCentralSessionBestEffort,
@@ -32,7 +36,10 @@ import {
   type KioskEvent,
 } from "./app/kiosk-machine.ts";
 import { buildManagerProductRequestV2 } from "./app/manager-product-request-v2.ts";
-import { buildObservationBatchesV2 } from "./app/observation-batch-v2.ts";
+import {
+  buildObservationBatchesV2,
+  resolveObservationAttentionAuthority,
+} from "./app/observation-batch-v2.ts";
 import { buildD1ReactionBatches } from "./app/reaction-batch.ts";
 import {
   pollRecommendation,
@@ -78,13 +85,18 @@ import "./App.css";
 
 const useMockApi = import.meta.env.VITE_USE_MOCK_API?.trim().toLowerCase() === "true";
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() ?? "";
-const configuredLookbookId =
-  import.meta.env.VITE_LOOKBOOK_ID?.trim() || "mcm-central-ai-replay-v2";
+const actualLookbookConfig = useMockApi
+  ? null
+  : resolveActualLookbookConfig(
+      import.meta.env.VITE_LOOKBOOK_ID,
+      import.meta.env.VITE_LOOKBOOK_VIDEO_URL,
+    );
+const configuredLookbookId = actualLookbookConfig?.lookbookId ?? ACTUAL_LOOKBOOK_ID;
 const mockApiClient = new MockApiClient({ sessionStartDelayMs: 450 });
 const httpApiClient = new HttpApiClient(apiBaseUrl);
 const apiClient: ApiClient = useMockApi ? mockApiClient : httpApiClient;
 const frameSource = new FrameSource();
-const temporaryLookbookVideoUrl = import.meta.env.VITE_LOOKBOOK_VIDEO_URL?.trim() ?? "";
+const configuredLookbookVideoUrl = actualLookbookConfig?.videoUrl ?? "";
 const configuredVisionMode = import.meta.env.VITE_VISION_MODE?.trim() || "replay";
 if (configuredVisionMode !== "replay" && configuredVisionMode !== "live") {
   throw new Error("VITE_VISION_MODE must be replay or live.");
@@ -1209,6 +1221,7 @@ function App() {
           batchSequence: 0,
           sessionId: session.session_id,
           manifest,
+          attentionAuthority: resolveObservationAttentionAuthority(manifest),
           gazeSamples: gazeSamples.current,
           expressionSamples: expressionSamples.current,
           videoLayoutsByFrameId: videoLayoutsByFrameId.current,
@@ -1245,14 +1258,20 @@ function App() {
   }, [flowController, manifest, send, session]);
 
   const captureCameraFrame = useCallback(
-    async (context: FrameContext) => {
+    async (contextFactory: () => FrameContext) => {
       const generation = flowController.captureGeneration();
-      rememberCapturedFrameLayout(videoLayoutsByFrameId.current, context);
 
       try {
-        await frameSource.capture(context, async (frame, frameContext, signal) => {
-          await visionClient.sendFrame(frame, frameContext, { signal });
-        });
+        await frameSource.capture(
+          () => {
+            const context = contextFactory();
+            rememberCapturedFrameLayout(videoLayoutsByFrameId.current, context);
+            return context;
+          },
+          async (frame, frameContext, signal) => {
+            await visionClient.sendFrame(frame, frameContext, { signal });
+          },
+        );
       } catch (error: unknown) {
         if (
           !flowController.isCurrent(generation) ||
@@ -1440,7 +1459,7 @@ function App() {
         posterUrl={getLookbookPoster(selectedCategory)}
         sessionId={session.session_id}
         videoId={manifest.video_id}
-        videoUrl={temporaryLookbookVideoUrl}
+        videoUrl={configuredLookbookVideoUrl}
         onCameraRetry={retryCamera}
         onComplete={completeLookbook}
         onFrameCapture={captureCameraFrame}

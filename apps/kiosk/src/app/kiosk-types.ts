@@ -27,9 +27,12 @@ export type SessionCreated = {
 
 export type NormalizedPoint = [number, number];
 
+export type ProductPart = "handle" | "body" | "accessory";
+
 export type LookbookExposure = {
   exposure_id: string;
   product_id: string;
+  product_part?: ProductPart;
   start_ms: number;
   end_ms: number;
   priority: number;
@@ -104,6 +107,7 @@ export type ExpressionSample = ObservationBase &
 type ProductCandidate = {
   exposure_id: string;
   product_id: string;
+  product_part?: ProductPart;
   priority: number;
 };
 
@@ -158,6 +162,7 @@ export type ReactionBatchAccepted = {
 export type AttentionCandidateV2 = {
   exposure_id: string;
   product_id: string;
+  product_part?: ProductPart;
   priority: number;
 };
 
