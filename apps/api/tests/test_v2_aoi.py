@@ -24,7 +24,7 @@ from apps.api.app.v2_postgres import load_canonical_catalog
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 VIDEO_ID = "mcm-central-ai-replay-v2"
 PRODUCT_1 = "mcm-toni-medium-disco-visetos"
-PRODUCT_2 = "mcm-diamant-3d-small-calfskin"
+PRODUCT_2 = "mcm-pina-vanity-case-studded-calfskin"
 APPROVED_METADATA = load_aoi_metadata(
     REPOSITORY_ROOT / "data" / "lookbooks" / VIDEO_ID / "aoi-metadata-v2.json"
 )
@@ -230,7 +230,7 @@ def test_same_product_overlap_preserves_all_aoi_but_other_product_is_ambiguous()
 
     other_product = {
         **root,
-        "aoi_id": "diamant-overlap",
+        "aoi_id": "pina-vanity-overlap",
         "product_id": PRODUCT_2,
         "observed_visual_tag_ids": ["leather", "shoulder"],
     }

@@ -63,8 +63,8 @@ reason code만 반환합니다.
 
 ### v2 상품 source와 보존
 
-- `mcm-us-listing-names-v2-2026-08-16` seed는 공식 all-bags listing에서 확인된 상품명 10개를 사용하지만 추천 tag·요약은 팀 작성 demo 정보입니다. style code와 개별 상품 URL은 확인 전이므로 이름 기반 team ID를 사용합니다.
-- 미검증 개별 URL, 승인되지 않은 image/QR asset은 만들지 않고 각각 `null+reason`으로 둡니다. `approved_asset=false`인 record는 고객용 자산 catalog로 승격하지 않습니다.
+- `mcm-us-pdp-verified-v3-2026-08-18` seed는 사용자 승인 공식 MCM US PDP URL의 slug 상품명과 URL에 포함된 SKU identity를 사용하며 추천 tag·요약은 팀 작성 정보입니다. PDP 본문 자동 조회는 HTTP 403으로 차단되어 색상·치수·무게·수납·잠금·현재 판매 상태와 소재 세부 구성은 미검증입니다.
+- `source_status=official_product_page_verified_assets_pending` record는 검증된 개별 PDP URL을 사용하되 `approved_asset=false`, image/QR asset은 `null+reason`으로 유지합니다. 이미지 라이선스 검토와 QR 생성 전에는 고객용 자산 catalog로 승격하지 않습니다.
 - ObservationBatch와 RecommendationEvidence는 활성 세션 메모리의 일시 데이터입니다. 추천 terminal/취소/TTL 시 frame-level 좌표·score·변화량·window/timeline·중복 제거 키를 폐기하고 DB·파일·로그·cache·queue·backup에 저장하지 않습니다.
 - DB에는 승인된 상품 profile, terminal RecommendationDecision의 최소 audit metadata와 향후 별도 동의·계약이 승인된 conversion outcome만 둡니다. 운영 로그에는 payload 대신 request ID, status, version과 count만 남깁니다.
 

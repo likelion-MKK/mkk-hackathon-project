@@ -9,7 +9,7 @@ Supabase production DB, migration, API 코드는 이 폴더의 작업 대상이 
 ```text
 data/products/submissions/
   mcm-toni-medium-disco-visetos.json
-  mcm-diamant-3d-small-calfskin.json
+  mcm-pina-vanity-case-studded-calfskin.json
   ...
 ```
 
@@ -31,8 +31,10 @@ data/products/submissions/
 - 이미지 파일, QR 파일, raw image bytes, base64, embedding은 제출 JSON에 넣지 않습니다.
   이미지는 URL과 사용 승인 근거만 적습니다.
 
-`product_id`는 현재 10개 canonical ID 중 하나를 그대로 사용합니다. 새로운 ID를
-임의로 만들거나 기존 상품을 삭제·교체하지 않습니다.
+`product_id`는 승인된 canonical catalog revision의 10개 ID 중 하나를 그대로 사용합니다.
+상품 교체가 필요하면 사용자 승인 mapping과 새 `catalog_version`을 먼저 확정하고,
+canonical·submission·lookbook·consumer fixture를 같은 revision으로 갱신합니다. 승인 없이
+새 ID를 만들거나 현재 revision의 상품을 삭제·교체하지 않습니다.
 
 ## 파일 구조
 

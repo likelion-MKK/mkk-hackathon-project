@@ -23,7 +23,9 @@ from apps.api.app.v2_models import (
 )
 
 
-REQUIRED_MIGRATION_ID = "0004_supabase_backend_rls"
+# The latest migration is the RLS boundary; 0004 contains the catalog PDP
+# status constraint and must remain applied immediately before this migration.
+REQUIRED_MIGRATION_ID = "0005_supabase_backend_rls"
 TERMINAL_JOB_STATUSES = (
     "completed",
     "failed",

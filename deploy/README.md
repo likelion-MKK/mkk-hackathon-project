@@ -45,7 +45,8 @@ uv run --project apps/api python -m apps.api.scripts.db_seed_catalog --execute
 unset MIGRATION_DATABASE_URL
 ```
 
-기존 `0001`, `0002`, `0003`은 수정하지 않고 `0004`까지 순서대로 적용한다. seed는 기존 승인 행을
+기존 `0001`, `0002`, `0003`은 수정하지 않고 `0004`(catalog PDP 상태), `0005`(backend RLS)까지
+순서대로 적용한다. seed는 기존 승인 행을
 덮어쓰지 않으며 불일치하면 실패한다. 그 다음 application `DATABASE_URL`은 IPv4 session
 pooler를 사용한다. API startup은 catalog가 정확히 10개인지 확인하고, 남은
 `pending|running` job은 `service_restart` 실패로 정리한다. observation/frame/timeline은

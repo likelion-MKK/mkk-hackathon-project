@@ -36,15 +36,15 @@ PSYCHOLOGICAL_ASSERTION_PATTERN = re.compile(
 
 EXPECTED_PRODUCT_IDS = (
     "mcm-toni-medium-disco-visetos",
-    "mcm-diamant-3d-small-calfskin",
+    "mcm-pina-vanity-case-studded-calfskin",
     "mcm-milla-small-grained-leather",
     "mcm-ella-small-disco-visetos",
-    "mcm-aren-nova-small-monogram-econyl",
+    "mcm-aren-east-west-shoulder-visetos",
     "mcm-ottomar-nova-55cm-monogram-econyl",
     "mcm-aren-nova-medium-backpack-econyl",
-    "mcm-aren-triangle-mini-visetos",
+    "mcm-pina-studded-tote-visetos",
     "mcm-pina-small-tambourine-visetos",
-    "mcm-tracy-large-hobo-visetos",
+    "mcm-stark-side-studs-backpack-gold-crystal-visetos",
 )
 
 EXPECTED_MODEL_CANDIDATES = {
@@ -195,6 +195,23 @@ def model_product_view(product: Mapping[str, Any]) -> dict[str, Any]:
 def build_evidence_variants() -> dict[str, dict[str, Any]]:
     base_evidence = load_json(EVIDENCE_PATH)
     frame = load_json(FRAME_PATH)
+    backend_attributed_frame = copy.deepcopy(frame)
+    attention = backend_attributed_frame.get("attention")
+    if not isinstance(attention, dict):
+        raise ValueError("frame fixture must contain valid attention for variant B")
+    # The wire fixture correctly keeps Kiosk candidates empty. Variant B models the
+    # Backend-enriched timeline after approved AOI attribution, so mutate only this copy.
+    attention["candidates"] = [
+        {
+            "exposure_id": "evaluation-backend-aoi-toni",
+            "product_id": "mcm-toni-medium-disco-visetos",
+            "priority": 0,
+            "parent_aoi_id": None,
+            "specificity_rank": 0,
+            "component_code": "whole_product",
+            "observed_visual_tag_ids": ["monogram", "shopper"],
+        }
+    ]
     variants: dict[str, dict[str, Any]] = {}
     for variant in ("A", "B", "C"):
         evidence = copy.deepcopy(base_evidence)
@@ -202,7 +219,9 @@ def build_evidence_variants() -> dict[str, dict[str, Any]]:
         evidence["evidence_windows"] = None if variant == "B" else copy.deepcopy(
             base_evidence["evidence_windows"]
         )
-        evidence["timeline"] = [copy.deepcopy(frame)] if variant in {"A", "B"} else None
+        evidence["timeline"] = (
+            [copy.deepcopy(backend_attributed_frame)] if variant in {"A", "B"} else None
+        )
         variants[variant] = evidence
     return variants
 
@@ -267,9 +286,13 @@ def assert_catalog(profile: Mapping[str, Any]) -> set[str]:
     if product_ids != EXPECTED_PRODUCT_IDS:
         raise ValueError("v2 catalog product IDs or ordering differ from the reviewed seed")
     for product in products:
+        if product["source_status"] != "official_product_page_verified_assets_pending":
+            raise ValueError(f"product page status differs: {product['product_id']}")
         if product["approved_asset"] is not False:
             raise ValueError(f"pending product unexpectedly approved: {product['product_id']}")
-        for field in ("official_product_url", "image_asset_path", "qr_asset_path"):
+        if not product["official_product_url"] or product["official_product_url_reason"] is not None:
+            raise ValueError(f"verified product URL is missing: {product['product_id']}")
+        for field in ("image_asset_path", "qr_asset_path"):
             if product[field] is not None or not product[f"{field}_reason"]:
                 raise ValueError(f"pending product {field} must remain null+reason")
     return set(product_ids)

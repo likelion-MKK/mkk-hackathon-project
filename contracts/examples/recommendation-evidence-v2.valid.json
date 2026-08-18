@@ -5,7 +5,7 @@
   "session_id": "session-demo-v2-001",
   "video_id": "lookbook-demo-v2",
   "manifest_version": "demo-lookbook-v1",
-  "catalog_version": "mcm-us-listing-names-v2-2026-08-16",
+  "catalog_version": "mcm-us-pdp-verified-v3-2026-08-18",
   "feature_version": "central-evidence-v2-demo-1",
   "signal_versions": {
     "eye": { "producer_id": "eyetrax-eye-adapter", "model_revision": "eyetrax-demo-raw-v1" },
@@ -56,7 +56,7 @@
       "expression_reason": null
     },
     {
-      "product_id": "mcm-diamant-3d-small-calfskin",
+      "product_id": "mcm-pina-vanity-case-studded-calfskin",
       "exposure_duration_ms": 10000,
       "observed_component_codes": [],
       "observed_visual_tag_ids": [],

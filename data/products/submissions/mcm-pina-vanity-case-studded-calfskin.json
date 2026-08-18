@@ -1,0 +1,73 @@
+{
+  "submission_version": "1.0",
+  "product_id": "mcm-pina-vanity-case-studded-calfskin",
+  "research": {
+    "brand": "MCM",
+    "display_name": "Pina Vanity Case in Studded Calfskin",
+    "category": "bag",
+    "collection_or_line": "Pina",
+    "official_product_url": "https://us.mcmworldwide.com/en_US/bags/shoulder-crossbody-bags/pina-vanity-case-in-studded-calfskin/MWRGATA01BK001.html",
+    "official_listing_url": "https://us.mcmworldwide.com/en_US/women/bags/all-bags",
+    "color": {
+      "official_name": null,
+      "normalized_family": null,
+      "not_verified_reason": "공식 PDP 본문을 HTTP 403으로 확인하지 못해 색상명을 검증하지 못함"
+    },
+    "material": {
+      "official_name": "Studded Calfskin",
+      "normalized_family": "leather",
+      "not_verified_reason": "상품명에서 Studded Calfskin 계열만 확인했으며 세부 구성과 가공은 미검증"
+    },
+    "dimensions_mm": {
+      "width": null,
+      "height": null,
+      "depth": null,
+      "not_verified_reason": "공식 PDP 본문을 HTTP 403으로 확인하지 못해 치수를 검증하지 못함"
+    },
+    "weight_g": {
+      "value": null,
+      "not_verified_reason": "공식 PDP 본문을 HTTP 403으로 확인하지 못해 무게를 검증하지 못함"
+    },
+    "carrying_methods": ["상품명에서 확인한 숄더 스타일의 베니티 케이스 유형"],
+    "closure": null,
+    "capacity_and_pockets": ["공식 PDP 본문을 HTTP 403으로 확인하지 못해 수납 구성을 검증하지 못함"],
+    "visual_features": ["상품명에서 확인한 Pina Vanity Case", "상품명에서 확인한 Studded Calfskin 계열"],
+    "recommended_use_cases": ["이브닝 및 주말용 컴팩트 숄더 스타일이라는 팀 작성 해석"],
+    "care_notes": null,
+    "availability": {
+      "status": null,
+      "checked_at": null,
+      "not_verified_reason": "공식 PDP 본문을 HTTP 403으로 확인하지 못해 현재 판매 상태를 검증하지 못함"
+    }
+  },
+  "recommendation_profile": {
+    "controlled_tags": ["compact", "evening", "leather", "shoulder", "structured"],
+    "recommendation_summary": "컴팩트한 스터드 장식 가죽 베니티 케이스와 구조적인 숄더 스타일 방향을 비교하기 위한 팀 작성 추천 profile입니다.",
+    "style": {
+      "silhouette": "boxy",
+      "visual_tone": "refined",
+      "use_cases": ["evening", "weekend"]
+    }
+  },
+  "sources": [
+    {
+      "source_id": "official-product-page",
+      "kind": "official_product_page",
+      "url": "https://us.mcmworldwide.com/en_US/bags/shoulder-crossbody-bags/pina-vanity-case-in-studded-calfskin/MWRGATA01BK001.html",
+      "accessed_on": "2026-08-18",
+      "supports": ["research.display_name", "research.material", "official_product_url SKU MWRGATA01BK001 identity"]
+    }
+  ],
+  "asset_review": {
+    "image_source_url": null,
+    "usage_approval_reference": null,
+    "approved_asset": false,
+    "note": "공식 PDP 본문은 HTTP 403으로 확인하지 못했으며 이미지 자산과 라이선스는 승인되지 않음"
+  },
+  "review": {
+    "researcher": "박형진",
+    "checked_at": "2026-08-18",
+    "reviewer": null,
+    "review_status": "draft"
+  }
+}

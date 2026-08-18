@@ -420,6 +420,7 @@ export type ProductRecommendationItemV2 = {
   source_status:
     | "demo_placeholder"
     | "official_listing_name_verified_assets_pending"
+    | "official_product_page_verified_assets_pending"
     | "team_approved_catalog_record";
   official_product_url: string | null;
   official_product_url_reason: string | null;

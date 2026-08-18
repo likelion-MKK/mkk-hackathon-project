@@ -45,5 +45,5 @@ CREATE POLICY mcm_schema_migration_backend_all
     WITH CHECK (true);
 
 INSERT INTO mcm_schema_migration (migration_id)
-VALUES ('0004_supabase_backend_rls')
+VALUES ('0005_supabase_backend_rls')
 ON CONFLICT (migration_id) DO NOTHING;

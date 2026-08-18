@@ -7,26 +7,28 @@ import type {
 import { presentCentralRecommendation } from "./recommendation-presentation.ts";
 
 const product: ProductRecommendationItemV2 = {
-  product_id: "mcm-diamant-3d-small-calfskin",
-  display_name: "Small Diamant 3D Shoulder Bag in Calfskin",
+  product_id: "mcm-pina-vanity-case-studded-calfskin",
+  display_name: "Pina Vanity Case in Studded Calfskin",
   category: "bag",
-  controlled_tags: ["compact", "leather", "structured"],
-  recommendation_summary: "팀 검수 요약",
+  controlled_tags: ["compact", "evening", "leather", "shoulder", "structured"],
+  recommendation_summary:
+    "컴팩트한 스터드 장식 가죽 베니티 케이스와 구조적인 숄더 스타일 방향을 비교하기 위한 팀 작성 추천 profile입니다.",
   style: {
     silhouette: "boxy",
     visual_tone: "refined",
-    use_cases: ["evening"],
+    use_cases: ["evening", "weekend"],
   },
   approved_asset: false,
-  source_status: "official_listing_name_verified_assets_pending",
-  official_product_url: null,
-  official_product_url_reason: "individual_product_url_unverified",
+  source_status: "official_product_page_verified_assets_pending",
+  official_product_url:
+    "https://us.mcmworldwide.com/en_US/bags/shoulder-crossbody-bags/pina-vanity-case-in-studded-calfskin/MWRGATA01BK001.html",
+  official_product_url_reason: null,
   official_listing_url: "https://us.mcmworldwide.com/en_US/women/bags/all-bags",
   image_asset_path: null,
   image_asset_path_reason: "asset_license_review_pending",
   qr_asset_path: null,
-  qr_asset_path_reason: "official_product_url_unverified",
-  source_note: "공식 목록에서 이름만 확인",
+  qr_asset_path_reason: "qr_asset_generation_pending",
+  source_note: "공식 MCM PDP URL과 SKU identity 확인, 자산과 PDP 본문 상세는 미검증",
 };
 
 const decision: RecommendationDecisionV2 = {

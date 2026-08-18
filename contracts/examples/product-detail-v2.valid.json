@@ -6,13 +6,13 @@
   "recommendation_summary": "넉넉한 데일리 토트·쇼퍼 방향을 비교하기 위한 팀 작성 추천 profile입니다.",
   "style": { "silhouette": "trapezoid", "visual_tone": "bold", "use_cases": ["daily", "work"] },
   "approved_asset": false,
-  "source_status": "official_listing_name_verified_assets_pending",
-  "official_product_url": null,
-  "official_product_url_reason": "individual_product_url_unverified",
+  "source_status": "official_product_page_verified_assets_pending",
+  "official_product_url": "https://us.mcmworldwide.com/en_US/women/bags/totes-shoppers/toni-top-zip-shopper-in-disco-visetos/MWPGAMT01CO001.html",
+  "official_product_url_reason": null,
   "official_listing_url": "https://us.mcmworldwide.com/en_US/women/bags/all-bags",
   "image_asset_path": null,
   "image_asset_path_reason": "asset_license_review_pending",
   "qr_asset_path": null,
-  "qr_asset_path_reason": "official_product_url_unverified",
-  "source_note": "공식 all-bags listing에서 상품명만 확인했습니다. 개별 URL·자산·라이선스·판매 상태는 미검증이며 태그와 요약은 해커톤 평가용 팀 작성 정보입니다."
+  "qr_asset_path_reason": "qr_asset_generation_pending",
+  "source_note": "공식 MCM PDP URL과 SKU identity를 확인했습니다. 이미지 자산·라이선스·현재 판매 상태와 PDP 본문 상세는 미검증이며 태그와 요약은 팀 작성 정보입니다."
 }
