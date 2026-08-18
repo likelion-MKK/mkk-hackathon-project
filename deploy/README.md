@@ -52,6 +52,23 @@ pooler를 사용한다. API startup은 catalog가 정확히 10개인지 확인�
 `pending|running` job은 `service_restart` 실패로 정리한다. observation/frame/timeline은
 DB에서 복구하지 않는다.
 
+### 기존 migration marker가 다른 경우
+
+이전 환경에 `0004_supabase_backend_rls` marker만 있고
+`0004_catalog_pdp_source_status`, `0005_supabase_backend_rls` marker가 없을 수 있다.
+이 경우 marker를 직접 rename·insert·delete하지 않는다. 그렇게 하면 공식 product page가
+검증된 catalog 상태를 허용하는 constraint가 빠진 채 readiness를 가장할 수 있다.
+
+direct PostgreSQL connection으로 backup을 먼저 만든 뒤, 위의 일반 `db_migrate --execute`
+명령을 그대로 실행한다. 모든 migration은 idempotent하게 작성되어 있으므로 기존 table·RLS
+policy를 재생성하고 누락된 catalog constraint와 두 현재 marker를 함께 맞춘다. 그 다음
+`db_seed_catalog --execute`가 새 canonical catalog version의 정확히 10개 행을 insert하고
+동일 key의 기존 행은 덮어쓰지 않는다. 마지막으로 runtime session pooler를 사용한 API의
+`/readyz`가 200이 되는지 확인한다.
+
+direct URL이 연결되지 않거나 `db_migrate`가 실패하면 marker를 수동 수정하지 말고 중단한다.
+그 상태에서는 runtime pooler가 연결되어 있어도 deployment readiness는 완료가 아니다.
+
 ## DB 보존·cleanup과 backup/restore
 
 DB에는 catalog와 최소 final job/decision metadata만 남는다. 기본 보유 기간은 terminal
@@ -161,7 +178,8 @@ HTTP→HTTPS redirect, `wss://` 원격 camera E2E를 추가한다. public IP만�
 - `npm test`, `npm run lint`, `npm run build`를 Node 24.19.0에서 실행
 - API·Face·Eye·Vision·Contract·Integration 테스트 통과
 - video `Range` 응답과 `/media/` static path 확인
-- camera 권한 → calibration → Eye/Face → Gateway → API → 정확히 10개 중 Top 1 확인
+- camera 권한 → calibration → Eye → Gateway → API → 정확히 10개 중 Top 1 확인
+  (`VISION_EXPRESSION_MODE=disabled`인 현재 배포에서는 표정을 `not_observed`로 유지)
 - actual AOI metadata를 담당자가 `approved`로 고정하고 Vision 3-B
   (valid gaze → video time/point → product/component/tag → aggregate evidence) 통과
 - cancel, insufficient-data, provider failure, duplicate complete와 30분 orphan cleanup 확인

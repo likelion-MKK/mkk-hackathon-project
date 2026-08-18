@@ -198,7 +198,7 @@ class VisionStreamApp:
         self,
         *,
         token_verifier: VisionTokenVerifier,
-        face_worker_factory: FaceWorkerFactory,
+        face_worker_factory: FaceWorkerFactory | None,
         frame_decoder: FrameDecoder = default_frame_decoder,
         max_frame_bytes: int = 524_288,
         max_fps: float = 4.0,
@@ -279,8 +279,9 @@ class VisionStreamApp:
                 await self._send_error(websocket, "invalid_message", retryable=False)
                 await self._send_close(websocket, code=1002, reason="protocol_error")
                 return
-            worker = self.face_worker_factory()
-            await asyncio.to_thread(worker.start)
+            if self.face_worker_factory is not None:
+                worker = self.face_worker_factory()
+                await asyncio.to_thread(worker.start)
             await websocket.send_json(
                 {
                     "type": "ready",
@@ -596,10 +597,13 @@ class VisionStreamApp:
     async def _process_frame(
         self,
         binary: DecodedBinaryFrame,
-        worker: FaceWorker,
+        worker: FaceWorker | None,
         state: "_StreamState",
         session_id: str,
     ) -> _FrameOutcome:
+        if worker is None:
+            return await self._process_gaze_only_frame(binary, state, session_id)
+
         metadata = binary.metadata
         context = metadata.context
         frame: Any | None = None
@@ -748,6 +752,73 @@ class VisionStreamApp:
             if frame is not None and not frame_cleanup_deferred:
                 _close_frame(frame)
             del frame
+            del binary
+
+    async def _process_gaze_only_frame(
+        self,
+        binary: DecodedBinaryFrame,
+        state: "_StreamState",
+        session_id: str,
+    ) -> _FrameOutcome:
+        """Forward one frame only to Eye when expression is deliberately disabled.
+
+        The disabled mode avoids decoding the frame in the Gateway and retains no
+        Face-derived result.  It is distinct from a failed Face worker: the
+        response explicitly says that expression was not observed.
+        """
+
+        context = binary.metadata.context
+        eye_task: asyncio.Task[EyeInferenceResult] | None = None
+        try:
+            if not state.inference_started:
+                return _FrameOutcome(
+                    "drop", self._drop(context, "session_closing", retryable=False)
+                )
+
+            gaze_sample: Mapping[str, object] | None = None
+            gaze_reason: str | None = "eye_not_connected"
+            try:
+                eye_task = asyncio.create_task(self.eye_worker.infer(binary))
+                eye_result = await asyncio.wait_for(
+                    asyncio.shield(eye_task),
+                    timeout=self.inference_timeout_ms / 1000,
+                )
+                candidate = eye_result.gaze_sample
+                if candidate is None:
+                    gaze_reason = eye_result.reason or "gaze_unavailable"
+                elif not _same_gaze_payload_context(
+                    candidate, context, session_id=session_id
+                ):
+                    gaze_reason = "gaze_context_mismatch"
+                elif not isinstance(candidate.get("valid"), bool):
+                    gaze_reason = "eye_worker_invalid_response"
+                else:
+                    gaze_sample = candidate
+                    gaze_reason = None
+            except asyncio.TimeoutError:
+                assert eye_task is not None
+                state.defer_cleanup(eye_task, lambda _result: None)
+                gaze_reason = "eye_worker_timeout"
+            except asyncio.CancelledError:
+                if eye_task is not None and not eye_task.done():
+                    state.defer_cleanup(eye_task, lambda _result: None)
+                raise
+            except Exception:
+                gaze_reason = "eye_worker_unavailable"
+
+            return _FrameOutcome(
+                "result",
+                {
+                    "type": "result",
+                    "protocol_version": "1.0",
+                    **context.as_payload(),
+                    "gaze_sample": gaze_sample,
+                    "gaze_reason": gaze_reason,
+                    "expression_sample": None,
+                    "expression_reason": "not_observed",
+                },
+            )
+        finally:
             del binary
 
     async def _cleanup_worker(

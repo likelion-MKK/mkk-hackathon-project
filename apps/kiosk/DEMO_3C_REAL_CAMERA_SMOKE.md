@@ -58,7 +58,7 @@ environment variable.
 
 ```powershell
 $env:EYE_FACE_MODEL_PATH = (Resolve-Path "services/eye/.cache/face_landmarker.task").Path
-uv run --project services/eye --locked python -m mcm_eye.worker
+uv run --project services/eye --locked python services/eye/scripts/run_worker.py
 ```
 
 ### 3. Vision Gateway
@@ -66,7 +66,7 @@ uv run --project services/eye --locked python -m mcm_eye.worker
 ```powershell
 $env:VISION_STREAM_TOKEN_SECRET = "<the same local-only secret>"
 $env:VISION_EYE_WORKER_URL = "http://127.0.0.1:8766"
-$env:VISION_FACE_MODEL_PATH = (Resolve-Path "experiments/face/mediapipe-face-landmarker/models/face_landmarker.task").Path
+$env:VISION_EXPRESSION_MODE = "disabled"
 uv run --project apps/api --locked python -m uvicorn `
   apps.vision_gateway.local_server:app --host 127.0.0.1 --port 8765
 ```

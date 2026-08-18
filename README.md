@@ -4,13 +4,13 @@
 
 ## 현재 MVP 방향
 
-고객은 회원가입이나 설문 없이 검수된 33.5초 룩북 `mcm-lookbook-v2`를 본다. Eye·Face 생산자는 웹캠 frame을 처리해 시선·표정 관찰값을 만들고, Kiosk는 캡처 순간의 영상 시각·layout으로 시선을 영상 정규화 좌표로만 변환한다. 상품 구간·부위는 Backend가 승인 AOI metadata로 연결한다. 원본 frame은 추천 AI로 보내지 않는다.
+고객은 회원가입이나 설문 없이 검수된 33.5초 룩북 `mcm-lookbook-v2`를 본다. 현재 배포·시연 경로는 Eye 생산자가 웹캠 frame에서 시선 관찰값만 만들고, Kiosk는 캡처 순간의 영상 시각·layout으로 시선을 영상 정규화 좌표로만 변환한다. 표정 관찰은 명시적으로 비활성화되어 `expression=null`, `expression_reason=not_observed`로 남긴다. 상품 구간·부위는 Backend가 승인 AOI metadata로 연결한다. 원본 frame은 추천 AI로 보내지 않는다.
 
 룩북이 끝나면 Backend가 세션 메모리에 있는 파생 신호를 한 번의 `RecommendationEvidence`로 정리한다. hosted Luna 중앙 판단 AI는 이 JSON과 DB에 등록된 **MCM 가방 정확히 10개**의 태그·분석을 비교해 **Top 1** 상품과 근거를 반환한다.
 
 ```text
 웹캠 frame(추론 중 메모리만)
-  → Eye·Face 파생 신호
+  → Eye 시선 파생 신호 (표정 관찰 비활성화)
   → 시간·상품 기준 RecommendationEvidence JSON(세션 메모리)
   + DB의 MCM 가방 10개 프로필
   → 룩북 종료 후 hosted Luna 중앙 판단 AI 1회 호출

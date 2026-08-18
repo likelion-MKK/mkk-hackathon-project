@@ -13,6 +13,12 @@ def make_app() -> LocalVisionGatewayApp:
     )
 
 
+def test_gaze_only_mode_needs_no_face_model_path() -> None:
+    app = LocalVisionGatewayApp(expression_mode="disabled")
+
+    assert app.expression_mode == "disabled"
+
+
 def test_local_token_bootstrap_is_cors_scoped_and_one_time() -> None:
     app = make_app()
 

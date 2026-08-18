@@ -3,7 +3,8 @@
 ## Current stream boundary
 
 `server.py` provides `/vision/v1/stream`, validates a one-time token, receives the
-v1 binary frame envelope, and returns only derived Eye/Face samples. When
+v1 binary frame envelope, and returns only derived Eye samples plus an optional
+Face result. When
 `VISION_EYE_WORKER_URL` is configured, the encoded frame is sent once over the
 private bounded loopback/container boundary to the Python 3.12 Eye worker. If
 that worker is absent, timed out or not calibrated, `gaze_sample` stays `null`
@@ -14,12 +15,17 @@ Every Eye and Face result must repeat the original session, video, frame,
 sequence, monotonic capture time, capture-time video time and playback epoch.
 The Gateway drops a mismatched result and never creates an AOI or product ID.
 
-## 브라우저 localhost Eye + Face live 개발
+## 브라우저 localhost Eye live 개발
 
 `local_server.py`는 개발용 local token을 유지하고, `VISION_STREAM_TOKEN_SECRET`가
 설정되면 API가 발급한 signed one-time token을 검증한다. Backend token endpoint는
 `/api/v1/sessions/{session_id}/vision-stream-token`이며 token은 URL·로그·파일에
 기록하지 않는다.
+
+현재 시연은 `VISION_EXPRESSION_MODE=disabled`가 기본이다. 이 모드에서는 Gateway가
+Face worker를 만들거나 frame을 Face 용도로 decode하지 않고, `expression=null`과
+`expression_reason=not_observed`를 반환한다. 실제 표정 관찰을 다시 켤 때만
+`VISION_EXPRESSION_MODE=selected`와 검증된 `VISION_FACE_MODEL_PATH`를 함께 설정한다.
 
 ```powershell
 Set-Location apps/api

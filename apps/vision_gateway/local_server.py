@@ -27,6 +27,7 @@ _DEFAULT_ORIGINS = frozenset(
         "http://localhost:5173",
     }
 )
+_EXPRESSION_MODES = frozenset({"disabled", "selected"})
 
 
 def _configured_origins() -> frozenset[str]:
@@ -42,6 +43,13 @@ def _configured_origins() -> frozenset[str]:
 def _default_model_path() -> Path:
     repository_root = Path(__file__).resolve().parents[2]
     return repository_root / "experiments/face/mediapipe-face-landmarker/models/face_landmarker.task"
+
+
+def _expression_mode() -> str:
+    mode = os.getenv("VISION_EXPRESSION_MODE", "disabled").strip().lower()
+    if mode not in _EXPRESSION_MODES:
+        raise ValueError("VISION_EXPRESSION_MODE must be disabled or selected")
+    return mode
 
 
 async def _read_body(receive: Receive, *, limit: int = 8_192) -> bytes:
@@ -108,13 +116,19 @@ class LocalVisionGatewayApp:
     def __init__(
         self,
         *,
-        model_path: Path,
+        model_path: Path | None = None,
+        expression_mode: str = "selected",
         allowed_origins: frozenset[str] = _DEFAULT_ORIGINS,
         token_issuer: Any | None = None,
     ) -> None:
+        if expression_mode not in _EXPRESSION_MODES:
+            raise ValueError("expression_mode must be disabled or selected")
+        if expression_mode == "selected" and model_path is None:
+            raise ValueError("selected expression mode requires a model_path")
         self.allowed_origins = allowed_origins
         self.token_issuer = token_issuer or LocalVisionTokenIssuer()
         self.local_token_enabled = isinstance(self.token_issuer, LocalVisionTokenIssuer)
+        self.expression_mode = expression_mode
         eye_worker_url = os.getenv("VISION_EYE_WORKER_URL", "").strip()
         eye_worker = (
             HttpEyeWorkerClient(eye_worker_url)
@@ -123,7 +137,11 @@ class LocalVisionGatewayApp:
         )
         self.stream_app = VisionStreamApp(
             token_verifier=self.token_issuer,
-            face_worker_factory=selected_face_worker_factory(model_path),
+            face_worker_factory=(
+                selected_face_worker_factory(model_path)
+                if expression_mode == "selected" and model_path is not None
+                else None
+            ),
             eye_worker=eye_worker,
         )
 
@@ -176,11 +194,17 @@ class LocalVisionGatewayApp:
 
 
 def create_app() -> LocalVisionGatewayApp:
-    model_path = Path(os.getenv("VISION_FACE_MODEL_PATH", str(_default_model_path())))
+    expression_mode = _expression_mode()
+    model_path = (
+        Path(os.getenv("VISION_FACE_MODEL_PATH", str(_default_model_path())))
+        if expression_mode == "selected"
+        else None
+    )
     secret = os.getenv("VISION_STREAM_TOKEN_SECRET", "").strip()
     token_issuer = SignedVisionTokenIssuer(secret, ttl_seconds=60) if secret else None
     return LocalVisionGatewayApp(
         model_path=model_path,
+        expression_mode=expression_mode,
         allowed_origins=_configured_origins(),
         token_issuer=token_issuer,
     )

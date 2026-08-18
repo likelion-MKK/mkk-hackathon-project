@@ -97,6 +97,17 @@ uv run python scripts/live_eyetrax_demo.py --camera 0 --smoothing kalman_ema --e
 runtime Adapter는 모델을 내려받지 않는다. 한글 경로에서는 검증된 모델을 ASCII 임시
 경로에 복사하고 estimator 종료 후 복사본만 지운다.
 
+브라우저 Gateway가 연결하는 private Eye HTTP worker는 저장소 루트에서 다음처럼 실행한다.
+Eye 프로젝트는 의도적으로 package install을 하지 않으므로 `python -m mcm_eye.worker`를
+저장소 루트에서 직접 실행하지 않는다.
+
+```powershell
+$env:EYE_FACE_MODEL_PATH = (Resolve-Path "services/eye/.cache/face_landmarker.task").Path
+uv run --project services/eye --locked python services/eye/scripts/run_worker.py
+```
+
+카메라를 열지 않고 실행 경로만 확인하려면 `--check-imports`를 붙인다.
+
 실제 카메라 데모는 화면에 보정점과 실시간 gaze crosshair만 표시한다. 카메라 frame,
 이미지, landmark, 프레임별 gaze 좌표를 파일이나 로그에 남기지 않는다. Kiosk의 시간 기반
 AOI 판정은 기존 `apps/kiosk/src/app/reaction-batch.ts`가 소유하며 다음 연결 작업에서 실제

@@ -147,6 +147,90 @@ def test_face_only_stream_returns_expression_and_closes_frame() -> None:
     assert closed == [True]
 
 
+def test_gaze_only_stream_skips_face_decode_and_marks_expression_not_observed() -> None:
+    decode_calls: list[bytes] = []
+
+    class GazeOnlyEyeWorker:
+        async def start_calibration(self, **_: object) -> tuple[bool, str | None]:
+            return True, None
+
+        async def infer(self, frame: Any) -> EyeInferenceResult:
+            context = frame.metadata.context
+            return EyeInferenceResult(
+                {
+                    "schema_version": "1.0",
+                    "session_id": context.session_id,
+                    "event_id": f"gaze-{context.frame_id}",
+                    "sequence": context.sequence,
+                    "frame_id": context.frame_id,
+                    "captured_at_mono_ms": context.captured_at_mono_ms,
+                    "video_id": context.video_id,
+                    "video_time_ms": context.video_time_ms,
+                    "playback_epoch": context.playback_epoch,
+                    "producer_id": "eye-gaze-only-test",
+                    "model_revision": "eye-gaze-only-v1",
+                    "calibration_id": "calibration-gaze-only-v1",
+                    "valid": True,
+                    "confidence": 0.9,
+                    "reason": None,
+                    "screen_x_norm": 0.25,
+                    "screen_y_norm": 0.5,
+                },
+                None,
+            )
+
+        async def close(self) -> None:
+            return None
+
+    def decoder(image_bytes: bytes, _metadata: object) -> object:
+        decode_calls.append(image_bytes)
+        raise AssertionError("gaze-only mode must not decode a Face frame")
+
+    issuer = LocalVisionTokenIssuer()
+    app = VisionStreamApp(
+        token_verifier=issuer,
+        face_worker_factory=None,
+        frame_decoder=decoder,
+        eye_worker=GazeOnlyEyeWorker(),
+    )
+    token = issuer.issue("session-local-001", "mcm-lookbook-example-v1")["stream_token"]
+
+    with TestClient(app) as client:
+        with client.websocket_connect("/vision/v1/stream") as websocket:
+            websocket.send_json(hello(token))
+            assert websocket.receive_json()["type"] == "ready"
+            websocket.send_json(
+                {
+                    "type": "control",
+                    "protocol_version": "1.0",
+                    "request_id": "gaze-only-start",
+                    "action": "start_inference",
+                }
+            )
+            assert websocket.receive_json()["valid"] is True
+            websocket.send_bytes(
+                encode_binary_frame(frame_metadata(), b"\xff\xd8\xff\xd9")
+            )
+            result = websocket.receive_json()
+            assert result["type"] == "result"
+            assert result["gaze_sample"]["frame_id"] == "frame-0001"
+            assert result["gaze_reason"] is None
+            assert result["expression_sample"] is None
+            assert result["expression_reason"] == "not_observed"
+            websocket.send_json(
+                {
+                    "type": "control",
+                    "protocol_version": "1.0",
+                    "request_id": "gaze-only-stop",
+                    "action": "stop_session",
+                }
+            )
+            assert websocket.receive_json()["type"] == "control_result"
+            assert websocket.receive_json()["type"] == "close"
+
+    assert decode_calls == []
+
+
 def test_second_frame_is_dropped_while_first_is_in_flight() -> None:
     started = threading.Event()
     release = threading.Event()

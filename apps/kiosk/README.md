@@ -4,7 +4,7 @@
 
 조윤혜가 S01–S04 화면, 영상·웹캠 orchestration과 Backend 연결을 담당한다. 공유 Vision·추천 계약은 박형진·양유상·정은미와 함께 리뷰한다.
 
-기본 실행은 실제 FastAPI에 연결하는 중앙 추천 v2 transport다. live Vision은 브라우저 `getUserMedia` → signed token → Vision Gateway → private Eye/Face worker 경계를 구현했으며, [`ADR-0001`](../../docs/adr/0001-remote-vision-inference.md)이 Proposed이고 domain/TLS가 미확정인 동안 public customer traffic은 열지 않는다. 원본 frame·image bytes·base64·embedding·원본 경로는 REST payload, 브라우저 저장소, 로그나 추천 AI 입력에 포함하지 않는다.
+기본 실행은 실제 FastAPI에 연결하는 중앙 추천 v2 transport다. live Vision은 브라우저 `getUserMedia` → signed token → Vision Gateway → private Eye worker 경계를 구현했으며, 현재 표정 관찰은 비활성화되어 `expression=null`, `expression_reason=not_observed`로만 전송된다. [`ADR-0001`](../../docs/adr/0001-remote-vision-inference.md)이 Proposed이고 domain/TLS가 미확정인 동안 public customer traffic은 열지 않는다. 원본 frame·image bytes·base64·embedding·원본 경로는 REST payload, 브라우저 저장소, 로그나 추천 AI 입력에 포함하지 않는다.
 
 ## Real HTTP v2 흐름
 
@@ -18,7 +18,7 @@ S01 대기 → S02 가방 룩북 선택·동의 → 보정 → S03 33.5초 실�
   → 고객이 버튼을 누른 경우에만 v2 manager-product-request 전송
 ```
 
-real mode는 actual `mcm-lookbook-v2` manifest와 v2 계약을 사용한다. Kiosk는 camera frame 생성 직전에 `session_id`, `video_id`, `frame_id`, `sequence`, `captured_at_mono_ms`, `video_time_ms`, `playback_epoch`, video layout을 한 번 snapshot하고 응답 시점의 `currentTime`을 다시 읽지 않는다. 동일 snapshot의 Eye·Face 신호만 결합하며 원래 sequence와 frame-drop gap을 보존한다. seek·replay·source 교체는 이후 frame보다 먼저 epoch를 증가시킨다.
+real mode는 actual `mcm-lookbook-v2` manifest와 v2 계약을 사용한다. Kiosk는 camera frame 생성 직전에 `session_id`, `video_id`, `frame_id`, `sequence`, `captured_at_mono_ms`, `video_time_ms`, `playback_epoch`, video layout을 한 번 snapshot하고 응답 시점의 `currentTime`을 다시 읽지 않는다. 시선 신호는 그 snapshot에만 결합하고 원래 sequence와 frame-drop gap을 보존한다. 표정은 현재 관찰하지 않는다. seek·replay·source 교체는 이후 frame보다 먼저 epoch를 증가시킨다.
 
 Kiosk는 캡처 시점 layout으로 viewport gaze를 실제 video content rectangle의 `video_x_norm`, `video_y_norm`으로 변환한다. letterbox·pillarbox·영상 밖·무효 gaze에는 상품을 만들지 않으며 production observation의 `candidates`는 항상 빈 배열이다. 승인 AOI를 적용해 상품·부위·태그를 정하는 책임은 Backend에만 있다.
 
@@ -51,8 +51,8 @@ S04는 `completed` 결과의 단일 `selected_product_id`만 표시한다. `insu
 - `VITE_API_PROXY_TARGET`: 필요한 경우 Vite 개발 proxy 대상
 - `VITE_USE_MOCK_API=false`: 기본 real HTTP v2
 - `VITE_VISION_MODE=replay`: synthetic/in-process development producer
-- `VITE_VISION_MODE=live`: browser `getUserMedia` → Vision Gateway WSS → Eye/Face;
-  production은 backend token mode를 사용하고 Eye unavailable이면 fail-closed한다.
+- `VITE_VISION_MODE=live`: browser `getUserMedia` → Vision Gateway WSS → Eye;
+  현재 표정은 `not_observed`로 고정하고, production은 backend token mode를 사용하며 Eye unavailable이면 fail-closed한다.
 - `VITE_LOOKBOOK_ID=mcm-lookbook-v2`: 33.5초 actual canonical 가방 룩북
 - `VITE_LOOKBOOK_VIDEO_URL`: 로컬에서는 `/media/mcm-lookbook-v2.mp4`로 staging한
   canonical 영상, 배포에서는 Nginx `/media/` static path
