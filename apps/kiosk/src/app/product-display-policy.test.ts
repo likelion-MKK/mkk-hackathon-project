@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ProductRecommendationItemV2 } from "./kiosk-types.ts";
-import { resolveProductDisplayPolicy } from "./product-display-policy.ts";
+import {
+  isProductDisplayReady,
+  resolveProductDisplayPolicy,
+} from "./product-display-policy.ts";
 
 const pendingProduct: ProductRecommendationItemV2 = {
   product_id: "mcm-toni-medium-disco-visetos",
@@ -60,7 +63,7 @@ test("reviewed product shows only approved local assets and an approved official
   });
 });
 
-test("approved product does not accept a non-local asset path", () => {
+test("approved product rejects a non-local asset path and closes product actions", () => {
   const product: ProductRecommendationItemV2 = {
     ...pendingProduct,
     source_status: "team_approved_catalog_record",
@@ -72,10 +75,33 @@ test("approved product does not accept a non-local asset path", () => {
     qr_asset_path: "../not-allowed.png",
     qr_asset_path_reason: null,
   };
+
+  assert.deepEqual(resolveProductDisplayPolicy(product), {
+    isCentralProduct: true,
+    catalogApproved: true,
+    showProductDetails: false,
+    imageUrl: null,
+    officialProductUrl: null,
+    qrUrl: null,
+    canRequestManager: false,
+    unavailableMessage: "검수된 상품 이미지를 준비하고 있습니다.",
+  });
+});
+
+test("runtime image readiness stays closed until loading succeeds", () => {
+  const product: ProductRecommendationItemV2 = {
+    ...pendingProduct,
+    source_status: "team_approved_catalog_record",
+    approved_asset: true,
+    official_product_url: "https://official.example/product",
+    official_product_url_reason: null,
+    image_asset_path: "assets/products/mcm-toni-medium-disco-visetos.jpeg",
+    image_asset_path_reason: null,
+  };
   const policy = resolveProductDisplayPolicy(product);
-  assert.equal(policy.imageUrl, null);
-  assert.equal(policy.qrUrl, null);
-  assert.equal(policy.canRequestManager, true);
+
+  assert.equal(isProductDisplayReady(policy, false), false);
+  assert.equal(isProductDisplayReady(policy, true), true);
 });
 
 test("team-approved metadata remains closed until its asset is approved", () => {

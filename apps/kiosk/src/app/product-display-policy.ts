@@ -80,6 +80,19 @@ export function resolveProductDisplayPolicy(
     "media/products",
     `${product.product_id}.jpeg`,
   );
+  if (imageUrl === null) {
+    return {
+      isCentralProduct: true,
+      catalogApproved: true,
+      showProductDetails: false,
+      imageUrl: null,
+      officialProductUrl: null,
+      qrUrl: null,
+      canRequestManager: false,
+      unavailableMessage: "검수된 상품 이미지를 준비하고 있습니다.",
+    };
+  }
+
   const officialProductUrl = product.official_product_url;
   const qrUrl = officialProductUrl
     ? localAssetUrl(product.qr_asset_path, "assets/qr", "media/qr")
@@ -93,10 +106,13 @@ export function resolveProductDisplayPolicy(
     qrUrl,
     canRequestManager: officialProductUrl !== null,
     unavailableMessage:
-      imageUrl === null
-        ? "검수된 상품 이미지를 준비하고 있습니다."
-        : officialProductUrl === null
-          ? "공식 상품 URL을 준비하고 있습니다."
-          : null,
+      officialProductUrl === null ? "공식 상품 URL을 준비하고 있습니다." : null,
   };
+}
+
+export function isProductDisplayReady(
+  policy: ProductDisplayPolicy,
+  imageLoaded: boolean,
+): boolean {
+  return policy.showProductDetails && policy.imageUrl !== null && imageLoaded;
 }

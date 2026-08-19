@@ -40,7 +40,10 @@ import {
   buildObservationBatchesV2,
   resolveObservationAttentionAuthority,
 } from "./app/observation-batch-v2.ts";
-import { resolveProductDisplayPolicy } from "./app/product-display-policy.ts";
+import {
+  isProductDisplayReady,
+  resolveProductDisplayPolicy,
+} from "./app/product-display-policy.ts";
 import { buildD1ReactionBatches } from "./app/reaction-batch.ts";
 import {
   pollRecommendation,
@@ -791,11 +794,18 @@ function ReportScreen({
   onHome: () => void;
   onRequestManager: () => Promise<void>;
 }) {
-  const [imageFailed, setImageFailed] = useState(false);
+  const [imageStatus, setImageStatus] = useState<"loading" | "loaded" | "failed">(
+    "loading",
+  );
   const [qrFailed, setQrFailed] = useState(false);
   const [requestState, setRequestState] = useState<"idle" | "sending" | "sent" | "failed">(
     "idle",
   );
+
+  useEffect(() => {
+    setImageStatus("loading");
+    setQrFailed(false);
+  }, [product.product_id]);
 
   const requestManager = async () => {
     if (requestState === "sending" || requestState === "sent") return;
@@ -809,18 +819,28 @@ function ReportScreen({
   };
   const isCentralProduct = "controlled_tags" in product;
   const displayPolicy = resolveProductDisplayPolicy(product);
-  const hasApprovedProductDetails = displayPolicy.showProductDetails;
+  const hasApprovedProductDetails = isProductDisplayReady(
+    displayPolicy,
+    imageStatus === "loaded",
+  );
+  const unavailableMessage =
+    imageStatus === "failed"
+      ? "검수된 상품 이미지를 불러오지 못했습니다."
+      : imageStatus === "loading" && displayPolicy.imageUrl
+        ? "검수된 상품 이미지를 불러오는 중입니다."
+        : displayPolicy.unavailableMessage;
 
   return (
     <main className="store-screen report-screen">
       <StoreChrome onHome={onHome} step="04" />
       <section className="report-layout">
         <div className="report-media">
-          {displayPolicy.imageUrl && !imageFailed ? (
+          {displayPolicy.imageUrl && imageStatus !== "failed" ? (
             <img
               src={displayPolicy.imageUrl}
               alt={product.display_name}
-              onError={() => setImageFailed(true)}
+              onLoad={() => setImageStatus("loaded")}
+              onError={() => setImageStatus("failed")}
             />
           ) : (
             <div className="report-media__pending" role="status">
@@ -856,7 +876,7 @@ function ReportScreen({
               링크로 대체하지 않습니다.
             </p>
           )}
-          {displayPolicy.qrUrl && !qrFailed && (
+          {hasApprovedProductDetails && displayPolicy.qrUrl && !qrFailed && (
             <div className="report-qr">
               <img
                 src={displayPolicy.qrUrl}
@@ -874,15 +894,15 @@ function ReportScreen({
               개발 검증용 replay 파생 신호 결과이며 실제 고객 분석 결과가 아닙니다.
             </p>
           )}
-          {displayPolicy.unavailableMessage && (
-            <p className="report-disclaimer">{displayPolicy.unavailableMessage}</p>
+          {unavailableMessage && (
+            <p className="report-disclaimer">{unavailableMessage}</p>
           )}
           <p className="report-disclaimer">
             시선·표정 관련 신호는 이번 세션의 비언어적 관찰값이며 감정·성격·구매
             의도를 확정하지 않습니다.
           </p>
           <div className="report-actions">
-            {displayPolicy.officialProductUrl && (
+            {hasApprovedProductDetails && displayPolicy.officialProductUrl && (
               <a
                 className="store-button store-button--solid"
                 href={displayPolicy.officialProductUrl}
@@ -892,7 +912,7 @@ function ReportScreen({
                 상품 정보 보기
               </a>
             )}
-            {displayPolicy.canRequestManager && (
+            {hasApprovedProductDetails && displayPolicy.canRequestManager && (
               <button
                 className="store-button store-button--outline"
                 type="button"
@@ -1513,6 +1533,7 @@ function App() {
   if (screen === "report" && recommendation && recommendedProduct && session) {
     return (
       <ReportScreen
+        key={`${session.session_id}:${recommendation.recommendation_id}:${recommendedProduct.product_id}`}
         recommendation={recommendation}
         product={recommendedProduct}
         onHome={restart}

@@ -6,7 +6,10 @@ on:
       - "contracts/**"
       - "data/lookbooks/**"
       - "data/products/**"
+      - "apps/kiosk/public/media/products/**"
       - "scripts/validate_contracts.py"
+      - "scripts/verify_product_assets.py"
+      - "tests/contract/test_product_assets.py"
       - "requirements-contracts.txt"
       - ".github/workflows/contracts.yml"
   push:
@@ -16,7 +19,10 @@ on:
       - "contracts/**"
       - "data/lookbooks/**"
       - "data/products/**"
+      - "apps/kiosk/public/media/products/**"
       - "scripts/validate_contracts.py"
+      - "scripts/verify_product_assets.py"
+      - "tests/contract/test_product_assets.py"
       - "requirements-contracts.txt"
       - ".github/workflows/contracts.yml"
 
@@ -48,3 +54,8 @@ jobs:
 
       - name: Validate schemas and examples
         run: python scripts/validate_contracts.py
+
+      - name: Verify reviewed product assets
+        run: |
+          python scripts/verify_product_assets.py
+          python tests/contract/test_product_assets.py
