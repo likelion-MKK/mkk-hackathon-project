@@ -47,7 +47,7 @@ test("reviewed product shows only approved local assets and an approved official
     official_product_url_reason: null,
     image_asset_path: "assets/products/mcm-toni-medium-disco-visetos.jpeg",
     image_asset_path_reason: null,
-    qr_asset_path: "assets/qr/mcm-toni-medium-disco-visetos.png",
+    qr_asset_path: "assets/qr/mcm-toni-medium-disco-visetos/official-product.png",
     qr_asset_path_reason: null,
   };
 
@@ -57,7 +57,7 @@ test("reviewed product shows only approved local assets and an approved official
     showProductDetails: true,
     imageUrl: "/media/products/mcm-toni-medium-disco-visetos.jpeg",
     officialProductUrl: "https://official.example/product",
-    qrUrl: "/media/qr/mcm-toni-medium-disco-visetos.png",
+    qrUrl: "/media/qr/mcm-toni-medium-disco-visetos/official-product.png",
     canRequestManager: true,
     unavailableMessage: null,
   });
@@ -143,4 +143,24 @@ test("an approved image and official URL do not require a QR asset", () => {
   assert.equal(policy.qrUrl, null);
   assert.equal(policy.canRequestManager, true);
   assert.equal(policy.unavailableMessage, null);
+});
+
+test("approved product rejects a QR path for a different product", () => {
+  const product: ProductRecommendationItemV2 = {
+    ...pendingProduct,
+    source_status: "team_approved_catalog_record",
+    approved_asset: true,
+    official_product_url: "https://official.example/product",
+    official_product_url_reason: null,
+    image_asset_path: "assets/products/mcm-toni-medium-disco-visetos.jpeg",
+    image_asset_path_reason: null,
+    qr_asset_path: "assets/qr/a-different-product/official-product.png",
+    qr_asset_path_reason: null,
+  };
+  const policy = resolveProductDisplayPolicy(product);
+
+  assert.equal(policy.imageUrl, "/media/products/mcm-toni-medium-disco-visetos.jpeg");
+  assert.equal(policy.officialProductUrl, "https://official.example/product");
+  assert.equal(policy.qrUrl, null);
+  assert.equal(policy.canRequestManager, true);
 });

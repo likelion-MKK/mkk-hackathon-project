@@ -81,6 +81,86 @@
       "source_url": "https://us.mcmworldwide.com/en_US/bags/new-arrivals/stark-side-studs-backpack-in-gold-crystal-visetos/MMKGAVE07CO001.html",
       "sha256": "5846d148f2464ba7972d454eb7888089ab5f99b7912fbcd4f6db7fe70605bf7d",
       "approval_note": "팀 승인 상품 이미지 자산을 product_id 기반 파일명으로 연결함"
+    },
+    {
+      "asset_kind": "qr",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "relative_path": "media/qr/mcm-toni-medium-disco-visetos/official-product.png",
+      "source_url": "https://us.mcmworldwide.com/en_US/women/bags/totes-shoppers/toni-top-zip-shopper-in-disco-visetos/MWPGAMT01CO001.html",
+      "sha256": "5653f3504940e824ff4db59c470b73c2ff1776ed7ce73d2a10d70e7365a61ba3",
+      "approval_note": "검수된 공식 MCM PDP URL을 직접 인코딩한 QR 자산"
+    },
+    {
+      "asset_kind": "qr",
+      "product_id": "mcm-pina-vanity-case-studded-calfskin",
+      "relative_path": "media/qr/mcm-pina-vanity-case-studded-calfskin/official-product.png",
+      "source_url": "https://us.mcmworldwide.com/en_US/bags/shoulder-crossbody-bags/pina-vanity-case-in-studded-calfskin/MWRGATA01BK001.html",
+      "sha256": "6a5638c4370ed87f471ba6752cb93dc77e07254dc4719b8b478721159d9dfbde",
+      "approval_note": "검수된 공식 MCM PDP URL을 직접 인코딩한 QR 자산"
+    },
+    {
+      "asset_kind": "qr",
+      "product_id": "mcm-milla-small-grained-leather",
+      "relative_path": "media/qr/mcm-milla-small-grained-leather/official-product.png",
+      "source_url": "https://us.mcmworldwide.com/en_US/women/bags/totes-shoppers/milla-tote-in-grained-leather/MWTGAMA02OQ001.html",
+      "sha256": "872e55267f318a986581037dd78ff62de134989eb0e1842ea5e504c425bb20fe",
+      "approval_note": "검수된 공식 MCM PDP URL을 직접 인코딩한 QR 자산"
+    },
+    {
+      "asset_kind": "qr",
+      "product_id": "mcm-ella-small-disco-visetos",
+      "relative_path": "media/qr/mcm-ella-small-disco-visetos/official-product.png",
+      "source_url": "https://us.mcmworldwide.com/en_US/women/bags/top-handle-bags/ella-boston-bag-in-visetos/MWBFAEA03PZ001.html",
+      "sha256": "f09d7d3fd76478b03bac56b5b14efbc26e71691dfdec1548ca24ffaadc6ab643",
+      "approval_note": "검수된 공식 MCM PDP URL을 직접 인코딩한 QR 자산"
+    },
+    {
+      "asset_kind": "qr",
+      "product_id": "mcm-aren-east-west-shoulder-visetos",
+      "relative_path": "media/qr/mcm-aren-east-west-shoulder-visetos/official-product.png",
+      "source_url": "https://us.mcmworldwide.com/en_US/bags/shoulder-crossbody-bags/aren-east-west-shoulder-bag-in-visetos/MWSGATA01I8001.html",
+      "sha256": "32146557533323131dd4fc6b6532cae27c15b6278e890c9caebbd75765567aac",
+      "approval_note": "검수된 공식 MCM PDP URL을 직접 인코딩한 QR 자산"
+    },
+    {
+      "asset_kind": "qr",
+      "product_id": "mcm-ottomar-nova-55cm-monogram-econyl",
+      "relative_path": "media/qr/mcm-ottomar-nova-55cm-monogram-econyl/official-product.png",
+      "source_url": "https://us.mcmworldwide.com/en_US/travel/travel-bags/ottomar-nova-weekender-bag-in-monogram-econyl%C2%AE/MMVGATT06BK001.html",
+      "sha256": "288644bde08b05101a4bce081ccf568356b820578567bc46b318d78cb5bbe0ae",
+      "approval_note": "검수된 공식 MCM PDP URL을 직접 인코딩한 QR 자산"
+    },
+    {
+      "asset_kind": "qr",
+      "product_id": "mcm-aren-nova-medium-backpack-econyl",
+      "relative_path": "media/qr/mcm-aren-nova-medium-backpack-econyl/official-product.png",
+      "source_url": "https://us.mcmworldwide.com/en_US/men/bags/backpacks/aren-nova-backpack-in-monogram-econyl%C2%AE/MMKGATA02BK001.html",
+      "sha256": "6979858b7233e8c140e909817daf277b0a63a1bc2be4260baea3c3163ef370b9",
+      "approval_note": "검수된 공식 MCM PDP URL을 직접 인코딩한 QR 자산"
+    },
+    {
+      "asset_kind": "qr",
+      "product_id": "mcm-pina-studded-tote-visetos",
+      "relative_path": "media/qr/mcm-pina-studded-tote-visetos/official-product.png",
+      "source_url": "https://us.mcmworldwide.com/en_US/bags/new-arrivals/pina-studded-tote-in-visetos/MWTGATA01CO001.html",
+      "sha256": "8ff181cddfe360102808e32720f9aca50926d96f4dab661676cd28a0e4a96edb",
+      "approval_note": "검수된 공식 MCM PDP URL을 직접 인코딩한 QR 자산"
+    },
+    {
+      "asset_kind": "qr",
+      "product_id": "mcm-pina-small-tambourine-visetos",
+      "relative_path": "media/qr/mcm-pina-small-tambourine-visetos/official-product.png",
+      "source_url": "https://us.mcmworldwide.com/en_US/women/bags/shoulder-crossbody-bags/pina-tambourine-bag-in-visetos/MWRGAOB01CO001.html",
+      "sha256": "bda2b77c6f1ff4fca5de005a439610fea3a118116ce5bc03311eb860a46b6a27",
+      "approval_note": "검수된 공식 MCM PDP URL을 직접 인코딩한 QR 자산"
+    },
+    {
+      "asset_kind": "qr",
+      "product_id": "mcm-stark-side-studs-backpack-gold-crystal-visetos",
+      "relative_path": "media/qr/mcm-stark-side-studs-backpack-gold-crystal-visetos/official-product.png",
+      "source_url": "https://us.mcmworldwide.com/en_US/bags/new-arrivals/stark-side-studs-backpack-in-gold-crystal-visetos/MMKGAVE07CO001.html",
+      "sha256": "f24942939ab5d01da0d0c8e2e097ccbd5cfc50b52e63beacbafa64488463b0e1",
+      "approval_note": "검수된 공식 MCM PDP URL을 직접 인코딩한 QR 자산"
     }
   ]
 }

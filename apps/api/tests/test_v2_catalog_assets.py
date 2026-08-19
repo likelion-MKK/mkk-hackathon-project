@@ -33,11 +33,13 @@ def test_catalog_asset_metadata_matches_all_ten_reviewed_products() -> None:
     catalog = load_canonical_catalog(CATALOG_PATH)
     assets = load_catalog_assets(ASSET_PATH, catalog)
 
-    assert len(assets) == 10
-    assert {asset.product_id for asset in assets} == {
-        product.product_id for product in catalog.products
+    assert len(assets) == 20
+    product_ids = {product.product_id for product in catalog.products}
+    assert {(asset.asset_kind, asset.product_id) for asset in assets} == {
+        (asset_kind, product_id)
+        for asset_kind in ("image", "qr")
+        for product_id in product_ids
     }
-    assert all(asset.asset_kind == "image" for asset in assets)
 
 
 @pytest.mark.parametrize(
@@ -46,7 +48,7 @@ def test_catalog_asset_metadata_matches_all_ten_reviewed_products() -> None:
         (lambda body: body.update(catalog_version="wrong-version"), "does not match"),
         (
             lambda body: body["assets"].__setitem__(1, body["assets"][0].copy()),
-            "product IDs must match",
+            "invalid product asset metadata",
         ),
         (
             lambda body: body["assets"][0].update(relative_path="media/products/wrong.jpeg"),
@@ -101,32 +103,43 @@ class FakeConnection:
         return self.fake_cursor
 
 
-def test_seed_catalog_upserts_ten_catalog_and_ten_image_asset_rows() -> None:
+def test_seed_catalog_upserts_catalog_image_and_qr_asset_rows() -> None:
     catalog = load_canonical_catalog(CATALOG_PATH)
     assets = load_catalog_assets(ASSET_PATH, catalog)
-    connection = FakeConnection([(10,), (10, 10)])
+    connection = FakeConnection([(10,), (10, 10, 10, 10)])
 
     seed_catalog(connection, catalog, assets)
 
     assert connection.fake_cursor.executemany_calls[0] == (UPSERT_CATALOG_SQL, connection.fake_cursor.executemany_calls[0][1])
     assert len(connection.fake_cursor.executemany_calls[0][1]) == 10
     assert connection.fake_cursor.executemany_calls[1] == (UPSERT_ASSET_SQL, connection.fake_cursor.executemany_calls[1][1])
-    assert len(connection.fake_cursor.executemany_calls[1][1]) == 10
-    assert "count(DISTINCT product_id)" in connection.fake_cursor.execute_calls[1][0]
+    assert len(connection.fake_cursor.executemany_calls[1][1]) == 20
+    assert "asset_kind = 'image'" in connection.fake_cursor.execute_calls[1][0]
+    assert "asset_kind = 'qr'" in connection.fake_cursor.execute_calls[1][0]
 
 
-@pytest.mark.parametrize("readiness", [(9, 9), (10, 9), (11, 10)])
-def test_seed_catalog_rejects_inexact_image_asset_readiness(
-    readiness: tuple[int, int]
+@pytest.mark.parametrize(
+    "readiness",
+    [
+        (9, 9, 10, 10),
+        (10, 10, 9, 9),
+        (10, 9, 10, 10),
+        (10, 10, 10, 9),
+        (11, 10, 10, 10),
+        (10, 10, 11, 10),
+    ],
+)
+def test_seed_catalog_rejects_inexact_asset_readiness(
+    readiness: tuple[int, int, int, int]
 ) -> None:
     catalog = load_canonical_catalog(CATALOG_PATH)
     assets = load_catalog_assets(ASSET_PATH, catalog)
 
-    with pytest.raises(RuntimeError, match="exactly 10 image rows"):
+    with pytest.raises(RuntimeError, match="exactly 10 image rows and 10 QR rows"):
         seed_catalog(FakeConnection([(10,), readiness]), catalog, assets)
 
 
-def test_all_ten_product_routes_return_reviewed_image_metadata() -> None:
+def test_all_ten_product_routes_return_reviewed_image_and_qr_metadata() -> None:
     catalog = load_canonical_catalog(CATALOG_PATH)
     app = create_app(MemoryStore(REPOSITORY_ROOT))
 
@@ -140,6 +153,10 @@ def test_all_ten_product_routes_return_reviewed_image_metadata() -> None:
             assert body["image_asset_path"] == (
                 f"assets/products/{product.product_id}.jpeg"
             )
+            assert body["qr_asset_path"] == (
+                f"assets/qr/{product.product_id}/official-product.png"
+            )
+            assert body["qr_asset_path_reason"] is None
             assert body["official_product_url"] == product.official_product_url
 
 

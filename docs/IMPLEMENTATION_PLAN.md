@@ -16,7 +16,7 @@
 | W0 문서·결정 | 완료 | canonical 문서, ADR-0006, archive와 branch 감사 | 구현 변경 시 정합성 유지 |
 | W1 v2 계약 | 완료 | 18 schema, v1/v2 example, privacy negative fixture와 OpenAPI | 공동 리뷰·PR 승인 |
 | W2 fusion·evidence | vertical slice 완료 | 동일 frame join, gap/seek reset, 결측·다중 AOI, 이동·표정 변화·지속 집계 | 실제 Eye·Face producer와 승인 Vision E2E |
-| W3 10개 catalog | 코드 완료 | 동일 10 ID JSON, migration, seed/readiness adapter, 60초 replay manifest | live PostgreSQL 및 개별 URL·자산·QR·tag 검수 |
+| W3 10개 catalog | 자산 연결 완료 | 동일 10 ID JSON, migration, image·QR 각 10개 asset과 seed/readiness adapter, 60초 replay manifest | live PostgreSQL, 실제 QR scan 및 tag 최종 검수 |
 | W4 모델·prompt | harness 완료 | Korean prompt, Qwen/Mistral pinned revision 후보, A/B/C scorer | GPU server 실행, weight checksum, 모델·variant 승인 |
 | W5 Frontend 연결 | vertical slice 완료 | Kiosk v2 HTTP Top 1·template·cleanup, Manager v2 REST polling | 승인 영상·상품 자산의 실제 Browser E2E |
 | W6 통합 검증 | 자동화 일부 완료 | Contract/API/Kiosk/Manager unit·replay·build | Node 24, live PostgreSQL, 실모델, 로그/APM·browser 잔존 감사 |
@@ -226,7 +226,7 @@ P0 Decision docs
 
 - self-hosted 모델·runtime·quantization·revision·weight checksum과 목표 hardware
 - A/B/C 실제 반복 benchmark에 따른 input variant 승인
-- catalog 10개 상품의 개별 공식 URL, 이미지·QR 라이선스와 tag·설명 최종 검수
+- catalog 10개 상품의 공식 URL·이미지 provenance와 태그·설명 최종 검수, 실제 장치 QR scan
 - 최소 최종 추천 metadata의 보유 기간·삭제 정책
 - live PostgreSQL 재시작·다중 process·job 복구와 운영 readiness
 - 승인 Vision producer, 실제 Browser E2E, Node.js 24.19.0 재검증

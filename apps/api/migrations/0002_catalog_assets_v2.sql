@@ -1,5 +1,5 @@
 -- Additive product asset provenance. 0001 remains immutable.
--- This table stores image metadata only; image bytes never enter PostgreSQL.
+-- This table stores display asset metadata only; image and QR bytes never enter PostgreSQL.
 
 CREATE TABLE IF NOT EXISTS recommendation_catalog_asset_v2 (
     catalog_version text NOT NULL,

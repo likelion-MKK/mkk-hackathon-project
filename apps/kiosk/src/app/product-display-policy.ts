@@ -95,7 +95,12 @@ export function resolveProductDisplayPolicy(
 
   const officialProductUrl = product.official_product_url;
   const qrUrl = officialProductUrl
-    ? localAssetUrl(product.qr_asset_path, "assets/qr", "media/qr")
+    ? localAssetUrl(
+        product.qr_asset_path,
+        "assets/qr",
+        "media/qr",
+        `${product.product_id}/official-product.png`,
+      )
     : null;
   return {
     isCentralProduct: true,

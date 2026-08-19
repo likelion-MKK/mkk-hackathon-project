@@ -114,11 +114,12 @@ def load_catalog_assets(
     ):
         raise ValueError("product asset metadata does not match the canonical catalog")
     raw_assets = body.get("assets")
-    if not isinstance(raw_assets, list) or len(raw_assets) != 10:
-        raise ValueError("product asset metadata must contain exactly 10 records")
+    if not isinstance(raw_assets, list) or len(raw_assets) != 20:
+        raise ValueError("product asset metadata must contain exactly 10 image and 10 QR records")
 
     products_by_id = {product.product_id: product for product in catalog.products}
     records: list[CatalogAssetRecord] = []
+    record_keys: set[tuple[str, str]] = set()
     for raw in raw_assets:
         if not isinstance(raw, dict):
             raise ValueError("product asset metadata records must be objects")
@@ -128,11 +129,21 @@ def load_catalog_assets(
         source_url = raw.get("source_url")
         sha256_value = raw.get("sha256")
         approval_note = raw.get("approval_note")
+        if not isinstance(product_id, str) or product_id not in products_by_id:
+            raise ValueError(f"invalid product asset metadata for {product_id!r}")
+        if asset_kind == "image":
+            expected_relative_path = f"media/products/{product_id}.jpeg"
+            expected_logical_path = f"assets/products/{product_id}.jpeg"
+        elif asset_kind == "qr":
+            expected_relative_path = f"media/qr/{product_id}/official-product.png"
+            expected_logical_path = f"assets/qr/{product_id}/official-product.png"
+        else:
+            raise ValueError(f"invalid product asset metadata for {product_id!r}")
+
+        key = (asset_kind, product_id)
         if (
-            asset_kind != "image"
-            or not isinstance(product_id, str)
-            or product_id not in products_by_id
-            or relative_path != f"media/products/{product_id}.jpeg"
+            key in record_keys
+            or relative_path != expected_relative_path
             or not isinstance(source_url, str)
             or not isinstance(sha256_value, str)
             or len(sha256_value) != 64
@@ -142,21 +153,30 @@ def load_catalog_assets(
             or not approval_note.strip()
         ):
             raise ValueError(f"invalid product asset metadata for {product_id!r}")
+        record_keys.add(key)
 
         product = products_by_id[product_id]
+        catalog_path = (
+            product.image_asset_path if asset_kind == "image" else product.qr_asset_path
+        )
+        catalog_reason = (
+            product.image_asset_path_reason
+            if asset_kind == "image"
+            else product.qr_asset_path_reason
+        )
         if (
             not product.approved_asset
             or product.source_status != "team_approved_catalog_record"
-            or product.image_asset_path != f"assets/products/{product_id}.jpeg"
-            or product.image_asset_path_reason is not None
+            or catalog_path != expected_logical_path
+            or catalog_reason is not None
             or product.official_product_url != source_url
         ):
             raise ValueError(
-                f"catalog image asset does not match product record for {product_id!r}"
+                f"catalog {asset_kind} asset does not match product record for {product_id!r}"
             )
         records.append(
             CatalogAssetRecord(
-                asset_kind="image",
+                asset_kind=asset_kind,
                 product_id=product_id,
                 relative_path=relative_path,
                 source_url=source_url,
@@ -165,8 +185,15 @@ def load_catalog_assets(
             )
         )
 
-    if {record.product_id for record in records} != set(products_by_id):
-        raise ValueError("product asset metadata product IDs must match the canonical catalog")
+    expected_keys = {
+        (asset_kind, product_id)
+        for asset_kind in ("image", "qr")
+        for product_id in products_by_id
+    }
+    if record_keys != expected_keys:
+        raise ValueError(
+            "image and QR asset product IDs must match the canonical catalog"
+        )
     return records
 
 
@@ -226,17 +253,21 @@ def seed_catalog(
         if assets is not None:
             cursor.execute(
                 """
-                SELECT count(*), count(DISTINCT product_id)
+                SELECT
+                    count(*) FILTER (WHERE asset_kind = 'image'),
+                    count(DISTINCT product_id) FILTER (WHERE asset_kind = 'image'),
+                    count(*) FILTER (WHERE asset_kind = 'qr'),
+                    count(DISTINCT product_id) FILTER (WHERE asset_kind = 'qr')
                 FROM recommendation_catalog_asset_v2
-                WHERE catalog_version = %s AND asset_kind = 'image'
+                WHERE catalog_version = %s AND asset_kind IN ('image', 'qr')
                 """,
                 (catalog.catalog_version,),
             )
             asset_count_row = cursor.fetchone()
-            if asset_count_row is None or asset_count_row != (10, 10):
+            if asset_count_row is None or asset_count_row != (10, 10, 10, 10):
                 raise RuntimeError(
                     "PostgreSQL v2 asset readiness gate requires exactly 10 image rows "
-                    "for 10 distinct products"
+                    "and 10 QR rows for 10 distinct products"
                 )
 
 
