@@ -6,6 +6,7 @@ The adapter never receives or stores the transient FrameObservationV2 timeline.
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Literal, Protocol
 
@@ -42,6 +43,16 @@ class ConnectionLike(Protocol):
 ConnectionFactory = Callable[[], ConnectionLike]
 
 
+@dataclass(frozen=True, slots=True)
+class CatalogAssetRecord:
+    asset_kind: Literal["image", "qr", "video"]
+    product_id: str
+    relative_path: str
+    source_url: str | None
+    sha256: str | None
+    approval_note: str
+
+
 UPSERT_CATALOG_SQL = """
 INSERT INTO recommendation_catalog_v2 (
     catalog_version, product_id, display_name, category, controlled_tags,
@@ -69,6 +80,19 @@ ON CONFLICT (catalog_version, product_id) DO UPDATE SET
     updated_at = now()
 """
 
+UPSERT_ASSET_SQL = """
+INSERT INTO recommendation_catalog_asset_v2 (
+    catalog_version, product_id, asset_kind, relative_path, source_url,
+    sha256, approval_note
+) VALUES (%s, %s, %s, %s, %s, %s, %s)
+ON CONFLICT (catalog_version, product_id, asset_kind) DO UPDATE SET
+    relative_path = EXCLUDED.relative_path,
+    source_url = EXCLUDED.source_url,
+    sha256 = EXCLUDED.sha256,
+    approval_note = EXCLUDED.approval_note,
+    updated_at = now()
+"""
+
 
 def load_canonical_catalog(path: Path) -> ProductRecommendationProfileV2:
     catalog = ProductRecommendationProfileV2.model_validate(
@@ -80,8 +104,105 @@ def load_canonical_catalog(path: Path) -> ProductRecommendationProfileV2:
     return catalog
 
 
-def seed_catalog(connection: ConnectionLike, catalog: ProductRecommendationProfileV2) -> None:
-    """Idempotently upsert the exact reviewed catalog version."""
+def load_catalog_assets(
+    path: Path, catalog: ProductRecommendationProfileV2
+) -> list[CatalogAssetRecord]:
+    body = json.loads(path.read_text(encoding="utf-8"))
+    if (
+        body.get("schema_version") != "2.0"
+        or body.get("catalog_version") != catalog.catalog_version
+    ):
+        raise ValueError("product asset metadata does not match the canonical catalog")
+    raw_assets = body.get("assets")
+    if not isinstance(raw_assets, list) or len(raw_assets) != 20:
+        raise ValueError("product asset metadata must contain exactly 10 image and 10 QR records")
+
+    products_by_id = {product.product_id: product for product in catalog.products}
+    records: list[CatalogAssetRecord] = []
+    record_keys: set[tuple[str, str]] = set()
+    for raw in raw_assets:
+        if not isinstance(raw, dict):
+            raise ValueError("product asset metadata records must be objects")
+        asset_kind = raw.get("asset_kind")
+        product_id = raw.get("product_id")
+        relative_path = raw.get("relative_path")
+        source_url = raw.get("source_url")
+        sha256_value = raw.get("sha256")
+        approval_note = raw.get("approval_note")
+        if not isinstance(product_id, str) or product_id not in products_by_id:
+            raise ValueError(f"invalid product asset metadata for {product_id!r}")
+        if asset_kind == "image":
+            expected_relative_path = f"media/products/{product_id}.jpeg"
+            expected_logical_path = f"assets/products/{product_id}.jpeg"
+        elif asset_kind == "qr":
+            expected_relative_path = f"media/qr/{product_id}/official-product.png"
+            expected_logical_path = f"assets/qr/{product_id}/official-product.png"
+        else:
+            raise ValueError(f"invalid product asset metadata for {product_id!r}")
+
+        key = (asset_kind, product_id)
+        if (
+            key in record_keys
+            or relative_path != expected_relative_path
+            or not isinstance(source_url, str)
+            or not isinstance(sha256_value, str)
+            or len(sha256_value) != 64
+            or sha256_value != sha256_value.lower()
+            or any(character not in "0123456789abcdef" for character in sha256_value)
+            or not isinstance(approval_note, str)
+            or not approval_note.strip()
+        ):
+            raise ValueError(f"invalid product asset metadata for {product_id!r}")
+        record_keys.add(key)
+
+        product = products_by_id[product_id]
+        catalog_path = (
+            product.image_asset_path if asset_kind == "image" else product.qr_asset_path
+        )
+        catalog_reason = (
+            product.image_asset_path_reason
+            if asset_kind == "image"
+            else product.qr_asset_path_reason
+        )
+        if (
+            not product.approved_asset
+            or product.source_status != "team_approved_catalog_record"
+            or catalog_path != expected_logical_path
+            or catalog_reason is not None
+            or product.official_product_url != source_url
+        ):
+            raise ValueError(
+                f"catalog {asset_kind} asset does not match product record for {product_id!r}"
+            )
+        records.append(
+            CatalogAssetRecord(
+                asset_kind=asset_kind,
+                product_id=product_id,
+                relative_path=relative_path,
+                source_url=source_url,
+                sha256=sha256_value,
+                approval_note=approval_note,
+            )
+        )
+
+    expected_keys = {
+        (asset_kind, product_id)
+        for asset_kind in ("image", "qr")
+        for product_id in products_by_id
+    }
+    if record_keys != expected_keys:
+        raise ValueError(
+            "image and QR asset product IDs must match the canonical catalog"
+        )
+    return records
+
+
+def seed_catalog(
+    connection: ConnectionLike,
+    catalog: ProductRecommendationProfileV2,
+    assets: list[CatalogAssetRecord] | None = None,
+) -> None:
+    """Idempotently upsert the reviewed catalog and optional asset metadata."""
 
     rows = [
         (
@@ -107,6 +228,20 @@ def seed_catalog(connection: ConnectionLike, catalog: ProductRecommendationProfi
     ]
     with connection.cursor() as cursor:
         cursor.executemany(UPSERT_CATALOG_SQL, rows)
+        if assets is not None:
+            asset_rows = [
+                (
+                    catalog.catalog_version,
+                    asset.product_id,
+                    asset.asset_kind,
+                    asset.relative_path,
+                    asset.source_url,
+                    asset.sha256,
+                    asset.approval_note,
+                )
+                for asset in assets
+            ]
+            cursor.executemany(UPSERT_ASSET_SQL, asset_rows)
         cursor.execute(
             "SELECT count(*) FROM recommendation_catalog_v2 WHERE catalog_version = %s",
             (catalog.catalog_version,),
@@ -115,6 +250,26 @@ def seed_catalog(connection: ConnectionLike, catalog: ProductRecommendationProfi
         if count_row is None or count_row[0] != 10:
             raise RuntimeError("PostgreSQL v2 catalog readiness gate requires exactly 10 rows")
 
+        if assets is not None:
+            cursor.execute(
+                """
+                SELECT
+                    count(*) FILTER (WHERE asset_kind = 'image'),
+                    count(DISTINCT product_id) FILTER (WHERE asset_kind = 'image'),
+                    count(*) FILTER (WHERE asset_kind = 'qr'),
+                    count(DISTINCT product_id) FILTER (WHERE asset_kind = 'qr')
+                FROM recommendation_catalog_asset_v2
+                WHERE catalog_version = %s AND asset_kind IN ('image', 'qr')
+                """,
+                (catalog.catalog_version,),
+            )
+            asset_count_row = cursor.fetchone()
+            if asset_count_row is None or asset_count_row != (10, 10, 10, 10):
+                raise RuntimeError(
+                    "PostgreSQL v2 asset readiness gate requires exactly 10 image rows "
+                    "and 10 QR rows for 10 distinct products"
+                )
+
 
 class PostgresDecisionPersistence:
     def __init__(self, connection_factory: ConnectionFactory) -> None:
@@ -122,8 +277,10 @@ class PostgresDecisionPersistence:
 
     def seed_and_load(self, catalog_path: Path) -> ProductRecommendationProfileV2:
         catalog = load_canonical_catalog(catalog_path)
+        asset_path = catalog_path.with_name("mcm-recommendation-catalog-assets-v2.json")
+        assets = load_catalog_assets(asset_path, catalog)
         with self._connection_factory() as connection:
-            seed_catalog(connection, catalog)
+            seed_catalog(connection, catalog, assets)
         return catalog
 
     def save_pending(

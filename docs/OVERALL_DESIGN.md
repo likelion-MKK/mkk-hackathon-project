@@ -119,7 +119,7 @@ Evidence Builder는 데이터량·event 수·문자열 길이·시간 범위를 
 
 MVP 후보군은 **MCM 가방 정확히 10개**다. 각 profile은 최소 다음 의미를 갖는다.
 
-- 안정적인 `product_id`, 공식명, 공식 상세·QR URL
+- 안정적인 `product_id`, 공식명, 공식 상세 URL과 이를 직접 인코딩한 QR asset
 - 검수된 이미지·짧은 설명
 - 형태, 크기, 소재, 색상, 사용 장면 등 사실 기반 태그
 - 추천 설명에 사용할 수 있는 검수 문장과 금지 주장
@@ -205,7 +205,7 @@ S04에서 고객이 “직원에게 제품 요청”을 직접 누를 때만 Man
 | Eye·Face | 같은 frame ID·capture context의 시선·표정 파생값, 결측 reason, 이동·변화·지속 feature와 replay | 실제 고객 Vision 전송 승인과 실 producer E2E |
 | Recommendation | A/B/C evidence builder, self-hosted HTTP port, test-only deterministic stub와 fail-closed validator | target server 모델·revision·checksum·variant benchmark 승인 |
 | Result contract | v1 호환을 유지한 strict Top 1 `RecommendationDecisionV2` | 실모델 반복 안정성·지연·근거 품질 검증 |
-| Product data | 동일 ID의 10개 JSON profile, PostgreSQL migration·seed/readiness code | live PostgreSQL 검증, 개별 URL·이미지·QR·태그 팀 승인 |
+| Product data | 동일 ID의 10개 JSON profile, 검수된 공식 PDP URL·image·직접 URL QR, PostgreSQL migration·seed/readiness code | live PostgreSQL 검증, 실제 QR scan과 태그 최종 검수 |
 | Persistence | frame timeline용 DB table 없이 transient buffer를 terminal/cancel/TTL에 폐기 | 운영 DB 보유·삭제 정책과 재시작·다중 process 설계 |
 | UI | real HTTP v2 Kiosk, Top 1 template, insufficient/failed 처리, 명시적 Manager 요청과 REST polling | 승인 영상·상품 자산을 사용한 실제 Browser E2E와 접근성 확인 |
 

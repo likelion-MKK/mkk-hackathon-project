@@ -33,18 +33,25 @@ DB, cache, queue와 로그에서 금지한다. v2 frame timeline은 프로세스
 ## PostgreSQL
 
 `migrations/0001_central_recommendation_v2.sql`은 `recommendation_catalog_v2`와
-`recommendation_job_v2`만 만든다. observation/timeline 테이블은 의도적으로 없다.
+`recommendation_job_v2`를 만들고, `migrations/0002_catalog_assets_v2.sql`은 상품 image·QR의
+경로·공식 PDP URL·SHA-256·승인 메모만 저장하는 `recommendation_catalog_asset_v2`를 추가한다.
+image/QR bytes와 observation/timeline 테이블은 의도적으로 없다.
 
 ```powershell
 Set-Location apps/api
 psql $env:DATABASE_URL -f migrations/0001_central_recommendation_v2.sql
+psql $env:DATABASE_URL -f migrations/0002_catalog_assets_v2.sql
 ```
 
 `DATABASE_URL`이 설정되면 시작 시
-`data/products/mcm-demo-recommendation-profile-v2.json`을 strict 검증한 뒤 정확히 10개를
-`ON CONFLICT` upsert하고 readiness count를 확인한다. 설정하지 않은 로컬 개발에서는 같은
-canonical JSON을 읽는 memory catalog adapter를 쓰며, session timeline은 어느 모드에서도
-메모리 전용이다. 실제 PostgreSQL 연결 통합 검증은 별도 PostgreSQL 환경에서 수행해야 한다.
+`data/products/mcm-demo-recommendation-profile-v2.json`과
+`mcm-recommendation-catalog-assets-v2.json`을 strict 검증한 뒤 catalog 10행과 image·QR
+asset metadata 각 10행을 `ON CONFLICT` upsert한다. readiness gate는 해당 catalog version에
+catalog 10행, `asset_kind='image'` 10행과 `asset_kind='qr'` 10행이 각각 distinct product
+10개와 일치해야 통과한다. 설정하지
+않은 로컬 개발에서는 같은 canonical JSON을 읽는 memory catalog adapter를 쓰며, session
+timeline은 어느 모드에서도 메모리 전용이다. 실제 PostgreSQL 연결 통합 검증은 별도
+PostgreSQL 환경에서 수행해야 한다.
 
 ## 환경 변수
 

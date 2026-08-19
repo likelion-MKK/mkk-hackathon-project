@@ -754,8 +754,8 @@ def test_v2_manifest_and_product_routes_use_canonical_ids(
     assert manifest.json()["exposures"][0]["product_id"] == PRODUCT_1
     assert "product_part" not in manifest.json()["exposures"][0]
     assert product.json()["product_id"] == PRODUCT_1
-    assert product.json()["official_product_url"] is None
-    assert product.json()["official_product_url_reason"]
+    assert product.json()["official_product_url"].endswith("MWPGAMT01CO001.html")
+    assert product.json()["official_product_url_reason"] is None
 
 
 def test_legacy_product_part_omission_never_serializes_as_null() -> None:

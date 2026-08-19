@@ -75,10 +75,9 @@ slice가 구현되어 있다.
 - versioned Korean prompt, Google Colab GPU 7개 후보 registry, A/B/C·12개 합성 case의 self-hosted benchmark CLI
 
 다만 production 준비가 끝났다는 뜻은 아니다. 실제 self-hosted 모델은 아직 선택·실행하지
-않았고, live PostgreSQL·실제 Browser E2E·승인된 Vision producer도 검증 전이다. 공식
-listing에서 상품명만 확인했으므로 개별 상품 URL·이미지·QR은 `null+reason`이며 팀 검수와
-자산 승인이 필요하다. 현재 Frontend 검증은 Node.js 22.19.0에서 수행되어 요구 버전
-24.19.0 재검증도 남아 있다.
+않았고, live PostgreSQL·실제 Browser E2E·승인된 Vision producer도 검증 전이다. 검수된
+MCM 상품 10개의 공식 PDP URL, 이미지와 해당 URL을 직접 인코딩한 QR 정적 자산은 연결됐으며,
+실제 장치의 QR scan과 Node.js 24.19.0 Frontend 재검증은 production Gate로 남아 있다.
 
 구현 순서와 호환성 차이는 [`IMPLEMENTATION_PLAN`](docs/IMPLEMENTATION_PLAN.md)을 기준으로 한다.
 

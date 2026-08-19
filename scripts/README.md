@@ -5,7 +5,14 @@
 ```powershell
 python -m pip install -r requirements-contracts.txt
 python scripts/validate_contracts.py
+python scripts/verify_product_assets.py
 ```
+
+`verify_product_assets.py`는 v2 asset manifest의 canonical product ID별 image·QR 각 1개,
+총 20개 record를 요구한다. `media/products/<product_id>.jpeg`와
+`media/qr/<product_id>/official-product.png`의 경로·정확한 파일 집합·SHA-256을 검증하고, 두 asset의 source
+URL이 catalog의 검수된 공식 PDP URL과 일치하는지 확인한다. DB에는 이 metadata만 적재하고
+image/QR bytes는 적재하지 않는다.
 
 검증 항목:
 

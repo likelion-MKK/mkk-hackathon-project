@@ -40,6 +40,10 @@ import {
   buildObservationBatchesV2,
   resolveObservationAttentionAuthority,
 } from "./app/observation-batch-v2.ts";
+import {
+  isProductDisplayReady,
+  resolveProductDisplayPolicy,
+} from "./app/product-display-policy.ts";
 import { buildD1ReactionBatches } from "./app/reaction-batch.ts";
 import {
   pollRecommendation,
@@ -790,10 +794,18 @@ function ReportScreen({
   onHome: () => void;
   onRequestManager: () => Promise<void>;
 }) {
-  const [imageFailed, setImageFailed] = useState(false);
+  const [imageStatus, setImageStatus] = useState<"loading" | "loaded" | "failed">(
+    "loading",
+  );
+  const [qrFailed, setQrFailed] = useState(false);
   const [requestState, setRequestState] = useState<"idle" | "sending" | "sent" | "failed">(
     "idle",
   );
+
+  useEffect(() => {
+    setImageStatus("loading");
+    setQrFailed(false);
+  }, [product.product_id]);
 
   const requestManager = async () => {
     if (requestState === "sending" || requestState === "sent") return;
@@ -806,35 +818,74 @@ function ReportScreen({
     }
   };
   const isCentralProduct = "controlled_tags" in product;
-  const imageUrl = isCentralProduct
-    ? product.approved_asset && product.image_asset_path
-      ? `/${product.image_asset_path}`
-      : null
-    : product.image_url;
-  const productUrl = isCentralProduct
-    ? (product.official_product_url ?? product.official_listing_url)
-    : product.product_url;
+  const displayPolicy = resolveProductDisplayPolicy(product);
+  const hasApprovedProductDetails = isProductDisplayReady(
+    displayPolicy,
+    imageStatus === "loaded",
+  );
+  const unavailableMessage =
+    imageStatus === "failed"
+      ? "검수된 상품 이미지를 불러오지 못했습니다."
+      : imageStatus === "loading" && displayPolicy.imageUrl
+        ? "검수된 상품 이미지를 불러오는 중입니다."
+        : displayPolicy.unavailableMessage;
 
   return (
     <main className="store-screen report-screen">
       <StoreChrome onHome={onHome} step="04" />
       <section className="report-layout">
         <div className="report-media">
-          <img
-            src={imageFailed || !imageUrl ? bagImage : imageUrl}
-            alt={product.display_name}
-            onError={() => setImageFailed(true)}
-          />
-          <span>TOP 1 · {product.product_id}</span>
+          {displayPolicy.imageUrl && imageStatus !== "failed" ? (
+            <img
+              src={displayPolicy.imageUrl}
+              alt={product.display_name}
+              onLoad={() => setImageStatus("loaded")}
+              onError={() => setImageStatus("failed")}
+            />
+          ) : (
+            <div className="report-media__pending" role="status">
+              <strong>상품 정보 준비 중</strong>
+              <span>승인된 이미지가 연결된 뒤 표시됩니다.</span>
+            </div>
+          )}
+          <span>
+            {hasApprovedProductDetails ? `TOP 1 · ${product.product_id}` : "TOP 1 · PENDING"}
+          </span>
         </div>
         <div className="report-copy">
           <p className="section-label">YOUR RECOMMENDATION</p>
-          <h1>말로 표현되지 않은 탐색 반응에서 발견한 추천</h1>
-          <p className="report-tendency">
-            이번 세션의 스타일 탐색 경향: {recommendation.tendency}
-          </p>
-          <h2>{product.display_name}</h2>
-          <p className="report-reason">{recommendation.reason}</p>
+          <h1>
+            {hasApprovedProductDetails
+              ? "이번 룩북의 관찰을 바탕으로 선정했습니다"
+              : "상품 정보 준비 중"}
+          </h1>
+          {hasApprovedProductDetails ? (
+            <>
+              <p className="report-tendency">
+                이번 세션의 스타일 탐색 경향: {recommendation.tendency}
+              </p>
+              <h2>{product.display_name}</h2>
+              {isCentralProduct && (
+                <p className="report-reason">{product.recommendation_summary}</p>
+              )}
+              <p className="report-reason">{recommendation.reason}</p>
+            </>
+          ) : (
+            <p className="report-reason">
+              선정된 상품의 공식 정보와 자산은 담당자 검수 후 표시됩니다. 임의의 이미지나
+              링크로 대체하지 않습니다.
+            </p>
+          )}
+          {hasApprovedProductDetails && displayPolicy.qrUrl && !qrFailed && (
+            <div className="report-qr">
+              <img
+                src={displayPolicy.qrUrl}
+                alt="공식 상품 페이지 QR 코드"
+                onError={() => setQrFailed(true)}
+              />
+              <span>공식 상품 페이지에서 보기</span>
+            </div>
+          )}
           {recommendation.mode === "mock_v1" && (
             <p className="report-disclaimer">개발 환경에서만 사용하는 v1 Mock fixture 결과입니다.</p>
           )}
@@ -843,36 +894,36 @@ function ReportScreen({
               개발 검증용 replay 파생 신호 결과이며 실제 고객 분석 결과가 아닙니다.
             </p>
           )}
-          {isCentralProduct && !product.approved_asset && (
-            <p className="report-disclaimer">
-              검수된 상품 이미지와 개별 QR은 아직 연결되지 않아 기본 이미지를 표시합니다.
-            </p>
+          {unavailableMessage && (
+            <p className="report-disclaimer">{unavailableMessage}</p>
           )}
           <p className="report-disclaimer">
             시선·표정 관련 신호는 이번 세션의 비언어적 관찰값이며 감정·성격·구매
             의도를 확정하지 않습니다.
           </p>
           <div className="report-actions">
-            <a
-              className="store-button store-button--solid"
-              href={productUrl}
-              rel="noreferrer"
-              target="_blank"
-            >
-              {isCentralProduct && !product.official_product_url
-                ? "공식 가방 목록 보기"
-                : "상품 정보 보기"}
-            </a>
-            <button
-              className="store-button store-button--outline"
-              type="button"
-              disabled={requestState === "sending" || requestState === "sent"}
-              onClick={() => void requestManager()}
-            >
-              {requestState === "sending" && "요청 전송 중"}
-              {requestState === "sent" && "매니저 요청 완료"}
-              {(requestState === "idle" || requestState === "failed") && "직접 보고 싶어요"}
-            </button>
+            {hasApprovedProductDetails && displayPolicy.officialProductUrl && (
+              <a
+                className="store-button store-button--solid"
+                href={displayPolicy.officialProductUrl}
+                rel="noreferrer"
+                target="_blank"
+              >
+                상품 정보 보기
+              </a>
+            )}
+            {hasApprovedProductDetails && displayPolicy.canRequestManager && (
+              <button
+                className="store-button store-button--outline"
+                type="button"
+                disabled={requestState === "sending" || requestState === "sent"}
+                onClick={() => void requestManager()}
+              >
+                {requestState === "sending" && "요청 전송 중"}
+                {requestState === "sent" && "매니저 요청 완료"}
+                {(requestState === "idle" || requestState === "failed") && "직접 보고 싶어요"}
+              </button>
+            )}
           </div>
           {requestState === "failed" && (
             <p className="report-request-error" role="alert">
@@ -1482,6 +1533,7 @@ function App() {
   if (screen === "report" && recommendation && recommendedProduct && session) {
     return (
       <ReportScreen
+        key={`${session.session_id}:${recommendation.recommendation_id}:${recommendedProduct.product_id}`}
         recommendation={recommendation}
         product={recommendedProduct}
         onHome={restart}
