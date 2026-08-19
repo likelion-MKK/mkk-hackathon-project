@@ -1,0 +1,65 @@
+{
+  "schema_version": "1.0",
+  "video_id": "lookbook-demo-v1",
+  "manifest_version": "lookbook-demo-v1-grid-details-v2-2026-08-18",
+  "metadata_version": "lookbook-demo-source-aoi-v1-2026-08-18",
+  "feature_taxonomy_version": "mcm-bag-visual-features-v1",
+  "approval": {
+    "status": "approved",
+    "approved_by": "project-owner-current-request",
+    "approved_at": "2026-08-18T00:00:00Z",
+    "note": "Current implementation request approved the source AOI mapping; source IDs remain separate from catalog product IDs."
+  },
+  "source_aois": [
+    {
+      "source_aoi_id": "source-scene-01-toni-cognac-top",
+      "exposure_id_prefixes": ["scene-01-toni-brown-top."],
+      "visual_features": { "color_primary": "cognac", "color_family": "brown", "silhouette": "shopper", "category_type": "tote_bag", "patterns": ["monogram"], "bag_accessories": ["logo_plaque", "shoulder_strap", "top_handle", "zipper"] }
+    },
+    {
+      "source_aoi_id": "source-scene-01-toni-black-top",
+      "exposure_id_prefixes": ["scene-01-toni-black-top."],
+      "visual_features": { "color_primary": "black", "color_family": "black", "silhouette": "shopper", "category_type": "tote_bag", "patterns": ["monogram"], "bag_accessories": ["logo_plaque", "shoulder_strap", "top_handle", "zipper"] }
+    },
+    {
+      "source_aoi_id": "source-scene-01-toni-pink-bottom",
+      "exposure_id_prefixes": ["scene-01-toni-pink-bottom."],
+      "visual_features": { "color_primary": "pink", "color_family": "pink", "silhouette": "shopper", "category_type": "tote_bag", "patterns": ["monogram"], "bag_accessories": ["logo_plaque", "shoulder_strap", "top_handle", "zipper"] }
+    },
+    {
+      "source_aoi_id": "source-scene-01-toni-beige-bottom",
+      "exposure_id_prefixes": ["scene-01-toni-tan-bottom."],
+      "visual_features": { "color_primary": "beige", "color_family": "beige", "silhouette": "shopper", "category_type": "tote_bag", "patterns": ["monogram"], "bag_accessories": ["logo_plaque", "shoulder_strap", "top_handle", "zipper"] }
+    },
+    {
+      "source_aoi_id": "source-scene-02-boston-top-left",
+      "exposure_id_prefixes": ["scene-02-ella-top-left."],
+      "visual_features": { "color_primary": "cognac", "color_family": "brown", "silhouette": "boston", "category_type": "top_handle_bag", "patterns": ["monogram"], "bag_accessories": ["shoulder_strap", "tag", "top_handle", "zipper"] }
+    },
+    {
+      "source_aoi_id": "source-scene-02-shoulder-top-right",
+      "exposure_id_prefixes": ["scene-02-aren-east-west-top-right."],
+      "visual_features": { "color_primary": "cognac", "color_family": "brown", "silhouette": "east_west_shoulder", "category_type": "shoulder_bag", "patterns": ["monogram"], "bag_accessories": ["lock", "shoulder_strap"] }
+    },
+    {
+      "source_aoi_id": "source-scene-02-pouch-bottom-left",
+      "exposure_id_prefixes": ["scene-02-pina-vanity-bottom-left."],
+      "visual_features": { "color_primary": "cognac", "color_family": "brown", "silhouette": "pouch", "category_type": "pouch", "patterns": ["monogram"], "bag_accessories": ["zipper"] }
+    },
+    {
+      "source_aoi_id": "source-scene-02-backpack-bottom-right",
+      "exposure_id_prefixes": ["scene-02-stark-backpack-bottom-right."],
+      "visual_features": { "color_primary": "cognac", "color_family": "brown", "silhouette": "backpack", "category_type": "backpack", "patterns": ["monogram"], "bag_accessories": ["front_pocket", "top_handle", "zipper"] }
+    },
+    {
+      "source_aoi_id": "source-scene-03-toni-brown",
+      "exposure_id_prefixes": ["scene-03-shot-01-toni-brown.", "scene-03-shot-03-toni-brown.", "scene-03-shot-05-toni-brown.", "scene-03-shot-07-toni-brown.", "scene-03-shot-09-toni-brown.", "scene-03-shot-11-toni-brown.", "scene-03-shot-13-toni-brown.", "scene-03-shot-15-toni-brown.", "scene-03-shot-17-toni-brown."],
+      "visual_features": { "color_primary": "cognac", "color_family": "brown", "silhouette": "shopper", "category_type": "tote_bag", "patterns": ["monogram"], "bag_accessories": ["shoulder_strap", "top_handle", "zipper"] }
+    },
+    {
+      "source_aoi_id": "source-scene-03-toni-black",
+      "exposure_id_prefixes": ["scene-03-shot-02-toni-black.", "scene-03-shot-04-toni-black.", "scene-03-shot-06-toni-black.", "scene-03-shot-08-toni-black.", "scene-03-shot-10-toni-black.", "scene-03-shot-12-toni-black.", "scene-03-shot-14-toni-black.", "scene-03-shot-16-toni-black."],
+      "visual_features": { "color_primary": "black", "color_family": "black", "silhouette": "shopper", "category_type": "tote_bag", "patterns": ["monogram"], "bag_accessories": ["shoulder_strap", "top_handle", "zipper"] }
+    }
+  ]
+}

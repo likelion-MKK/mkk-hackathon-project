@@ -5,7 +5,7 @@
   "session_id": "session-demo-v2-001",
   "video_id": "lookbook-demo-v2",
   "manifest_version": "demo-lookbook-v1",
-  "catalog_version": "mcm-us-listing-names-v2-2026-08-16",
+  "catalog_version": "mcm-us-pdp-verified-v3-2026-08-18",
   "feature_version": "central-evidence-v2-demo-1",
   "signal_versions": {
     "eye": { "producer_id": "eyetrax-eye-adapter", "model_revision": "eyetrax-demo-raw-v1" },
@@ -54,7 +54,7 @@
       "expression_reason": null
     },
     {
-      "product_id": "mcm-diamant-3d-small-calfskin",
+      "product_id": "mcm-pina-vanity-case-studded-calfskin",
       "exposure_duration_ms": 10000,
       "gaze": null,
       "gaze_reason": "no_product_attention",
@@ -66,6 +66,7 @@
     {
       "window_id": "evidence-window-001",
       "product_id": "mcm-toni-medium-disco-visetos",
+      "product_part": "body",
       "start_offset_ms": 4000,
       "end_offset_ms": 7200,
       "video_start_ms": 4000,

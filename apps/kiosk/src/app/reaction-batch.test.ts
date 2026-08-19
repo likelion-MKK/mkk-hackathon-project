@@ -23,6 +23,7 @@ const manifest: LookbookManifest = {
     {
       exposure_id: "scene-01-product-01",
       product_id: "P001",
+      product_part: "handle",
       start_ms: 0,
       end_ms: 10_000,
       priority: 0,
@@ -148,9 +149,23 @@ test("시선과 표정 신호를 함께 ReactionBatch에 담는다", () => {
   assert.equal(attentionEvent.sequence, 3);
   assert.equal(attentionEvent.video_x_norm, 0.3);
   assert.equal(attentionEvent.video_y_norm, 0.46);
-  assert.deepEqual(
-    attentionEvent.candidates.map((candidate) => candidate.product_id),
-    ["P001", "P003"],
+  assert.equal(attentionEvent.model_revision, "aoi-mapper-v2");
+  assert.deepEqual(attentionEvent.candidates, [
+    {
+      exposure_id: "scene-01-product-01",
+      product_id: "P001",
+      product_part: "handle",
+      priority: 0,
+    },
+    {
+      exposure_id: "overlapping-product",
+      product_id: "P003",
+      priority: 1,
+    },
+  ]);
+  assert.equal(
+    Object.hasOwn(attentionEvent.candidates[1] ?? {}, "product_part"),
+    false,
   );
 });
 

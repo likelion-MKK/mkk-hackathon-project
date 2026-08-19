@@ -24,7 +24,7 @@
     "model_revision": "aoi-mapper-v1",
     "manifest_version": "demo-lookbook-v1",
     "candidates": [
-      { "exposure_id": "demo-exposure-001", "product_id": "mcm-toni-medium-disco-visetos", "priority": 0 }
+      { "exposure_id": "demo-exposure-001", "product_id": "mcm-toni-medium-disco-visetos", "product_part": "body", "priority": 0 }
     ]
   },
   "attention_reason": null,

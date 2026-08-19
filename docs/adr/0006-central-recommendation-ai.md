@@ -26,8 +26,13 @@
 4. 중앙 AI는 팀이 통제하는 self-hosted runtime에서 실행한다. 외부 hosted AI API를 production 판단 경로로 사용하지 않는다.
 5. 룩북이 종료되고 evidence가 finalize된 뒤 세션당 한 번만 호출한다.
 6. 후보군은 DB의 활성·검수된 **MCM 가방 정확히 10개**다.
-7. 정상 결과는 후보 안의 **Top 1** 상품, allowlist reason code, evidence reference와 비진단적 설명이다.
-8. schema 위반, 후보 밖 상품, 근거 없는 설명 또는 신호 부족은 fail-closed한다.
+7. 룩북 영상의 source AOI는 추천 catalog와 독립적이다. 영상 속 가방이 catalog 상품이 아니어도 되며 source AOI 식별자를 catalog `product_id`로 해석하거나 동일성을 강제하지 않는다.
+8. source AOI에는 검수된 색상·형태·패턴·가방 액세서리 등 시각 특징과 annotation version·provenance를 정형화한다. 시선 hit와 결합된 특징만 bounded evidence로 전달하며 영상 원본이나 image-derived embedding은 전달하지 않는다.
+9. 중앙 AI는 응시한 source AOI의 시각 특징·시선·표정 관찰 evidence를 DB의 10개 catalog 특징과 비교한다.
+10. 정상 결과는 후보 안의 **Top 1** 상품, allowlist reason code, evidence reference와 비진단적 설명이다.
+11. schema 위반, 후보 밖 상품, 근거 없는 설명 또는 신호 부족은 fail-closed한다.
+
+`lookbook-demo-v1` 구현은 기존 v2 field 의미를 바꾸지 않고 별도 승인 source metadata와 matching profile을 로드한다. Kiosk candidate는 권위 근거로 사용하지 않으며 Backend가 시간·polygon hit를 재판정한 뒤 source 특징 evidence와 catalog 후보를 분리해 중앙 AI에 전달한다. 기존 catalog candidate replay는 회귀 호환으로 보존한다. standalone JSON Schema 공동 승인과 production 환경 검증은 후속 gate다.
 
 ### 2.2 데이터 수명
 

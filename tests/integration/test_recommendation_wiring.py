@@ -70,7 +70,10 @@ def replay_attention_batch(
         video_time_ms=video_time_ms,
         candidates=[
             {
-                "exposure_id": f"scene-01-{product_id}",
+                "exposure_id": {
+                    "P001": "scene-01-product-01",
+                    "P002": "scene-01-product-02",
+                }[product_id],
                 "product_id": product_id,
                 "priority": 0,
             }

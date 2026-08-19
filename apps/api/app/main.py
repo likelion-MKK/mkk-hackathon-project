@@ -149,7 +149,18 @@ def create_app(
         decision_ttl_seconds=_positive_env_float("V2_DECISION_TTL_SECONDS", 900.0),
         input_variant=central_input_variant or _configured_input_variant(),
     )
-    app.router.add_event_handler("shutdown", app.state.job_dispatcher.close)
+
+    def start_v2_store() -> None:
+        app.state.v2_store.start()
+
+    def close_v2_resources() -> None:
+        try:
+            app.state.v2_store.close()
+        finally:
+            app.state.job_dispatcher.close()
+
+    app.router.add_event_handler("startup", start_v2_store)
+    app.router.add_event_handler("shutdown", close_v2_resources)
 
     @app.exception_handler(DomainError)
     async def handle_domain_error(_: Request, exc: DomainError) -> JSONResponse:

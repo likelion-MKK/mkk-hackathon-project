@@ -9,8 +9,8 @@ import type {
   ProductAttentionEvent,
 } from "./kiosk-types.ts";
 import {
+  createCoordinateOnlyAttentionEvent,
   createProductAttentionEvent,
-  mapD1MockGazeToVideoPoint,
   mapGazeToVideoPoint,
 } from "./reaction-batch.ts";
 import type { VideoLayout } from "./video-context.ts";
@@ -19,11 +19,27 @@ const MAX_OBSERVATIONS_PER_BATCH = 256;
 const CONTINUITY_GAP_MS = 1_000;
 const SUSTAINED_ACTION_THRESHOLD = 0.5;
 
+export type AttentionAuthority = "backend_source_aoi" | "kiosk_manifest";
+
+const BACKEND_SOURCE_AOI_VIDEO_ID = "lookbook-demo-v1";
+const BACKEND_SOURCE_AOI_MANIFEST_VERSION =
+  "lookbook-demo-v1-grid-details-v2-2026-08-18";
+
+export function resolveObservationAttentionAuthority(
+  manifest: Pick<LookbookManifest, "video_id" | "manifest_version">,
+): AttentionAuthority {
+  return manifest.video_id === BACKEND_SOURCE_AOI_VIDEO_ID &&
+    manifest.manifest_version === BACKEND_SOURCE_AOI_MANIFEST_VERSION
+    ? "backend_source_aoi"
+    : "kiosk_manifest";
+}
+
 type BuildObservationBatchesV2Options = {
   batchId: string;
   batchSequence: number;
   sessionId: string;
   manifest: LookbookManifest;
+  attentionAuthority: AttentionAuthority;
   gazeSamples: readonly GazeSample[];
   expressionSamples: readonly ExpressionSample[];
   videoLayoutsByFrameId?: ReadonlyMap<string, VideoLayout>;
@@ -43,8 +59,6 @@ type FusedFrame = {
 type GazeContinuity = {
   sample: Extract<GazeSample, { valid: true }>;
   run_started_at_mono_ms: number;
-  last_unambiguous_product_id: string | null;
-  seen_product_ids: Set<string>;
 };
 
 type ExpressionContinuity = {
@@ -157,13 +171,29 @@ function fuseByFrameId(options: BuildObservationBatchesV2Options): FusedFrame[] 
 function mapAttention(
   sample: GazeSample,
   manifest: LookbookManifest,
+  attentionAuthority: AttentionAuthority,
   videoLayoutsByFrameId: ReadonlyMap<string, VideoLayout> | undefined,
 ): ProductAttentionEvent {
   const layout = videoLayoutsByFrameId?.get(sample.frame_id);
-  const videoPoint = layout
-    ? mapGazeToVideoPoint(sample, layout)
-    : mapD1MockGazeToVideoPoint(sample);
-  return createProductAttentionEvent(sample, manifest, sample.sequence, videoPoint);
+  if (!layout) {
+    throw new Error(
+      `Missing video layout for valid gaze frame_id "${sample.frame_id}".`,
+    );
+  }
+  const videoPoint = mapGazeToVideoPoint(sample, layout);
+  return attentionAuthority === "backend_source_aoi"
+    ? createCoordinateOnlyAttentionEvent(
+        sample,
+        manifest,
+        sample.sequence,
+        videoPoint,
+      )
+    : createProductAttentionEvent(
+        sample,
+        manifest,
+        sample.sequence,
+        videoPoint,
+      );
 }
 
 function isContinuityReset(
@@ -179,17 +209,9 @@ function isContinuityReset(
   );
 }
 
-function unambiguousProductId(attention: ProductAttentionEvent | null): string | null {
-  if (!attention?.valid || attention.outside_video || attention.candidates.length !== 1) {
-    return null;
-  }
-  return attention.candidates[0].product_id;
-}
-
 function buildGazeDerived(
   sample: Extract<GazeSample, { valid: true }>,
   frame: FusedFrame,
-  attention: ProductAttentionEvent,
   previous: GazeContinuity | null,
   forcedReset: boolean,
 ): { value: GazeDerivedV2; next: GazeContinuity } {
@@ -202,17 +224,6 @@ function buildGazeDerived(
         sample.screen_x_norm - previous.sample.screen_x_norm,
         sample.screen_y_norm - previous.sample.screen_y_norm,
       );
-  const currentProductId = unambiguousProductId(attention);
-  const seenProductIds = reset ? new Set<string>() : new Set(previous.seen_product_ids);
-  const lastProductId = reset ? null : previous.last_unambiguous_product_id;
-  const returnCandidate =
-    currentProductId !== null &&
-    lastProductId !== currentProductId &&
-    seenProductIds.has(currentProductId);
-
-  if (currentProductId) seenProductIds.add(currentProductId);
-  const productIsAmbiguous =
-    attention.valid && !attention.outside_video && attention.candidates.length > 1;
 
   return {
     value: {
@@ -226,20 +237,14 @@ function buildGazeDerived(
       continuous_observation_ms: reset
         ? 0
         : frame.captured_at_mono_ms - previous.run_started_at_mono_ms,
-      return_candidate: reset || productIsAmbiguous ? null : returnCandidate,
-      return_candidate_reason: reset
-        ? resetReason
-        : productIsAmbiguous
-          ? "ambiguous_product"
-          : null,
+      return_candidate: null,
+      return_candidate_reason: "backend_aoi_mapping_required",
     },
     next: {
       sample,
       run_started_at_mono_ms: reset
         ? frame.captured_at_mono_ms
         : previous.run_started_at_mono_ms,
-      last_unambiguous_product_id: currentProductId,
-      seen_product_ids: seenProductIds,
     },
   };
 }
@@ -324,7 +329,12 @@ function buildObservations(options: BuildObservationBatchesV2Options): FrameObse
     const validGaze = gazeSample?.valid ? gazeSample : null;
     const validExpression = expressionSample?.valid ? expressionSample : null;
     const attentionEvent = validGaze
-      ? mapAttention(validGaze, options.manifest, options.videoLayoutsByFrameId)
+      ? mapAttention(
+          validGaze,
+          options.manifest,
+          options.attentionAuthority,
+          options.videoLayoutsByFrameId,
+        )
       : null;
 
     let gazeDerived: GazeDerivedV2 | null = null;
@@ -332,7 +342,6 @@ function buildObservations(options: BuildObservationBatchesV2Options): FrameObse
       const result = buildGazeDerived(
         validGaze,
         frame,
-        attentionEvent,
         gazeContinuity,
         gazeWasReset,
       );

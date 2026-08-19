@@ -14,6 +14,7 @@ from apps.api.app.schemas import (
     ContractModel,
     Identifier,
     Revision,
+    ProductPart,
     _validate_reason,
 )
 
@@ -64,6 +65,9 @@ class ExpressionObservationV2(ContractModel):
 class AttentionCandidateV2(ContractModel):
     exposure_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
     product_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
+    product_part: ProductPart | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     priority: StrictInt = Field(ge=0)
 
 
@@ -362,6 +366,9 @@ EvidenceCode = Literal[
 class EvidenceWindowV2(ContractModel):
     window_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
     product_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
+    product_part: ProductPart | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     start_offset_ms: StrictFloat = Field(ge=0)
     end_offset_ms: StrictFloat = Field(ge=0)
     video_start_ms: StrictInt = Field(ge=0)
@@ -507,7 +514,13 @@ class ProductRecommendationProfileV2(ContractModel):
 
 
 class CentralRecommendationRequestV2(ContractModel):
-    """Self-hosted transport envelope over the reviewed v2 contracts."""
+    """Self-hosted transport envelope over reviewed, derived-only contracts.
+
+    ``source_visual_evidence`` and ``matching_products`` are kept as closed JSON
+    objects here to avoid a circular import with the authoritative AOI mapper.
+    The store and central output gate revalidate them with their dedicated
+    Pydantic models before use.
+    """
 
     schema_version: Literal["2.0"] = "2.0"
     decision_request_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
@@ -517,6 +530,16 @@ class CentralRecommendationRequestV2(ContractModel):
     evidence_version: Revision = Field(min_length=1, max_length=128)
     evidence: RecommendationEvidenceV2
     products: list[ProductRecommendationItemV2] = Field(min_length=1, max_length=10)
+    source_visual_evidence: dict[str, object] | None = None
+    matching_products: list[dict[str, object]] | None = Field(default=None, min_length=10, max_length=10)
+
+    @model_validator(mode="after")
+    def source_matching_payloads_have_joint_presence(self) -> Self:
+        if (self.source_visual_evidence is None) != (self.matching_products is None):
+            raise ValueError(
+                "source_visual_evidence and matching_products must be present or absent together"
+            )
+        return self
 
 
 class EvidenceReferenceV2(ContractModel):

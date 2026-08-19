@@ -19,6 +19,7 @@
     {
       "exposure_id": "scene-01-product-01",
       "product_id": "P001",
+      "product_part": "body",
       "priority": 0
     }
   ],

@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 from apps.api.app.main import _configured_input_variant, create_app
-from apps.api.app.schemas import SessionCreate
+from apps.api.app.schemas import (
+    ManifestExposure,
+    ProductAttentionCandidate,
+    SessionCreate,
+)
 from apps.api.app.store import MemoryStore
 from apps.api.app.v2_central import (
     APPROVED_PROMPT_VERSION,
@@ -29,12 +34,14 @@ from apps.api.app.v2_postgres import load_canonical_catalog, seed_catalog
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 PRODUCT_1 = "mcm-toni-medium-disco-visetos"
-PRODUCT_2 = "mcm-diamant-3d-small-calfskin"
+PRODUCT_2 = "mcm-pina-vanity-case-studded-calfskin"
 VIDEO_ID = "mcm-central-ai-replay-v2"
-MANIFEST_VERSION = "mcm-central-ai-replay-v2-2026-08-16"
+MANIFEST_VERSION = "mcm-central-ai-replay-v2-2026-08-18"
+DEMO_VIDEO_ID = "lookbook-demo-v1"
+DEMO_MANIFEST_VERSION = "lookbook-demo-v1-grid-details-v2-2026-08-18"
 EXPOSURES = {
     PRODUCT_1: "replay-scene-01-toni",
-    PRODUCT_2: "replay-scene-02-diamant",
+    PRODUCT_2: "replay-scene-02-pina-vanity",
 }
 
 
@@ -535,10 +542,35 @@ def test_failure_cancel_and_ttl_clear_transient_state() -> None:
     assert store.cleanup_expired() == 1
     assert store.buffered_observation_count(session_id) == 0
 
+    class CountingStub(DeterministicCentralStub):
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def recommend(self, request: CentralRecommendationRequestV2) -> object:
+            self.calls += 1
+            return super().recommend(request)
+
+    model = CountingStub()
+    dispatcher = ManualJobDispatcher()
+
     now[0] = 200.0
     store.append_batch(session_id, batch.model_copy(update={"batch_id": "batch-cancel"}))
+    store.complete(session_id, model, dispatcher)
     store.cancel(session_id)
     assert store.buffered_observation_count(session_id) == 0
+    dispatcher.run_next()
+    assert model.calls == 0
+
+    now[0] = 300.0
+    store.append_batch(
+        session_id,
+        batch.model_copy(update={"batch_id": "batch-pending-ttl"}),
+    )
+    store.complete(session_id, model, dispatcher)
+    now[0] = 306.0
+    assert store.cleanup_expired() == 1
+    dispatcher.run_next()
+    assert model.calls == 0
 
 
 def test_pending_persistence_failure_is_terminal_and_never_dispatched() -> None:
@@ -720,9 +752,396 @@ def test_v2_manifest_and_product_routes_use_canonical_ids(
     product = client.get(f"/api/v2/products/{PRODUCT_1}")
     assert manifest.status_code == product.status_code == 200
     assert manifest.json()["exposures"][0]["product_id"] == PRODUCT_1
+    assert "product_part" not in manifest.json()["exposures"][0]
     assert product.json()["product_id"] == PRODUCT_1
     assert product.json()["official_product_url"] is None
     assert product.json()["official_product_url_reason"]
+
+
+def test_legacy_product_part_omission_never_serializes_as_null() -> None:
+    exposure = ManifestExposure.model_validate(
+        {
+            "exposure_id": "legacy-exposure",
+            "product_id": PRODUCT_1,
+            "start_ms": 0,
+            "end_ms": 100,
+            "priority": 0,
+            "shape": {
+                "type": "polygon",
+                "points": [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]],
+            },
+        }
+    )
+    candidate = ProductAttentionCandidate.model_validate(
+        {
+            "exposure_id": "legacy-exposure",
+            "product_id": PRODUCT_1,
+            "priority": 0,
+        }
+    )
+    assert exposure.product_part is candidate.product_part is None
+    assert "product_part" not in exposure.model_dump(mode="json")
+    assert "product_part" not in candidate.model_dump(mode="json")
+
+    central_json = json.loads(_central_request().model_dump_json())
+    windows = central_json["evidence"]["evidence_windows"]
+    assert windows
+    assert all("product_part" not in window for window in windows)
+
+
+def _demo_source_aoi_fixture():
+    from apps.api.app.aoi_metadata import bind_source_aois, load_source_aoi_metadata
+    from apps.api.app.schemas import LookbookManifest
+
+    manifest_path = (
+        REPOSITORY_ROOT / "data" / "lookbooks" / DEMO_VIDEO_ID / "manifest.json"
+    )
+    manifest = LookbookManifest.model_validate_json(
+        manifest_path.read_text(encoding="utf-8")
+    )
+    metadata = load_source_aoi_metadata(REPOSITORY_ROOT, DEMO_VIDEO_ID)
+    assert metadata is not None
+    return metadata, bind_source_aois(manifest, metadata)
+
+
+def _demo_source_frame(
+    sequence: int,
+    video_time_ms: int,
+    video_x_norm: float,
+    video_y_norm: float,
+) -> FrameObservationV2:
+    frame = _valid_frame(
+        sequence,
+        float(sequence * 100),
+        frame_id=f"demo-source-frame-{sequence}",
+        video_time_ms=video_time_ms,
+    )
+    attention = frame["attention"]
+    assert isinstance(attention, dict)
+    attention.update(
+        manifest_version=DEMO_MANIFEST_VERSION,
+        video_x_norm=video_x_norm,
+        video_y_norm=video_y_norm,
+        candidates=[],
+    )
+    return FrameObservationV2.model_validate(frame)
+
+
+def _resolve_demo_source_hits(frame: FrameObservationV2, bindings: tuple[object, ...]):
+    from apps.api.app.aoi_metadata import resolve_source_aoi_hits
+
+    return resolve_source_aoi_hits(frame, bindings)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    (
+        "video_time_ms",
+        "video_x_norm",
+        "video_y_norm",
+        "expected_source_id",
+        "expected_exposure_id",
+    ),
+    [
+        (9_000, 0.20, 0.35, "source-scene-01-toni-cognac-top", "scene-01-toni-brown-top.body"),
+        (9_000, 0.70, 0.35, "source-scene-01-toni-black-top", "scene-01-toni-black-top.body"),
+        (9_000, 0.20, 0.85, "source-scene-01-toni-pink-bottom", "scene-01-toni-pink-bottom.body"),
+        (9_000, 0.70, 0.85, "source-scene-01-toni-beige-bottom", "scene-01-toni-tan-bottom.body"),
+        (17_000, 0.20, 0.35, "source-scene-02-boston-top-left", "scene-02-ella-top-left.body"),
+        (
+            17_000,
+            0.70,
+            0.35,
+            "source-scene-02-shoulder-top-right",
+            "scene-02-aren-east-west-top-right.body",
+        ),
+        (
+            17_000,
+            0.22,
+            0.84,
+            "source-scene-02-pouch-bottom-left",
+            "scene-02-pina-vanity-bottom-left.body",
+        ),
+        (
+            17_000,
+            0.74,
+            0.72,
+            "source-scene-02-backpack-bottom-right",
+            "scene-02-stark-backpack-bottom-right.body",
+        ),
+    ],
+)
+def test_demo_source_aoi_hits_each_2x2_item(
+    video_time_ms: int,
+    video_x_norm: float,
+    video_y_norm: float,
+    expected_source_id: str,
+    expected_exposure_id: str,
+) -> None:
+    _, bindings = _demo_source_aoi_fixture()
+    hits = _resolve_demo_source_hits(
+        _demo_source_frame(0, video_time_ms, video_x_norm, video_y_norm),
+        bindings,
+    )
+
+    assert [
+        (hit.source_aoi_id, hit.exposure_ids, hit.product_parts) for hit in hits
+    ] == [(expected_source_id, (expected_exposure_id,), ("body",))]
+
+
+def test_demo_source_aoi_scene_boundary_is_half_open() -> None:
+    _, bindings = _demo_source_aoi_fixture()
+
+    before = _resolve_demo_source_hits(
+        _demo_source_frame(0, 12_999, 0.20, 0.35), bindings
+    )
+    after = _resolve_demo_source_hits(
+        _demo_source_frame(1, 13_000, 0.20, 0.35), bindings
+    )
+
+    assert [hit.source_aoi_id for hit in before] == [
+        "source-scene-01-toni-cognac-top"
+    ]
+    assert before[0].exposure_ids == ("scene-01-toni-brown-top.body",)
+    assert [hit.source_aoi_id for hit in after] == [
+        "source-scene-02-boston-top-left"
+    ]
+    assert after[0].exposure_ids == ("scene-02-ella-top-left.body",)
+
+
+@pytest.mark.parametrize("video_time_ms", [9_000, 17_000])
+def test_demo_source_aoi_grid_gaps_do_not_hit(video_time_ms: int) -> None:
+    _, bindings = _demo_source_aoi_fixture()
+
+    hits = _resolve_demo_source_hits(
+        _demo_source_frame(0, video_time_ms, 0.50, 0.50), bindings
+    )
+
+    assert hits == ()
+
+
+def test_source_aoi_deduplicates_overlapping_parts_for_same_source() -> None:
+    from apps.api.app.aoi_metadata import BoundSourceAoi
+
+    _, bindings = _demo_source_aoi_fixture()
+    ella_body = next(
+        item
+        for item in bindings
+        if item.exposure.exposure_id == "scene-02-ella-top-left.body"
+    )
+    ella_tag = next(
+        item
+        for item in bindings
+        if item.exposure.exposure_id == "scene-02-ella-top-left.accessory-tag"
+    )
+    overlapping_tag = BoundSourceAoi(
+        exposure=ella_tag.exposure.model_copy(
+            update={"shape": ella_body.exposure.shape}
+        ),
+        definition=ella_tag.definition,
+    )
+
+    hits = _resolve_demo_source_hits(
+        _demo_source_frame(0, 14_000, 0.20, 0.35),
+        (ella_body, overlapping_tag),
+    )
+
+    assert len(hits) == 1
+    assert hits[0].source_aoi_id == "source-scene-02-boston-top-left"
+    assert hits[0].exposure_ids == (
+        "scene-02-ella-top-left.accessory-tag",
+        "scene-02-ella-top-left.body",
+    )
+    assert hits[0].product_parts == ("accessory", "body")
+
+
+def test_source_aoi_preserves_distinct_source_overlap_as_ambiguous() -> None:
+    from apps.api.app.aoi_metadata import (
+        BoundSourceAoi,
+        build_source_visual_evidence,
+    )
+
+    metadata, bindings = _demo_source_aoi_fixture()
+    ella_body = next(
+        item
+        for item in bindings
+        if item.exposure.exposure_id == "scene-02-ella-top-left.body"
+    )
+    aren_body = next(
+        item
+        for item in bindings
+        if item.exposure.exposure_id
+        == "scene-02-aren-east-west-top-right.body"
+    )
+    overlapping_aren = BoundSourceAoi(
+        exposure=aren_body.exposure.model_copy(
+            update={"shape": ella_body.exposure.shape}
+        ),
+        definition=aren_body.definition,
+    )
+    baseline = _demo_source_frame(0, 14_000, 0.20, 0.35)
+    ambiguous = _demo_source_frame(1, 14_100, 0.20, 0.35)
+    baseline_hits = _resolve_demo_source_hits(baseline, (ella_body,))
+    ambiguous_hits = _resolve_demo_source_hits(
+        ambiguous, (ella_body, overlapping_aren)
+    )
+
+    assert {hit.source_aoi_id for hit in ambiguous_hits} == {
+        "source-scene-02-shoulder-top-right",
+        "source-scene-02-boston-top-left",
+    }
+    evidence = build_source_visual_evidence(
+        (baseline, ambiguous),
+        {
+            (baseline.playback_epoch, baseline.frame_id): baseline_hits,
+            (ambiguous.playback_epoch, ambiguous.frame_id): ambiguous_hits,
+        },
+        metadata,
+    )
+
+    assert evidence is not None
+    assert evidence.total_hit_count == 1
+    assert evidence.ambiguous_frame_count == 1
+    assert evidence.grounded_frame_ids == frozenset({baseline.frame_id})
+    assert [item.source_aoi_id for item in evidence.source_aois] == [
+        "source-scene-02-boston-top-left"
+    ]
+
+
+def test_demo_source_aoi_visual_features_match_reference_frames() -> None:
+    metadata, _ = _demo_source_aoi_fixture()
+    expected = {
+        "source-scene-01-toni-cognac-top": ("cognac", "brown", "shopper", "tote_bag"),
+        "source-scene-01-toni-black-top": ("black", "black", "shopper", "tote_bag"),
+        "source-scene-01-toni-pink-bottom": ("pink", "pink", "shopper", "tote_bag"),
+        "source-scene-01-toni-beige-bottom": ("beige", "beige", "shopper", "tote_bag"),
+        "source-scene-02-boston-top-left": ("cognac", "brown", "boston", "top_handle_bag"),
+        "source-scene-02-shoulder-top-right": (
+            "cognac",
+            "brown",
+            "east_west_shoulder",
+            "shoulder_bag",
+        ),
+        "source-scene-02-pouch-bottom-left": ("cognac", "brown", "pouch", "pouch"),
+        "source-scene-02-backpack-bottom-right": (
+            "cognac",
+            "brown",
+            "backpack",
+            "backpack",
+        ),
+    }
+    definitions = {item.source_aoi_id: item for item in metadata.source_aois}
+
+    assert {
+        source_id: (
+            definitions[source_id].visual_features.color_primary,
+            definitions[source_id].visual_features.color_family,
+            definitions[source_id].visual_features.silhouette,
+            definitions[source_id].visual_features.category_type,
+        )
+        for source_id in expected
+    } == expected
+
+
+def test_source_sessions_strip_client_candidates_before_central_json() -> None:
+    class CapturingStub(DeterministicCentralStub):
+        def __init__(self) -> None:
+            self.request: CentralRecommendationRequestV2 | None = None
+
+        def recommend(self, request: CentralRecommendationRequestV2) -> object:
+            self.request = request
+            return super().recommend(request)
+
+    source_cases = [
+        (9_000, 0.20, 0.35, "source-scene-01-toni-cognac-top"),
+        (9_000, 0.70, 0.35, "source-scene-01-toni-black-top"),
+        (9_000, 0.20, 0.85, "source-scene-01-toni-pink-bottom"),
+        (9_000, 0.70, 0.85, "source-scene-01-toni-beige-bottom"),
+        (17_000, 0.20, 0.35, "source-scene-02-boston-top-left"),
+        (17_000, 0.70, 0.35, "source-scene-02-shoulder-top-right"),
+        (17_000, 0.22, 0.84, "source-scene-02-pouch-bottom-left"),
+        (17_000, 0.74, 0.72, "source-scene-02-backpack-bottom-right"),
+    ]
+    model = CapturingStub()
+    dispatcher = ManualJobDispatcher()
+    memory = MemoryStore(REPOSITORY_ROOT)
+    app = create_app(memory, central_client=model, job_dispatcher=dispatcher)
+
+    with TestClient(app) as client:
+        manifest_response = client.get(f"/api/v2/lookbooks/{DEMO_VIDEO_ID}/manifest")
+        assert manifest_response.status_code == 200
+        manifest = manifest_response.json()
+        assert manifest["manifest_version"] == DEMO_MANIFEST_VERSION
+
+        session_response = client.post(
+            "/api/v1/sessions",
+            json={
+                "kiosk_id": "kiosk-source-authority",
+                "lookbook_id": DEMO_VIDEO_ID,
+                "consent_version": "consent-v1",
+            },
+        )
+        assert session_response.status_code == 201, session_response.text
+        session_id = session_response.json()["session_id"]
+
+        frames: list[dict[str, object]] = []
+        for sequence, (video_time_ms, x, y, _) in enumerate(source_cases):
+            frame = _valid_frame(
+                sequence,
+                float(sequence * 100),
+                product_id=PRODUCT_2,
+                video_time_ms=video_time_ms,
+            )
+            attention = frame["attention"]
+            assert isinstance(attention, dict)
+            attention["manifest_version"] = DEMO_MANIFEST_VERSION
+            attention["video_x_norm"] = x
+            attention["video_y_norm"] = y
+            candidates = attention["candidates"]
+            assert isinstance(candidates, list)
+            candidate = candidates[0]
+            assert isinstance(candidate, dict)
+            candidate["exposure_id"] = "client-forged-exposure"
+            candidate["product_part"] = "accessory"
+            frames.append(frame)
+
+        batch = _batch(session_id, "batch-source-authority", 0, frames)
+        batch["video_id"] = DEMO_VIDEO_ID
+        accepted = client.post(
+            f"/api/v2/sessions/{session_id}/observations", json=batch
+        )
+        assert accepted.status_code == 202, accepted.text
+        complete = client.post(f"/api/v2/sessions/{session_id}/complete")
+        assert complete.status_code == 202
+        assert app.state.v2_store.buffered_observation_count(session_id) == 0
+        dispatcher.run_next()
+
+        assert model.request is not None
+        assert model.request.evidence.input_variant == "B"
+        assert model.request.evidence.evidence_windows is None
+        assert model.request.evidence.timeline is not None
+        assert all(
+            frame.attention is None or frame.attention.candidates == []
+            for frame in model.request.evidence.timeline
+        )
+        assert all(item.gaze is None for item in model.request.evidence.summary)
+        source_evidence = model.request.source_visual_evidence
+        assert isinstance(source_evidence, dict)
+        assert source_evidence["total_hit_count"] == 8
+        assert source_evidence["ambiguous_frame_count"] == 0
+        source_summaries = source_evidence["source_aois"]
+        assert isinstance(source_summaries, list)
+        assert {
+            item["source_aoi_id"]
+            for item in source_summaries
+            if isinstance(item, dict)
+        } == {source_id for _, _, _, source_id in source_cases}
+        assert model.request.matching_products is not None
+        assert len(model.request.matching_products) == 10
+
+        decision = client.get(f"/api/v2/sessions/{session_id}/recommendation").json()
+        assert decision["status"] == "completed"
+        assert decision["version"]["input_variant"] == "B"
+        assert decision["evidence"][0]["evidence_refs"][0]["kind"] == "frame"
 
 
 def test_unknown_evidence_window_reference_is_rejected() -> None:

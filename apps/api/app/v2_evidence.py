@@ -171,21 +171,25 @@ def summarize_observations(
     changes: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
     change_rates: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
     sustained: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
-    windows_raw: list[tuple[str, FrameObservationV2, FrameObservationV2, set[str]]] = []
+    windows_raw: list[
+        tuple[str, str | None, FrameObservationV2, FrameObservationV2, set[str]]
+    ] = []
 
     previous: FrameObservationV2 | None = None
     previous_product: str | None = None
-    window_product: str | None = None
+    window_key: tuple[str, str | None] | None = None
     window_start: FrameObservationV2 | None = None
     window_end: FrameObservationV2 | None = None
     window_codes: set[str] = set()
     continuity_reset_count = 0
 
     def close_window() -> None:
-        nonlocal window_product, window_start, window_end, window_codes
-        if window_product is not None and window_start is not None and window_end is not None:
-            windows_raw.append((window_product, window_start, window_end, set(window_codes)))
-        window_product = None
+        nonlocal window_key, window_start, window_end, window_codes
+        if window_key is not None and window_start is not None and window_end is not None:
+            windows_raw.append(
+                (window_key[0], window_key[1], window_start, window_end, set(window_codes))
+            )
+        window_key = None
         window_start = None
         window_end = None
         window_codes = set()
@@ -207,11 +211,13 @@ def summarize_observations(
                 close_window()
 
         attention = frame.attention
-        product_id = (
-            attention.candidates[0].product_id
+        candidate = (
+            attention.candidates[0]
             if attention is not None and len(attention.candidates) == 1
             else None
         )
+        product_id = None if candidate is None else candidate.product_id
+        product_part = None if candidate is None else candidate.product_part
         if attention is not None and len(attention.candidates) > 1:
             close_window()
             previous_product = None
@@ -253,9 +259,10 @@ def summarize_observations(
                 codes.add("gaze_movement")
             if changes[product_id]:
                 codes.add("face_action_change")
-            if window_product != product_id:
+            current_window_key = (product_id, product_part)
+            if window_key != current_window_key:
                 close_window()
-                window_product = product_id
+                window_key = current_window_key
                 window_start = frame
             window_end = frame
             window_codes.update(codes)
@@ -332,6 +339,7 @@ def summarize_observations(
         EvidenceWindowV2(
             window_id=f"window-{index:04d}",
             product_id=product_id,
+            product_part=product_part,
             start_offset_ms=start.session_offset_ms,
             end_offset_ms=end.session_offset_ms,
             video_start_ms=start.video_time_ms,
@@ -339,7 +347,9 @@ def summarize_observations(
             playback_epoch=start.playback_epoch,
             evidence_codes=sorted(codes),
         )
-        for index, (product_id, start, end, codes) in enumerate(windows_raw, start=1)
+        for index, (product_id, product_part, start, end, codes) in enumerate(
+            windows_raw, start=1
+        )
     ]
     quality = _data_quality(ordered, expected_observation_count=expected_observation_count)
     # No central call is made when there is no product window; B remains a

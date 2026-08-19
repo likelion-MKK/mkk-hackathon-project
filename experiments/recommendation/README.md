@@ -13,7 +13,9 @@
 - Google Colab은 이번 후보 비교를 위한 임시 self-hosted GPU 실험장입니다. GPU 종류와 사용 시간이 보장되지 않으므로 inventory에 실제 GPU·VRAM·driver를 남기며, 고객 데이터나 비밀키를 notebook에 넣지 않습니다. 자세한 한계는 [Google Colab FAQ](https://research.google.com/colaboratory/faq.html)를 따릅니다.
 - Google Colab 후보가 모두 탈락하면 `selected_model=null`을 유지합니다. 외부 API나 규칙 기반 추천으로 자동 대체하지 않습니다.
 
-production `/infer`, API, DB, migration과 Contract는 이 harness가 변경하지 않습니다. 실제 model weight, raw 응답과 상세 자원 로그는 Git에서 제외된 `artifacts/`에만 둡니다. `prompts/central-recommender.ko.v2.txt`는 이 benchmark 전용이며, production `apps/api/app/v2_central.py`의 승인 prompt v1을 자동으로 바꾸지 않습니다. 운영 prompt·모델 연결은 별도 integration review와 승인 대상입니다.
+production `/infer`, API, DB, migration과 Contract는 이 harness 자체가 변경하지 않습니다. 실제 model weight, raw 응답과 상세 자원 로그는 Git에서 제외된 `artifacts/`에만 둡니다. 별도 integration review에서 source AOI와 catalog 10개 비교 경계를 반영한 `prompts/central-recommender.ko.v2.txt`를 production `apps/api/app/v2_central.py`의 승인 prompt `central-recommender-ko-v2`로 고정했습니다. 실제 self-hosted 모델 endpoint 연결과 모델·revision 승인은 여전히 운영 배포 전 별도 확인 대상입니다.
+
+내부 `RecommendationEvidenceV2`는 strict contract 때문에 absent block도 명시적 `null`로 보존하지만, model에 serialize할 때는 absent key를 제거합니다. 기존 catalog candidate replay의 실제 key 순서는 A `summary→evidence_windows→timeline`, B `timeline→summary`, C `summary→evidence_windows`입니다. A/C decision은 `{kind=window,ref_id=window_id}`, B decision은 `{kind=frame,ref_id=frame_id}`만 참조합니다. `lookbook-demo-v1` source 경로는 variant와 별도로 승인된 `source_visual_evidence`와 matching profile 10개를 전달하고, `product_tag_match`가 실제 source evidence의 frame ID를 참조합니다. source ID와 선택 catalog ID의 동일성은 요구하지 않습니다.
 
 ## 후보와 immutable provenance
 
@@ -358,7 +360,7 @@ uv run --with-requirements requirements-contracts.txt python -m unittest tests.t
 - `evaluate_variants.py`: 기존 A/B/C Contract·privacy·grounding 정적 검증
 - `model-candidates.v2.json`: Google Colab GPU에서 비교할 7개 후보 provenance
 - `cases/central-recommender-cases.v1.json`: 12개 합성 suite와 stub 목록
-- `prompts/central-recommender.ko.v2.txt`: 심리학적 보조 신호를 supporting factor로 제한한 versioned Korean system prompt
+- `prompts/central-recommender.ko.v2.txt`: source AOI 특징과 catalog 10개를 분리해 비교하는 승인 경계 Korean system prompt
 - `prompts/central-recommender.ko.v3.txt`: 최초 live 진단에 사용한 Luna Max prompt 기록
 - `prompts/central-recommender.ko.v4.txt`: 27/27 품질 통과를 확인한 충돌 신호·재관찰 필수 매핑 prompt
 - `prompts/central-recommender.ko.v5.txt`: v4 의미 Gate를 유지하며 중복을 줄인 단일 latency 최적화 prompt
