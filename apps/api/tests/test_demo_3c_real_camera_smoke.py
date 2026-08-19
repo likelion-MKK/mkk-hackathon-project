@@ -22,7 +22,7 @@ from apps.api.app.v2_models import CentralRecommendationRequestV2
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 VIDEO_ID = "mcm-lookbook-v2"
-MANIFEST_VERSION = "mcm-lookbook-v2-2026-08-18"
+MANIFEST_VERSION = "mcm-lookbook-v2-grid-details-v2-2026-08-19"
 TONI_PRODUCT_ID = "mcm-toni-medium-disco-visetos"
 
 
@@ -188,7 +188,7 @@ def test_demo_3c_real_camera_smoke_test_instance_reaches_variant_c_top_one(
             assert forbidden not in rendered
 
 
-def test_demo_3c_default_pending_metadata_fail_closed(
+def test_demo_3c_canonical_approved_source_metadata_reaches_top_one(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _clear_live_service_environment(monkeypatch)
@@ -216,10 +216,19 @@ def test_demo_3c_default_pending_metadata_fail_closed(
             },
         )
 
-    assert response.status_code == 409
-    assert response.json()["code"] == "aoi_metadata_unapproved"
-    assert dispatcher.jobs == []
-    assert model.requests == []
+        assert response.status_code == 202, response.text
+        completion = client.post(f"/api/v2/sessions/{session_id}/complete")
+        assert completion.status_code == 202, completion.text
+        dispatcher.run_next()
+        decision = client.get(f"/api/v2/sessions/{session_id}/recommendation")
+
+    assert decision.status_code == 200
+    assert decision.json()["status"] == "completed"
+    assert decision.json()["selected_product_id"] in {
+        product.product_id for product in model.requests[0].products
+    }
+    assert len(model.requests) == 1
+    assert model.requests[0].source_visual_evidence is not None
 
 
 def test_demo_3c_test_app_requires_opt_in_and_rejects_live_services(

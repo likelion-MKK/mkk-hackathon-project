@@ -211,8 +211,12 @@ test("localhost Vision Stream이 handshake·control·binary frame을 처리하�
   const socketRef = { current: null as FakeSocket | null };
   const client = createClient(socketRef);
   let receivedExpression: Record<string, unknown> | null = null;
+  let receivedGazeReason: string | null = null;
   client.onExpressionSample((sample) => {
     receivedExpression = sample as unknown as Record<string, unknown>;
+  });
+  client.onGazeUnavailable((sample) => {
+    receivedGazeReason = sample.reason;
   });
 
   await client.startSession({ session_id: context.session_id, video_id: context.video_id });
@@ -244,6 +248,7 @@ test("localhost Vision Stream이 handshake·control·binary frame을 처리하�
     (receivedExpression as Record<string, unknown> | null)?.frame_id,
     context.frame_id,
   );
+  assert.equal(receivedGazeReason, "eye_not_connected");
   const sent = socketRef.current?.sent ?? [];
   const binary = sent.find((item) => typeof item !== "string") as Uint8Array | undefined;
   assert.ok(binary);

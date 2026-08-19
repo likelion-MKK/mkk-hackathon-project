@@ -80,6 +80,17 @@ export type GazeSample = ObservationBase &
       }
   );
 
+export type GazeUnavailableSample = {
+  session_id: string;
+  sequence: number;
+  frame_id: string;
+  captured_at_mono_ms: number;
+  video_id: string;
+  video_time_ms: number;
+  playback_epoch: number;
+  reason: string;
+};
+
 export type ExpressionSample = ObservationBase &
   {
     taxonomy_version: string;

@@ -11,7 +11,7 @@ export type RecommendationPresentation = {
   product_id: string;
   tendency: string;
   reason: string;
-  mode: "central_v2" | "replay_v2" | "mock_v1";
+  mode: "central_v2" | "central_low_signal_v2" | "demo_fallback_v2" | "replay_v2" | "mock_v1";
 };
 
 const TENDENCY_COPY: Record<ExplorationTendencyCodeV2, string> = {
@@ -110,6 +110,35 @@ export function presentCentralRecommendation(
     .filter((code) => code !== "catalog_tag_alignment")
     .slice(0, 2)
     .map((code) => requireCopy(REACTION_COPY, code, "reason code"));
+  const isLocalDemoFallback =
+    decision.version.model_id === "deterministic-test-stub" &&
+    decision.data_quality.gaze_valid_ratio === 0 &&
+    decision.reason_codes.length === 1 &&
+    decision.reason_codes[0] === "catalog_tag_alignment";
+  if (isLocalDemoFallback) {
+    return {
+      recommendation_id: decision.recommendation_id,
+      product_id: product.product_id,
+      tendency: "로컬 제출 데모용 기본 카탈로그 추천",
+      reason: `유효한 시선 신호가 부족해 관찰 기반 판단 대신 검수된 상품 태그(${tagCopy.join(", ")})의 기본 항목을 표시했습니다.`,
+      mode: "demo_fallback_v2",
+    };
+  }
+  const isCentralLowSignal =
+    decision.version.input_variant === "B" &&
+    decision.data_quality.gaze_valid_ratio === 0 &&
+    decision.reason_codes.length === 1 &&
+    decision.reason_codes[0] === "catalog_tag_alignment" &&
+    decision.evidence.some((item) => item.code === "data_quality");
+  if (isCentralLowSignal) {
+    return {
+      recommendation_id: decision.recommendation_id,
+      product_id: product.product_id,
+      tendency: "제한된 관찰로 진행한 카탈로그 선택",
+      reason: `유효한 시선 좌표는 부족했지만 실제 관찰의 결측 상태와 검수된 상품 태그(${tagCopy.join(", ")})를 Luna에 전달해 선택했습니다.`,
+      mode: "central_low_signal_v2",
+    };
+  }
   if (reactionCopy.length === 0) {
     throw new Error("A completed decision needs an observation reason code.");
   }

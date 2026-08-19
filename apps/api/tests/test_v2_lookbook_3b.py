@@ -24,7 +24,7 @@ from apps.api.app.v2_store import MemoryStoreRecommendationRepository, V2Recomme
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 VIDEO_ID = "mcm-lookbook-v2"
-MANIFEST_VERSION = "mcm-lookbook-v2-2026-08-18"
+MANIFEST_VERSION = "mcm-lookbook-v2-grid-details-v2-2026-08-19"
 PRODUCT_ID = "mcm-toni-medium-disco-visetos"
 APPROVED_METADATA_PATH = (
     REPOSITORY_ROOT
@@ -159,6 +159,10 @@ def approved_actual_client() -> tuple[TestClient, ManualJobDispatcher, Capturing
     repository = MemoryStoreRecommendationRepository(
         memory,
         aoi_metadata_paths={VIDEO_ID: APPROVED_METADATA_PATH},
+        # This fixture exercises the older, explicitly approved R3
+        # product-AOI path in isolation. Source-AOI approval and matching are
+        # covered separately with a test-only approved source fixture.
+        source_aoi_enabled=False,
     )
     app = create_app(
         memory,

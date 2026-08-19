@@ -3,6 +3,7 @@ import type {
   CalibrationResult,
   ExpressionSample,
   GazeSample,
+  GazeUnavailableSample,
   VisionHealth,
   VisionSessionContext,
 } from "../../app/kiosk-types.ts";
@@ -54,6 +55,7 @@ type SocketEvent = {
 };
 
 type SocketListener = (event: SocketEvent) => void;
+type GazeUnavailableListener = (sample: GazeUnavailableSample) => void;
 
 type VisionSocket = {
   readonly readyState: number;
@@ -340,6 +342,7 @@ export class LocalVisionStreamClient implements RemoteVisionClient {
   private readonly createWebSocket: (url: string) => VisionSocket;
   private readonly offeredFrameEncodings: readonly VisionFrameEncoding[];
   private readonly gazeListeners = new Set<GazeSampleListener>();
+  private readonly gazeUnavailableListeners = new Set<GazeUnavailableListener>();
   private readonly expressionListeners = new Set<ExpressionSampleListener>();
   private readonly controlWaiters = new Map<string, Deferred<ControlResultMessage>>();
   private sessionContext: VisionSessionContext | null = null;
@@ -460,6 +463,11 @@ export class LocalVisionStreamClient implements RemoteVisionClient {
   onGazeSample(listener: GazeSampleListener): Unsubscribe {
     this.gazeListeners.add(listener);
     return () => this.gazeListeners.delete(listener);
+  }
+
+  onGazeUnavailable(listener: GazeUnavailableListener): Unsubscribe {
+    this.gazeUnavailableListeners.add(listener);
+    return () => this.gazeUnavailableListeners.delete(listener);
   }
 
   onExpressionSample(listener: ExpressionSampleListener): Unsubscribe {
@@ -789,8 +797,23 @@ export class LocalVisionStreamClient implements RemoteVisionClient {
       if (!pending.callerAborted) {
         this.notifyGaze(sample as unknown as GazeSample);
       }
-    } else if (typeof message.gaze_reason !== "string") {
-      throw new Error("GazeSample absence reason is invalid.");
+    } else {
+      const reason = requireString(message.gaze_reason, "GazeSample absence reason is invalid.");
+      if (!/^[a-z][a-z0-9_]{0,63}$/.test(reason)) {
+        throw new Error("GazeSample absence reason is invalid.");
+      }
+      if (!pending.callerAborted) {
+        this.notifyGazeUnavailable({
+          session_id: pending.context.session_id,
+          sequence: pending.context.sequence,
+          frame_id: pending.context.frame_id,
+          captured_at_mono_ms: pending.context.captured_at_mono_ms,
+          video_id: pending.context.video_id,
+          video_time_ms: pending.context.video_time_ms,
+          playback_epoch: pending.context.playback_epoch,
+          reason,
+        });
+      }
     }
     pending.deferred.resolve({
       frame_id: pending.context.frame_id,
@@ -828,6 +851,16 @@ export class LocalVisionStreamClient implements RemoteVisionClient {
 
   private notifyGaze(sample: GazeSample): void {
     for (const listener of this.gazeListeners) {
+      try {
+        listener(sample);
+      } catch {
+        // A UI listener must not break the transport receive loop.
+      }
+    }
+  }
+
+  private notifyGazeUnavailable(sample: GazeUnavailableSample): void {
+    for (const listener of this.gazeUnavailableListeners) {
       try {
         listener(sample);
       } catch {

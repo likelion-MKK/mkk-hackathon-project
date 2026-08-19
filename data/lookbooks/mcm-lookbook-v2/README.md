@@ -1,9 +1,10 @@
 # 실제 MCM 룩북 v2
 
-`manifest.json`은 재생 identity만 제공하며 상품 exposure를 포함하지 않는다.
-`aoi-metadata-v2.json`은 기존 pending fixture로 보존한다. 양유상이 2026-08-18에
-Vision 3-B demo용으로 승인한 Toni top-left whole-product AOI 하나는 별도
-`aoi-metadata-v2-r3-approved.json` revision에만 들어 있다.
+`manifest.json`은 실제 33.5초 영상에서 동료가 작성한 86개 시간·polygon exposure를
+`video_normalized` 좌표로 보존한다. `source-aoi-metadata-v1.json`은 exposure prefix를
+10개 source 가방의 색상·형태·종류·패턴·액세서리에 연결한다. 둘 모두 source 장면
+근거이며 catalog 상품 ID를 확정하지 않는다. Backend가 이 근거를 다시 판정하고 검수된
+10개 catalog와 비교하며 Kiosk candidate는 권위 근거로 사용하지 않는다.
 
 - canonical video ID: `mcm-lookbook-v2`
 - byte length: 5,754,164
@@ -11,12 +12,22 @@ Vision 3-B demo용으로 승인한 Toni top-left whole-product AOI 하나는 별
 - resolution / FPS: 1280×720 / 24FPS
 - SHA-256: `dd40011e9a7767cf82f9cc7d04c15d7d987c86756170f3c98012644ed04c9c89`
 
-승인 r3 revision에는 `[5000,12000)`의
+노출 구간은 `[5000,29400)`뿐이다. `[0,5000)`과 `[29400,33500)`은 의도적으로
+AOI가 없으며 정상 미매칭으로 처리한다. polygon 밖과 영상 content rect 밖 좌표도
+미매칭이고 nearest-product 또는 중립 좌표 fallback을 만들지 않는다.
+
+PR #51의 동영상은 canonical 파일과 exact byte identity는 다르지만 804 frame,
+33.5초, 1280×720, 24FPS timeline과 표본 frame의 시각 내용이 일치하는 재인코딩본으로
+확인했다. polygon·source feature 값은 수정하지 않고 가져왔다. 다만 PR의 승인자 값은
+실제 owner provenance가 아닌 placeholder이므로 source metadata는 `pending_review`다.
+운영 Backend는 승인 전 유효 영상 observation을 `aoi_metadata_unapproved`로 종료한다.
+
+기존 승인 r3 revision에는 `[5000,12000)`의
 `mcm-lookbook-v2-toni-grid-top-left` / `mcm-toni-medium-disco-visetos` /
 `whole_product` / `monogram`, `shopper`, `tote`만 들어 있다. 나머지 Toni 후보,
 Ella, Aren backpack, component 후보와 미확정 영역은 여전히 pending이다. 기본
 Backend는 pending metadata를 사용하며, 3-B test만 approved revision 경로를 명시적으로
-주입한다. 승인 전 경로는 `aoi_metadata_unapproved`로 종료하며 임의 product ID를 만들지 않는다.
+주입한다. source-AOI 추천 경로도 test-only 승인 fixture로만 검증한다.
 
 R4는 실제 원본·Kiosk 사본을 다시 대조해 만든
 [`aoi-proposal-2026-08-18-r4.json`](./aoi-proposal-2026-08-18-r4.json),

@@ -4,6 +4,7 @@ import type {
   FrameObservationV2,
   GazeDerivedV2,
   GazeSample,
+  GazeUnavailableSample,
   LookbookManifest,
   ObservationBatchV2,
   AttentionObservationV2,
@@ -21,6 +22,7 @@ type BuildObservationBatchesV2Options = {
   sessionId: string;
   manifest: LookbookManifest;
   gazeSamples: readonly GazeSample[];
+  gazeUnavailableSamples?: readonly GazeUnavailableSample[];
   expressionSamples: readonly ExpressionSample[];
   videoLayoutsByFrameId?: ReadonlyMap<string, VideoLayout>;
 };
@@ -33,6 +35,7 @@ type FusedFrame = {
   playback_epoch: number;
   source_sequence: number;
   gaze?: GazeSample;
+  gaze_reason?: string;
   expression?: ExpressionSample;
 };
 
@@ -130,10 +133,52 @@ function addSampleToFrames(
   frame.expression = expressionSample;
 }
 
+function addUnavailableGazeToFrames(
+  frames: Map<string, FusedFrame>,
+  sample: GazeUnavailableSample,
+  options: BuildObservationBatchesV2Options,
+): void {
+  if (sample.session_id !== options.sessionId) {
+    throw new Error("Unavailable gaze sample must match the batch session_id.");
+  }
+  if (sample.video_id !== options.manifest.video_id) {
+    throw new Error("Unavailable gaze sample must match the manifest video_id.");
+  }
+  const key = `${sample.playback_epoch}:${sample.frame_id}`;
+  const existing = frames.get(key);
+  if (existing) {
+    if (
+      existing.captured_at_mono_ms !== sample.captured_at_mono_ms ||
+      existing.video_time_ms !== sample.video_time_ms ||
+      existing.playback_epoch !== sample.playback_epoch ||
+      existing.source_sequence !== sample.sequence
+    ) {
+      throw new Error("Unavailable gaze must preserve one capture context.");
+    }
+    if (existing.gaze || (existing.gaze_reason && existing.gaze_reason !== sample.reason)) {
+      throw new Error("One frame cannot contain conflicting gaze results.");
+    }
+    existing.gaze_reason = sample.reason;
+    return;
+  }
+  frames.set(key, {
+    key,
+    frame_id: sample.frame_id,
+    captured_at_mono_ms: sample.captured_at_mono_ms,
+    video_time_ms: sample.video_time_ms,
+    playback_epoch: sample.playback_epoch,
+    source_sequence: sample.sequence,
+    gaze_reason: sample.reason,
+  });
+}
+
 function fuseByFrameId(options: BuildObservationBatchesV2Options): FusedFrame[] {
   const frames = new Map<string, FusedFrame>();
   for (const sample of options.gazeSamples) {
     addSampleToFrames(frames, sample, "gaze", options);
+  }
+  for (const sample of options.gazeUnavailableSamples ?? []) {
+    addUnavailableGazeToFrames(frames, sample, options);
   }
   for (const sample of options.expressionSamples) {
     addSampleToFrames(frames, sample, "expression", options);
@@ -377,7 +422,9 @@ function buildObservations(options: BuildObservationBatchesV2Options): FrameObse
             calibration_id: validGaze.calibration_id,
           }
         : null,
-      gaze_reason: validGaze ? null : (gazeSample?.reason ?? "not_observed"),
+      gaze_reason: validGaze
+        ? null
+        : (gazeSample?.reason ?? frame.gaze_reason ?? "not_observed"),
       attention,
       attention_reason: attention ? null : attentionResult.reason,
       expression: validExpression

@@ -19,6 +19,11 @@ from urllib.request import Request, urlopen
 
 from pydantic import ValidationError
 
+from apps.api.app.source_aoi import (
+    ProductMatchingItemV1,
+    SourceVisualEvidenceV1,
+    product_feature_match_score,
+)
 from apps.api.app.v2_models import (
     CentralRecommendationOutputV2,
     CentralRecommendationRequestV2,
@@ -26,22 +31,20 @@ from apps.api.app.v2_models import (
 
 
 MAX_MODEL_RESPONSE_BYTES = 64 * 1024
-MAX_PROVIDER_RESPONSE_ENVELOPE_BYTES = 1 * 1024 * 1024
-MAX_PROVIDER_OUTPUT_TEXT_BYTES = 16 * 1024
 MAX_PROVIDER_ERROR_BODY_BYTES = 8 * 1024
-APPROVED_PROMPT_VERSION = "central-recommender-ko-v4"
+APPROVED_PROMPT_VERSION = "central-recommender-ko-v6"
 LUNA_MODEL_ID = "gpt-5.6-luna"
 LUNA_REASONING_EFFORT = "max"
 LUNA_REASONING_CONTEXT = "current_turn"
 LUNA_INPUT_VARIANT = "C"
 LUNA_RESPONSES_URL = "https://api.openai.com/v1/responses"
-LUNA_PROMPT_SHA256 = "bc1186d1e3f1e908e8a865ae8f89c35f7e6c3172ccd010018101141d5a350149"
+LUNA_PROMPT_SHA256 = "67a3dbeffded1e8bb290cb5286ee6cf487b3b92b73f3c808ee7683c8a132e762"
 LUNA_PROMPT_PATH = (
     Path(__file__).resolve().parents[3]
     / "experiments"
     / "recommendation"
     / "prompts"
-    / "central-recommender.ko.v4.txt"
+    / "central-recommender.ko.v6.txt"
 )
 _SAFE_PROVIDER_ERROR_TOKEN = re.compile(r"^[A-Za-z0-9_.-]{1,120}$")
 _SAFE_PROVIDER_ERROR_PARAM = re.compile(r"^[A-Za-z0-9_.\[\]-]{1,200}$")
@@ -311,13 +314,89 @@ def _openai_output_schema(request: CentralRecommendationRequestV2) -> dict[str, 
 
     products = list(request.products)
     windows = list(request.evidence.evidence_windows or [])
+    frames = list(request.evidence.timeline or [])
     if len(products) != 10 or len({item.product_id for item in products}) != 10:
         raise CentralModelError("catalog_mismatch", "central model catalog must contain exactly ten products")
-    if request.evidence.input_variant != LUNA_INPUT_VARIANT or not windows:
-        raise CentralModelError("invalid_model_output", "Luna production input must be canonical variant C")
+    if request.evidence.input_variant == "C":
+        if not windows or frames:
+            raise CentralModelError("invalid_model_output", "variant C requires evidence windows only")
+        reference_kind = "window"
+        reference_ids = [window.window_id for window in windows]
+        reason_code_enum = [
+            "observed_attention_lead", "return_candidate_support",
+            "movement_pattern_support", "observable_action_support",
+            "catalog_tag_alignment", "sufficient_data_quality",
+        ]
+        evidence_code_enum = [
+            "observed_attention", "return_candidate", "gaze_movement",
+            "face_action_change", "product_tag_match", "data_quality",
+        ]
+    elif (
+        request.evidence.input_variant == "B"
+        and request.source_visual_evidence is not None
+        and request.matching_products is not None
+    ):
+        if not frames or windows:
+            raise CentralModelError(
+                "invalid_model_output",
+                "source-AOI variant B requires a derived timeline only",
+            )
+        try:
+            source_evidence = SourceVisualEvidenceV1.model_validate(
+                request.source_visual_evidence
+            )
+            matching_products = [
+                ProductMatchingItemV1.model_validate(item)
+                for item in request.matching_products
+            ]
+        except ValidationError as exc:
+            raise CentralModelError(
+                "invalid_model_output",
+                "source matching input violated its schema",
+            ) from exc
+        if {item.product_id for item in matching_products} != {
+            item.product_id for item in products
+        }:
+            raise CentralModelError(
+                "catalog_mismatch",
+                "matching profiles differ from the canonical catalog",
+            )
+        timeline_ids = {frame.frame_id for frame in frames}
+        reference_ids = sorted(source_evidence.grounded_frame_ids & timeline_ids)
+        if not reference_ids:
+            raise CentralModelError(
+                "invalid_model_output",
+                "source-AOI evidence has no grounded timeline frame",
+            )
+        reference_kind = "frame"
+        reason_code_enum = [
+            "observed_attention_lead",
+            "return_candidate_support",
+            "movement_pattern_support",
+            "catalog_tag_alignment",
+            "sufficient_data_quality",
+        ]
+        evidence_code_enum = [
+            "observed_attention",
+            "return_candidate",
+            "gaze_movement",
+            "product_tag_match",
+            "data_quality",
+        ]
+    elif (
+        request.evidence.input_variant == "B"
+        and request.evidence.data_quality.gaze_valid_ratio == 0
+    ):
+        if not frames or windows:
+            raise CentralModelError("invalid_model_output", "variant B requires a derived timeline only")
+        reference_kind = "frame"
+        reference_ids = [frame.frame_id for frame in frames]
+        reason_code_enum = ["catalog_tag_alignment"]
+        evidence_code_enum = ["product_tag_match", "data_quality"]
+    else:
+        raise CentralModelError("invalid_model_output", "Luna production input must be variant B or C")
     product_ids = [item.product_id for item in products]
     tags = sorted({tag for product in products for tag in product.controlled_tags})
-    window_ids = [window.window_id for window in windows]
     return {
         "type": "object",
         "additionalProperties": False,
@@ -330,11 +409,7 @@ def _openai_output_schema(request: CentralRecommendationRequestV2) -> dict[str, 
             "reason": {"type": "string"},
             "reason_codes": {
                 "type": "array",
-                "items": {"type": "string", "enum": [
-                    "observed_attention_lead", "return_candidate_support",
-                    "movement_pattern_support", "observable_action_support",
-                    "catalog_tag_alignment", "sufficient_data_quality",
-                ]},
+                "items": {"type": "string", "enum": reason_code_enum},
             },
             "evidence": {
                 "type": "array",
@@ -342,10 +417,7 @@ def _openai_output_schema(request: CentralRecommendationRequestV2) -> dict[str, 
                     "type": "object", "additionalProperties": False,
                     "required": ["code", "product_id", "evidence_refs", "statement"],
                     "properties": {
-                        "code": {"type": "string", "enum": [
-                            "observed_attention", "return_candidate", "gaze_movement",
-                            "face_action_change", "product_tag_match", "data_quality",
-                        ]},
+                        "code": {"type": "string", "enum": evidence_code_enum},
                         "product_id": {"type": "string", "enum": product_ids},
                         "evidence_refs": {
                             "type": "array",
@@ -353,8 +425,8 @@ def _openai_output_schema(request: CentralRecommendationRequestV2) -> dict[str, 
                                 "type": "object", "additionalProperties": False,
                                 "required": ["kind", "ref_id"],
                                 "properties": {
-                                    "kind": {"type": "string", "enum": ["window"]},
-                                    "ref_id": {"type": "string", "enum": window_ids},
+                                    "kind": {"type": "string", "enum": [reference_kind]},
+                                    "ref_id": {"type": "string", "enum": reference_ids},
                                 },
                             },
                         },
@@ -391,6 +463,21 @@ def _load_luna_prompt() -> str:
     return prompt
 
 
+def _instructions_for_request(request: CentralRecommendationRequestV2) -> str:
+    instructions = _load_luna_prompt()
+    if request.source_visual_evidence is None:
+        return instructions
+    return instructions + """
+
+이번 요청의 B는 저신호 fallback이 아니라 승인된 source AOI 경로다.
+- source_visual_evidence의 grounded frame과 집계된 시각 특징은 실제 유효 gaze에서 파생됐다.
+- matching_products의 recommendation_profile로 10개 상품을 비교한다.
+- reason_codes에는 observed_attention_lead와 catalog_tag_alignment를 모두 포함한다.
+- evidence에는 grounded frame을 참조하는 observed_attention과 product_tag_match를 모두 포함한다.
+- 원본 영상에 없던 상품 ID를 frame에 직접 관찰했다고 표현하지 말고, source 특징과 catalog profile의 일치로 설명한다.
+"""
+
+
 @dataclass(frozen=True, slots=True)
 class OpenAILunaCentralClient:
     """Cancellable OpenAI Responses API adapter for the selected Luna config."""
@@ -402,8 +489,6 @@ class OpenAILunaCentralClient:
     reasoning_effort: str = LUNA_REASONING_EFFORT
     reasoning_context: str = LUNA_REASONING_CONTEXT
     endpoint: str = LUNA_RESPONSES_URL
-    response_envelope_bytes: int = MAX_PROVIDER_RESPONSE_ENVELOPE_BYTES
-    output_text_bytes: int = MAX_PROVIDER_OUTPUT_TEXT_BYTES
 
     def __post_init__(self) -> None:
         if not self.api_key.strip():
@@ -420,17 +505,14 @@ class OpenAILunaCentralClient:
             raise ValueError("CENTRAL_AI_REASONING_CONTEXT must be current_turn")
         if self.prompt_version != APPROVED_PROMPT_VERSION:
             raise ValueError(f"CENTRAL_AI_PROMPT_VERSION must match approved {APPROVED_PROMPT_VERSION}")
-        if self.response_envelope_bytes <= 0 or self.output_text_bytes <= 0:
-            raise ValueError("provider response limits must be positive")
-
     async def recommend_async(self, request: CentralRecommendationRequestV2) -> object:
-        if request.evidence.input_variant != LUNA_INPUT_VARIANT or request.evidence.timeline is not None:
-            raise CentralModelError("invalid_model_output", "Luna provider accepts only canonical variant C")
+        if request.evidence.input_variant not in {"B", "C"}:
+            raise CentralModelError("invalid_model_output", "Luna provider accepts only variant B or C")
         payload = request.model_dump(mode="json", exclude_none=True)
         body = {
             "model": self.model_id,
             "input": [
-                {"role": "system", "content": _load_luna_prompt()},
+                {"role": "system", "content": _instructions_for_request(request)},
                 {"role": "user", "content": _canonical_json(payload)},
             ],
             "reasoning": {
@@ -493,14 +575,7 @@ class OpenAILunaCentralClient:
                             provider_error_code=provider_error_code,
                             provider_error_param=provider_error_param,
                         )
-                    chunks: list[bytes] = []
-                    total = 0
-                    async for chunk in response.aiter_bytes():
-                        total += len(chunk)
-                        if total > self.response_envelope_bytes:
-                            raise CentralModelError("invalid_model_output", "central model response is too large")
-                        chunks.append(chunk)
-                    raw = b"".join(chunks)
+                    raw = await response.aread()
         except CentralModelError:
             raise
         except asyncio.CancelledError:
@@ -548,8 +623,6 @@ class OpenAILunaCentralClient:
         if len(texts) != 1:
             raise CentralModelError("invalid_model_output", "central model output_text count is invalid")
         text = texts[0]
-        if len(text.encode("utf-8")) > self.output_text_bytes:
-            raise CentralModelError("invalid_model_output", "central model output text is too large")
         try:
             value = json.loads(text)
         except json.JSONDecodeError as exc:
@@ -589,6 +662,86 @@ class DeterministicCentralStub:
     prompt_version = "test-only-prompt-v1"
 
     def recommend(self, request: CentralRecommendationRequestV2) -> object:
+        if request.source_visual_evidence is not None:
+            try:
+                source_evidence = SourceVisualEvidenceV1.model_validate(
+                    request.source_visual_evidence
+                )
+                matching_products = [
+                    ProductMatchingItemV1.model_validate(item)
+                    for item in (request.matching_products or [])
+                ]
+            except ValidationError as exc:
+                raise CentralModelError(
+                    "invalid_model_output",
+                    "test source input violated its schema",
+                ) from exc
+            ranked = sorted(
+                (
+                    (*product_feature_match_score(product, source_evidence), product)
+                    for product in matching_products
+                ),
+                key=lambda item: (-item[0], item[2].product_id),
+            )
+            if not ranked or ranked[0][0] <= 0:
+                raise CentralModelError(
+                    "invalid_model_output",
+                    "test source input has no matching catalog product",
+                )
+            _, matched_values, matching_product = ranked[0]
+            profile = next(
+                product
+                for product in request.products
+                if product.product_id == matching_product.product_id
+            )
+            matched_tags = [
+                tag for tag in profile.controlled_tags if tag in set(matched_values)
+            ] or [
+                tag
+                for tag in profile.controlled_tags
+                if tag in matching_product.controlled_tags
+            ][:1]
+            if not matched_tags:
+                raise CentralModelError(
+                    "invalid_model_output",
+                    "matching product has no grounded catalog tag",
+                )
+            frame_id = sorted(source_evidence.grounded_frame_ids)[0]
+            source_count = len(source_evidence.source_aois)
+            return {
+                "product_id": profile.product_id,
+                "reason": "승인된 source AOI에서 관찰된 시선 특징과 상품 정보를 함께 고려한 추천입니다.",
+                "reason_codes": [
+                    "observed_attention_lead",
+                    "catalog_tag_alignment",
+                ],
+                "evidence": [
+                    {
+                        "code": "observed_attention",
+                        "product_id": profile.product_id,
+                        "evidence_refs": [{"kind": "frame", "ref_id": frame_id}],
+                        "statement": "승인된 source AOI 안에서 유효 시선 frame이 관찰됐습니다.",
+                    },
+                    {
+                        "code": "product_tag_match",
+                        "product_id": profile.product_id,
+                        "evidence_refs": [{"kind": "frame", "ref_id": frame_id}],
+                        "statement": "관찰된 source AOI의 시각 특징과 검수된 상품 태그가 일치했습니다.",
+                    }
+                ],
+                "style": {
+                    "matched_tags": matched_tags,
+                    "summary": "세션에서 관찰된 시각 특징과 연결되는 검수된 상품 특성입니다.",
+                },
+                "exploration_tendency_code": (
+                    "focused_single_product"
+                    if source_count == 1
+                    else "comparative_exploration"
+                    if source_count <= 3
+                    else "broad_exploration"
+                ),
+            }
+
         signals = [
             item
             for item in request.evidence.summary
@@ -656,6 +809,14 @@ class DeterministicCentralStub:
 
 def configured_central_client() -> CentralRecommendationClient:
     provider = os.getenv("CENTRAL_AI_PROVIDER", "").strip().lower()
+    if provider == "local_demo_stub":
+        if os.getenv("MCM_LOCAL_DEMO_MODE", "").strip() != "1":
+            raise ValueError(
+                "CENTRAL_AI_PROVIDER=local_demo_stub requires MCM_LOCAL_DEMO_MODE=1"
+            )
+        if os.getenv("CENTRAL_AI_ENDPOINT", "").strip():
+            raise ValueError("local_demo_stub cannot use CENTRAL_AI_ENDPOINT")
+        return DeterministicCentralStub()
     if provider in {"openai_luna", "luna"}:
         model_id = os.getenv("CENTRAL_AI_MODEL_ID", LUNA_MODEL_ID).strip()
         prompt_version = os.getenv("CENTRAL_AI_PROMPT_VERSION", APPROVED_PROMPT_VERSION).strip()
@@ -674,7 +835,10 @@ def configured_central_client() -> CentralRecommendationClient:
             reasoning_context=os.getenv("CENTRAL_AI_REASONING_CONTEXT", LUNA_REASONING_CONTEXT).strip(),
         )
     if provider and provider not in {"self_hosted", "unavailable"}:
-        raise ValueError("CENTRAL_AI_PROVIDER must be openai_luna, self_hosted or unavailable")
+        raise ValueError(
+            "CENTRAL_AI_PROVIDER must be openai_luna, self_hosted, "
+            "local_demo_stub or unavailable"
+        )
     endpoint = os.getenv("CENTRAL_AI_ENDPOINT", "").strip()
     if not endpoint:
         return UnavailableCentralClient()
@@ -726,15 +890,91 @@ def validate_central_output(
     profile = profiles.get(output.product_id)
     if profile is None:
         raise CentralModelError("catalog_mismatch", "central model selected an unknown product")
-    eligible_product_ids = {
-        item.product_id
-        for item in request.evidence.summary
-        if item.gaze is not None and item.gaze.valid_observation_count > 0
-    }
-    if output.product_id not in eligible_product_ids:
-        raise CentralModelError(
-            "invalid_model_output", "central model selected a product without observation evidence"
+    source_evidence: SourceVisualEvidenceV1 | None = None
+    if request.source_visual_evidence is not None:
+        try:
+            source_evidence = SourceVisualEvidenceV1.model_validate(
+                request.source_visual_evidence
+            )
+            matching_products = [
+                ProductMatchingItemV1.model_validate(item)
+                for item in (request.matching_products or [])
+            ]
+        except ValidationError as exc:
+            raise CentralModelError(
+                "invalid_model_output",
+                "source matching input violated its schema",
+            ) from exc
+        if {item.product_id for item in matching_products} != set(profiles):
+            raise CentralModelError(
+                "catalog_mismatch",
+                "matching profiles differ from the canonical catalog",
+            )
+        matching_by_id = {item.product_id: item for item in matching_products}
+        selected = matching_by_id.get(output.product_id)
+        if selected is None:
+            raise CentralModelError(
+                "catalog_mismatch",
+                "selected product has no matching profile",
+            )
+        selected_score, matched_values = product_feature_match_score(
+            selected,
+            source_evidence,
         )
+        if selected_score <= 0 or not matched_values:
+            raise CentralModelError(
+                "invalid_model_output",
+                "central model selected a product without grounded feature overlap",
+            )
+        if not {
+            "observed_attention_lead",
+            "catalog_tag_alignment",
+        }.issubset(output.reason_codes):
+            raise CentralModelError(
+                "invalid_model_output",
+                "source-AOI recommendation requires attention and catalog grounding",
+            )
+        source_codes = {item.code for item in output.evidence}
+        if not {"observed_attention", "product_tag_match"}.issubset(source_codes):
+            raise CentralModelError(
+                "invalid_model_output",
+                "source-AOI recommendation requires observation and product-match evidence",
+            )
+    elif (
+        request.evidence.input_variant == "B"
+        and request.evidence.data_quality.gaze_valid_ratio == 0
+    ):
+        if not request.evidence.timeline:
+            raise CentralModelError(
+                "invalid_model_output", "low-signal recommendation requires a real derived timeline"
+            )
+        if "catalog_tag_alignment" not in output.reason_codes:
+            raise CentralModelError(
+                "invalid_model_output", "low-signal recommendation requires catalog grounding"
+            )
+        if not any(item.code == "data_quality" for item in output.evidence):
+            raise CentralModelError(
+                "invalid_model_output", "low-signal recommendation requires data-quality evidence"
+            )
+        disallowed_reason_codes = set(output.reason_codes) - {"catalog_tag_alignment"}
+        disallowed_evidence_codes = {
+            item.code for item in output.evidence
+        } - {"data_quality", "product_tag_match"}
+        if disallowed_reason_codes or disallowed_evidence_codes:
+            raise CentralModelError(
+                "invalid_model_output", "low-signal recommendation claimed unavailable observations"
+            )
+    else:
+        eligible_product_ids = {
+            item.product_id
+            for item in request.evidence.summary
+            if item.gaze is not None and item.gaze.valid_observation_count > 0
+        }
+        if output.product_id not in eligible_product_ids:
+            raise CentralModelError(
+                "invalid_model_output",
+                "central model selected a product without observation evidence",
+            )
 
     combined_text = " ".join(
         [output.reason, output.style.summary]
@@ -765,15 +1005,33 @@ def validate_central_output(
     }
     for item in output.evidence:
         for ref in item.evidence_refs:
+            if source_evidence is not None:
+                if (
+                    ref.kind != "frame"
+                    or ref.ref_id not in source_evidence.grounded_frame_ids
+                ):
+                    raise CentralModelError(
+                        "invalid_model_output",
+                        "central model referenced an ungrounded source AOI frame",
+                    )
+                continue
             if request.evidence.input_variant == "B":
                 if ref.kind != "frame":
                     raise CentralModelError(
                         "invalid_model_output", "variant B requires frame evidence references"
                     )
                 frame = frames.get(ref.ref_id)
+                if frame is None:
+                    raise CentralModelError(
+                        "invalid_model_output", "central model referenced an ungrounded frame"
+                    )
                 if (
-                    frame is None
-                    or frame.attention is None
+                    request.evidence.data_quality.gaze_valid_ratio == 0
+                    and item.code in {"data_quality", "product_tag_match"}
+                ):
+                    continue
+                if (
+                    frame.attention is None
                     or len(frame.attention.candidates) != 1
                     or frame.attention.candidates[0].product_id != output.product_id
                 ):

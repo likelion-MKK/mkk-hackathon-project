@@ -14,6 +14,7 @@ from apps.api.app.v2_central import (
     OpenAILunaCentralClient,
     validate_central_output,
 )
+from apps.api.app.v2_models import FrameObservationV2
 from apps.api.scripts.luna_canary import (
     EXPECTED_PRODUCT_ID,
     build_canary_request,
@@ -72,7 +73,7 @@ def _client() -> OpenAILunaCentralClient:
         model_id=MODEL_ID,
         reasoning_effort="max",
         reasoning_context="current_turn",
-        prompt_version="central-recommender-ko-v4",
+        prompt_version="central-recommender-ko-v6",
     )
 
 
@@ -95,12 +96,16 @@ def _install_transport(
     monkeypatch.setattr(httpx, "AsyncClient", async_client_factory)
 
 
-def _invoke(monkeypatch: pytest.MonkeyPatch, response: httpx.Response | Callable[[httpx.Request], httpx.Response]):
+def _invoke(
+    monkeypatch: pytest.MonkeyPatch,
+    response: httpx.Response | Callable[[httpx.Request], httpx.Response],
+    request_model: object | None = None,
+):
     def handler(request: httpx.Request) -> httpx.Response:
         return response(request) if callable(response) else response
 
     _install_transport(monkeypatch, handler)
-    return asyncio.run(_client().recommend_async(build_canary_request()))
+    return asyncio.run(_client().recommend_async(request_model or build_canary_request()))
 
 
 def test_luna_provider_sends_canonical_variant_c_and_accepts_one_output_text(
@@ -295,33 +300,100 @@ def test_luna_provider_rejects_invalid_output_text_json(monkeypatch: pytest.Monk
     assert caught.value.reason_code == "invalid_model_output"
 
 
-def test_luna_provider_rejects_output_text_over_16_kib(monkeypatch: pytest.MonkeyPatch) -> None:
-    envelope = {
-        "status": "completed",
-        "model": MODEL_ID,
-        "output": [
-            {
-                "type": "message",
-                "content": [{"type": "output_text", "text": "x" * (16 * 1024 + 1)}],
-            }
-        ],
-    }
+def test_luna_provider_does_not_cap_output_text_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
+    request_model = build_canary_request()
+    valid_output = DeterministicCentralStub().recommend(request_model)
+    text = (" " * (16 * 1024 + 1)) + json.dumps(valid_output, ensure_ascii=False)
+    envelope = _completed_envelope(valid_output)
+    envelope["output"][0]["content"][0]["text"] = text
 
-    with pytest.raises(CentralModelError) as caught:
-        _invoke(monkeypatch, httpx.Response(200, json=envelope))
-
-    assert caught.value.reason_code == "invalid_model_output"
+    raw_output = _invoke(monkeypatch, httpx.Response(200, json=envelope))
+    assert validate_central_output(raw_output, request=request_model).product_id == EXPECTED_PRODUCT_ID
 
 
-def test_luna_provider_rejects_response_envelope_over_safety_limit(
+def test_luna_provider_does_not_cap_response_envelope_bytes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    oversized_body = b"x" * (1024 * 1024 + 1)
+    request_model = build_canary_request()
+    valid_output = DeterministicCentralStub().recommend(request_model)
+    envelope = _completed_envelope(valid_output)
+    envelope["unused_provider_metadata"] = "x" * (1024 * 1024 + 1)
 
-    with pytest.raises(CentralModelError) as caught:
-        _invoke(monkeypatch, httpx.Response(200, content=oversized_body))
+    raw_output = _invoke(monkeypatch, httpx.Response(200, json=envelope))
+    assert validate_central_output(raw_output, request=request_model).product_id == EXPECTED_PRODUCT_ID
 
-    assert caught.value.reason_code == "invalid_model_output"
+
+def test_luna_provider_accepts_low_signal_variant_b_with_real_frame_reference(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request_model = build_canary_request()
+    frame = FrameObservationV2.model_validate(
+        {
+            "schema_version": "2.0",
+            "frame_id": "frame-low-signal-0001",
+            "sequence": 0,
+            "captured_at_mono_ms": 100.0,
+            "session_offset_ms": 100.0,
+            "video_time_ms": 100,
+            "playback_epoch": 0,
+            "gaze": None,
+            "gaze_reason": "gaze_unavailable",
+            "expression": None,
+            "expression_reason": "not_observed",
+            "attention": None,
+            "attention_reason": "gaze_unavailable",
+            "derived": None,
+            "derived_reason": "invalid_or_missing_modality",
+        }
+    )
+    evidence = request_model.evidence.model_copy(
+        update={
+            "input_variant": "B",
+            "evidence_windows": None,
+            "timeline": [frame],
+            "data_quality": request_model.evidence.data_quality.model_copy(
+                update={
+                    "gaze_valid_ratio": 0.0,
+                    "expression_valid_ratio": 0.0,
+                    "matched_frame_ratio": 0.0,
+                    "ambiguous_product_ratio": 0.0,
+                }
+            ),
+        }
+    )
+    request_model = request_model.model_copy(update={"evidence": evidence})
+    product = request_model.products[0]
+    low_signal_output = {
+        "product_id": product.product_id,
+        "reason": "유효 좌표가 없어 결측 상태와 검수된 상품 태그만 사용했습니다.",
+        "reason_codes": ["catalog_tag_alignment"],
+        "evidence": [
+            {
+                "code": "data_quality",
+                "product_id": product.product_id,
+                "evidence_refs": [{"kind": "frame", "ref_id": frame.frame_id}],
+                "statement": "실제 관찰 frame의 gaze_unavailable 상태를 유지했습니다.",
+            }
+        ],
+        "style": {
+            "matched_tags": [product.controlled_tags[0]],
+            "summary": "검수된 상품 태그 기반 저신호 선택",
+        },
+        "exploration_tendency_code": "focused_single_product",
+    }
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json=_completed_envelope(low_signal_output))
+
+    raw_output = _invoke(monkeypatch, handler, request_model)
+    output = validate_central_output(raw_output, request=request_model)
+    assert output.product_id == product.product_id
+    schema = captured["body"]["text"]["format"]["schema"]
+    refs = schema["properties"]["evidence"]["items"]["properties"]["evidence_refs"]
+    assert refs["items"]["properties"]["kind"]["enum"] == ["frame"]
+    assert refs["items"]["properties"]["ref_id"]["enum"] == [frame.frame_id]
 
 
 def test_canary_fixture_is_synthetic_variant_c_with_ten_products() -> None:

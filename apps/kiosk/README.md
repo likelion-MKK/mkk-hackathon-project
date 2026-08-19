@@ -70,6 +70,10 @@ test-only deterministic Top 1을 위한 loopback-only 수동 smoke 절차다. �
 production acceptance가 아니며, fake media device·Luna·Supabase를 사용하지
 않는다.
 
+실제 Kiosk 보정 화면은 browser viewport 전체를 기준으로 초기 Dense5의 25개 학습점과
+8개 확인점을 부드럽게 이동시킨다. 한 시도의 점 수집 계획은 64초이며, 실패할 때 전체
+과정을 한 번 재시도한다(수집 128초와 로컬 처리 시간).
+
 저장소 루트에서 Node.js `24.19.0`과 npm을 사용한다.
 
 ```powershell

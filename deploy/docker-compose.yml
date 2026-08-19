@@ -10,7 +10,7 @@ services:
       LOOKBOOK_VIDEO_PATH: /srv/mcm/media/mcm-lookbook-v2.mp4
       REQUIRE_LOOKBOOK_MEDIA_READINESS: "true"
     volumes:
-      - /srv/mcm/media:/srv/mcm/media:ro
+      - ${MCM_SHARED_ROOT:-/srv/mcm/shared}/media:/srv/mcm/media:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=5)"]
       interval: 30s
@@ -27,7 +27,7 @@ services:
     command: ["uvicorn", "apps.vision_gateway.local_server:app", "--host", "0.0.0.0", "--port", "8765", "--workers", "1"]
     expose: ["8765"]
     volumes:
-      - /srv/mcm/models:/srv/mcm/models:ro
+      - ${MCM_SHARED_ROOT:-/srv/mcm/shared}/models:/srv/mcm/models:ro
     depends_on:
       - eye-worker
     restart: unless-stopped
@@ -42,7 +42,7 @@ services:
       EYE_FACE_MODEL_PATH: /srv/mcm/models/face_landmarker.task
     expose: ["8766"]
     volumes:
-      - /srv/mcm/models:/srv/mcm/models:ro
+      - ${MCM_SHARED_ROOT:-/srv/mcm/shared}/models:/srv/mcm/models:ro
     restart: unless-stopped
 
   web:
@@ -58,11 +58,30 @@ services:
         VITE_LOOKBOOK_VIDEO_URL: /media/mcm-lookbook-v2.mp4
         VITE_API_BASE_URL: ""
         VITE_VISION_GATEWAY_WS_URL: ""
-    ports:
-      - "80:80"
+    expose: ["8080"]
     volumes:
-      - /srv/mcm/media:/usr/share/nginx/html/media:ro
+      - ${MCM_SHARED_ROOT:-/srv/mcm/shared}/media:/usr/share/nginx/html/media:ro
     depends_on:
       - api
       - vision-gateway
     restart: unless-stopped
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    environment:
+      KIOSK_DOMAIN: ${KIOSK_DOMAIN:?KIOSK_DOMAIN is required}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -130,6 +130,20 @@ def _configured_input_variant() -> str:
     return variant
 
 
+def _configured_insufficient_signal_demo_fallback() -> bool:
+    enabled = os.getenv("MCM_LOCAL_DEMO_ALLOW_INSUFFICIENT_SIGNAL", "").strip() == "1"
+    if not enabled:
+        return False
+    provider = os.getenv("CENTRAL_AI_PROVIDER", "").strip().lower()
+    demo_mode = os.getenv("MCM_LOCAL_DEMO_MODE", "").strip() == "1"
+    if provider != "local_demo_stub" or not demo_mode:
+        raise ValueError(
+            "MCM_LOCAL_DEMO_ALLOW_INSUFFICIENT_SIGNAL=1 requires "
+            "CENTRAL_AI_PROVIDER=local_demo_stub and MCM_LOCAL_DEMO_MODE=1"
+        )
+    return True
+
+
 def create_app(
     store: MemoryStore | None = None,
     recommendation_engine: RecommendationEngine | None = None,
@@ -167,6 +181,7 @@ def create_app(
             "V2_JOB_RETENTION_SECONDS", 86_400.0
         ),
         input_variant=central_input_variant or _configured_input_variant(),
+        allow_insufficient_signal_demo=_configured_insufficient_signal_demo_fallback(),
     )
     app.state.maintenance_task = None
 

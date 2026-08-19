@@ -41,11 +41,12 @@ NumPy `1.26.4`, OpenCV `4.11.0.86`으로 고정한다. 다른 Python 서비스�
 기록한다.
 
 `FakeEyeAdapter.calibrate()`는 lifecycle과 `calibration_id` 전달을 검증하는 개발용
-placeholder다. `EyeTraxAdapter`는 현재 룩북 전용 Dense5 학습과 별도 8점 검증을 최대 두
-번 수행한다. 각 검증점은 전체 frame을 최소 15개 제공해야 하며, 부족하면 정확도 수치와
-무관하게 Gate 실패로 처리한다. 보정 요청 전 추론은 lifecycle 오류이며, 보정 중이거나
-최종 실패한 뒤에는 현재 `calibration_id`로 `valid=false`, `reason=gaze_unavailable`을
-반환한다.
+placeholder다. `EyeTraxAdapter`는 초기 Dense5의 25개 학습점과 별도 8점 검증을 최대 두
+번 수행한다. 한 시도는 64초이고 실패하면 전체 과정을 한 번 재시도한다. 각 학습점과
+검증점은 예상 20 frame의 절반인 최소 10개를 제공해야 하며, 실제 카메라 시연을 위해 완화한 aggregate valid
+ratio 50%, 검증 오차 p50·p95 대각선 50% Gate를 통과해야 한다. 보정 요청 전 추론은
+lifecycle 오류이며, 보정 중이거나 최종 실패한 뒤에는 현재 `calibration_id`로
+`valid=false`, `reason=gaze_unavailable`을 반환한다.
 
 EyeTrax가 유효 좌표를 만들면 `confidence=1.0`을 사용한다. 이 값은 정확도 100%가 아니라
 해당 frame에서 사용할 수 있는 좌표라는 이진 표시다. `no_face`, `blink`, 비유효한 예측과

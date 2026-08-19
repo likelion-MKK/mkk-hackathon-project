@@ -146,6 +146,13 @@ class LocalVisionGatewayApp:
         )
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope.get("type") == "websocket":
+            request_origin = _headers(scope).get("origin")
+            if request_origin is None or request_origin.rstrip("/") not in self.allowed_origins:
+                await send({"type": "websocket.close", "code": 4403, "reason": "origin_not_allowed"})
+                return
+            await self.stream_app(scope, receive, send)
+            return
         if scope.get("type") != "http" or scope.get("path") != _TOKEN_PATH:
             await self.stream_app(scope, receive, send)
             return

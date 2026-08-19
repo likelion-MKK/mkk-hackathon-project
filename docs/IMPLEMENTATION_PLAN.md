@@ -121,7 +121,8 @@ Vision 전체 완료 Gate는 별도다.
 - 설명에 쓸 검수 문구와 금지 주장
 - schema/content version, 활성 상태와 검수 provenance
 - 정확히 10개 active profile을 보장하는 seed·migration·readiness check
-- Supabase session pooler runtime과 direct migration/backup credential 분리
+- Supabase session pooler runtime과 direct 우선·IPv4 session pooler fallback migration/backup
+  credential 분리
 - `pending→running→terminal` atomic transition, cancel-late 차단과 restart/orphan cleanup
 - terminal 최소 metadata 24시간 retention 및 `/healthz`·`/readyz` 분리
 

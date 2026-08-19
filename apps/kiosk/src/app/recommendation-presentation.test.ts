@@ -81,6 +81,50 @@ test("고객 문구는 code와 DB controlled tag 템플릿으로만 만든다", 
   assert.doesNotMatch(presentation.reason, /감정|성격|AI 자유 생성/);
 });
 
+test("명시적 로컬 데모 fallback은 시선 기반 추천으로 표시하지 않는다", () => {
+  const presentation = presentCentralRecommendation(
+    {
+      ...decision,
+      reason_codes: ["catalog_tag_alignment"],
+      data_quality: { ...decision.data_quality, gaze_valid_ratio: 0 },
+      version: { ...decision.version, model_id: "deterministic-test-stub" },
+    },
+    product,
+  );
+  assert.equal(presentation.mode, "demo_fallback_v2");
+  assert.match(presentation.tendency, /로컬 제출 데모/);
+  assert.match(presentation.reason, /유효한 시선 신호가 부족/);
+  assert.doesNotMatch(presentation.reason, /유효 시선 관찰/);
+});
+
+test("Luna 저신호 variant B는 유효 시선 추천으로 표현하지 않는다", () => {
+  const presentation = presentCentralRecommendation(
+    {
+      ...decision,
+      reason_codes: ["catalog_tag_alignment"],
+      evidence: [
+        {
+          code: "data_quality",
+          product_id: product.product_id,
+          evidence_refs: [{ kind: "frame", ref_id: "frame-001" }],
+          statement: "유효 시선 좌표가 없어 결측 상태를 유지했습니다.",
+        },
+      ],
+      data_quality: { ...decision.data_quality, gaze_valid_ratio: 0 },
+      version: {
+        ...decision.version,
+        model_id: "gpt-5.6-luna",
+        input_variant: "B",
+      },
+    },
+    product,
+  );
+  assert.equal(presentation.mode, "central_low_signal_v2");
+  assert.match(presentation.tendency, /제한된 관찰/);
+  assert.match(presentation.reason, /유효한 시선 좌표는 부족/);
+  assert.doesNotMatch(presentation.reason, /많은 유효 시선 관찰/);
+});
+
 test("다른 상품 근거나 통제되지 않은 tag를 표시하지 않는다", () => {
   assert.throws(
     () =>

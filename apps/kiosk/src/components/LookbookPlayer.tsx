@@ -33,6 +33,7 @@ type LookbookPlayerProps = {
   chrome: ReactNode;
   debugEnabled: boolean;
   debugGazeLayout: FrameContext["layout"] | null;
+  debugGazeReason: string | null;
   debugGazeSample: GazeSample | null;
   posterUrl: string;
   sessionId: string;
@@ -69,6 +70,7 @@ export function LookbookPlayer({
   chrome,
   debugEnabled,
   debugGazeLayout,
+  debugGazeReason,
   debugGazeSample,
   posterUrl,
   sessionId,
@@ -298,8 +300,10 @@ export function LookbookPlayer({
           height: contentRect.height_px,
         } satisfies CSSProperties)
       : null;
-  const debugStatus = !debugGazeSample
-    ? "WAITING FOR GAZE"
+  const debugStatus = debugGazeReason
+    ? `UNAVAILABLE / ${debugGazeReason}`
+    : !debugGazeSample
+      ? "WAITING FOR GAZE"
     : !debugGazeSample.valid
       ? `INVALID / ${debugGazeSample.reason}`
       : !debugVideoPoint

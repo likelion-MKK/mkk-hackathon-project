@@ -3,6 +3,7 @@ import test from "node:test";
 import type {
   ExpressionSample,
   GazeSample,
+  GazeUnavailableSample,
   LookbookManifest,
 } from "./kiosk-types.ts";
 import { buildObservationBatchesV2 } from "./observation-batch-v2.ts";
@@ -331,6 +332,37 @@ test("Demo 3-C gaze-only observation은 표정을 not_observed로 보존하고 �
   assert.equal(observation.expression, null);
   assert.equal(observation.expression_reason, "not_observed");
   assert.deepEqual(observation.attention?.candidates, []);
+});
+
+test("Eye 결측 frame도 좌표 없이 capture context와 reason을 보존한다", () => {
+  const unavailable: GazeUnavailableSample = {
+    session_id: "session-v2-001",
+    sequence: 7,
+    frame_id: "frame-unavailable-7",
+    captured_at_mono_ms: 1_750,
+    video_id: manifest.video_id,
+    video_time_ms: 1_700,
+    playback_epoch: 2,
+    reason: "calibration_in_progress",
+  };
+  const observation = buildObservationBatchesV2({
+    batchId: "observation-batch-unavailable",
+    batchSequence: 0,
+    sessionId: "session-v2-001",
+    manifest,
+    gazeSamples: [],
+    gazeUnavailableSamples: [unavailable],
+    expressionSamples: [],
+  })[0].observations[0];
+
+  assert.equal(observation.gaze, null);
+  assert.equal(observation.gaze_reason, "calibration_in_progress");
+  assert.equal(observation.attention, null);
+  assert.equal(observation.attention_reason, "source_gaze_unavailable");
+  assert.equal(observation.expression, null);
+  assert.equal(observation.expression_reason, "not_observed");
+  assert.equal(observation.video_time_ms, 1_700);
+  assert.equal(observation.playback_epoch, 2);
 });
 
 test("캡처 시점 layout이 없으면 화면 좌표를 영상 좌표로 추정하지 않는다", () => {

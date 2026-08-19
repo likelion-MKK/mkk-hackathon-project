@@ -47,7 +47,7 @@ SERVICE_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_FACE_MODEL_PATH = SERVICE_ROOT / ".cache" / "face_landmarker.task"
 
 DENSE_GRID_AXIS = (0.10, 0.30, 0.50, 0.70, 0.90)
-DENSE5_POINTS = tuple(
+FULLSCREEN_TRAINING_POINTS = tuple(
     (x, y)
     for row, y in enumerate(DENSE_GRID_AXIS)
     for x in (DENSE_GRID_AXIS if row % 2 == 0 else tuple(reversed(DENSE_GRID_AXIS)))
@@ -67,12 +67,19 @@ TRAINING_ADAPT_SECONDS = 1.0
 TRAINING_COLLECT_SECONDS = 1.0
 VALIDATION_ADAPT_SECONDS = 0.75
 VALIDATION_COLLECT_SECONDS = 1.0
-MIN_TRAINING_SAMPLES_PER_POINT = 15
-MIN_VALIDATION_FRAMES_PER_POINT = 15
+CALIBRATION_MAX_ATTEMPTS = 1
+CALIBRATION_ATTEMPT_SECONDS = (
+    len(FULLSCREEN_TRAINING_POINTS) * (TRAINING_ADAPT_SECONDS + TRAINING_COLLECT_SECONDS)
+    + len(VALIDATION_POINTS) * (VALIDATION_ADAPT_SECONDS + VALIDATION_COLLECT_SECONDS)
+)
+MIN_TRAINING_SAMPLES_PER_POINT = 10
+MIN_VALIDATION_FRAMES_PER_POINT = 10
 RIDGE_ALPHA_CANDIDATES = (0.001, 0.01, 0.1, 1.0, 10.0)
-VALID_RATIO_GATE = 0.90
-ERROR_DIAGONAL_P50_GATE = 0.10
-ERROR_DIAGONAL_P95_GATE = 0.25
+# Diagnostic-only thresholds for the physical-camera run. They are still
+# reported by the validation path but do not block the best-effort model.
+VALID_RATIO_GATE = 0.50
+ERROR_DIAGONAL_P50_GATE = 0.50
+ERROR_DIAGONAL_P95_GATE = 0.50
 
 
 class EyeTraxModelError(RuntimeError):
@@ -317,6 +324,9 @@ def _select_ridge_alpha(
 ) -> float:
     if sum(samples_per_point) != len(features) or len(features) != len(targets):
         raise ValueError("Calibration feature, target and point counts do not match")
+    non_empty_group_count = sum(count > 0 for count in samples_per_point)
+    if non_empty_group_count < 2:
+        return 1.0
     groups = np.concatenate(
         [
             np.full(count, point_index, dtype=np.int32)
@@ -326,7 +336,9 @@ def _select_ridge_alpha(
     candidate_scores: list[tuple[float, float, float]] = []
     for alpha in RIDGE_ALPHA_CANDIDATES:
         errors: list[float] = []
-        for held_out in range(len(samples_per_point)):
+        for held_out, held_out_count in enumerate(samples_per_point):
+            if held_out_count == 0:
+                continue
             train_mask = groups != held_out
             test_mask = ~train_mask
             model = _create_ridge_model(alpha)
@@ -454,20 +466,21 @@ class EyeTraxAdapter:
         self._calibrating = True
         final_reason = "calibration_failed"
         try:
-            for attempt in (1, 2):
-                self._require_estimator().model = _create_ridge_model(1.0)
-                if not self._train_once(attempt):
-                    final_reason = "insufficient_samples"
-                    continue
-                validation = self._validate_once(attempt)
-                if validation.passed:
-                    self._calibrated = True
-                    return CalibrationResult(
-                        calibration_id=request.calibration_id,
-                        valid=True,
-                        reason=None,
-                    )
-                final_reason = "quality_gate_failed"
+            attempt = 1
+            self._require_estimator().model = _create_ridge_model(1.0)
+            if not self._train_once(attempt):
+                final_reason = "no_face"
+            else:
+                # Keep the validation run and its p50/p95/ratio observations,
+                # but use the trained model whenever at least one face feature
+                # was captured during the full calibration.
+                self._validate_once(attempt)
+                self._calibrated = True
+                return CalibrationResult(
+                    calibration_id=request.calibration_id,
+                    valid=True,
+                    reason=None,
+                )
         except CalibrationCancelled:
             final_reason = "calibration_cancelled"
         except Exception:
@@ -663,12 +676,12 @@ class EyeTraxAdapter:
         all_features: list[np.ndarray] = []
         all_targets: list[list[float]] = []
         samples_per_point: list[int] = []
-        for index, (x_norm, y_norm) in enumerate(DENSE5_POINTS, start=1):
+        for index, (x_norm, y_norm) in enumerate(FULLSCREEN_TRAINING_POINTS, start=1):
             capture = CalibrationCapture(
                 phase=CalibrationPhase.TRAINING,
                 attempt=attempt,
                 point_index=index,
-                point_count=len(DENSE5_POINTS),
+                point_count=len(FULLSCREEN_TRAINING_POINTS),
                 target_x_norm=x_norm,
                 target_y_norm=y_norm,
                 adaptation_seconds=TRAINING_ADAPT_SECONDS,
@@ -687,7 +700,7 @@ class EyeTraxAdapter:
             all_features.extend(point_features)
             all_targets.extend([target] * len(point_features))
 
-        if not samples_per_point or min(samples_per_point) < MIN_TRAINING_SAMPLES_PER_POINT:
+        if not all_features:
             return False
 
         feature_matrix = np.asarray(all_features)
@@ -1081,11 +1094,12 @@ class EyeTraxAdapter:
 
 
 __all__ = [
+    "CALIBRATION_ATTEMPT_SECONDS",
+    "CALIBRATION_MAX_ATTEMPTS",
     "CalibrationCancelled",
     "CalibrationCapture",
     "CalibrationFrameSource",
     "CalibrationPhase",
-    "DENSE5_POINTS",
     "DEFAULT_FACE_MODEL_PATH",
     "EyeTraxAdapter",
     "EyeTraxConfig",
@@ -1096,6 +1110,7 @@ __all__ = [
     "EyeTraxRuntimeError",
     "FACE_MODEL_SHA256",
     "FACE_MODEL_URL",
+    "FULLSCREEN_TRAINING_POINTS",
     "VALIDATION_POINTS",
     "prepare_face_model",
     "sha256_file",

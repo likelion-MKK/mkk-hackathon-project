@@ -39,7 +39,7 @@ PRODUCT_2 = "mcm-pina-vanity-case-studded-calfskin"
 VIDEO_ID = "mcm-central-ai-replay-v2"
 MANIFEST_VERSION = "mcm-central-ai-replay-v2-2026-08-18"
 ACTUAL_VIDEO_ID = "mcm-lookbook-v2"
-ACTUAL_MANIFEST_VERSION = "mcm-lookbook-v2-2026-08-18"
+ACTUAL_MANIFEST_VERSION = "mcm-lookbook-v2-grid-details-v2-2026-08-19"
 EXPOSURES = {
     PRODUCT_1: "replay-scene-01-toni",
     PRODUCT_2: "replay-scene-02-pina-vanity",
@@ -596,6 +596,23 @@ def test_endpoint_config_requires_pinned_model_prompt_variant_and_approval(
     assert _configured_input_variant() == "C"
 
 
+def test_local_demo_stub_requires_explicit_opt_in_and_never_uses_an_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CENTRAL_AI_PROVIDER", "local_demo_stub")
+    monkeypatch.delenv("MCM_LOCAL_DEMO_MODE", raising=False)
+    monkeypatch.delenv("CENTRAL_AI_ENDPOINT", raising=False)
+    with pytest.raises(ValueError, match="MCM_LOCAL_DEMO_MODE=1"):
+        configured_central_client()
+
+    monkeypatch.setenv("MCM_LOCAL_DEMO_MODE", "1")
+    assert isinstance(configured_central_client(), DeterministicCentralStub)
+
+    monkeypatch.setenv("CENTRAL_AI_ENDPOINT", "http://127.0.0.1:9000/infer")
+    with pytest.raises(ValueError, match="cannot use CENTRAL_AI_ENDPOINT"):
+        configured_central_client()
+
+
 def test_manager_development_origin_is_allowed_by_default() -> None:
     app = create_app(
         MemoryStore(REPOSITORY_ROOT),
@@ -685,6 +702,45 @@ def test_gaze_only_observation_can_complete_without_expression() -> None:
     assert decision["status"] == "completed"
     assert len(model.requests) == 1
     assert model.requests[0].evidence.data_quality.expression_valid_ratio == 0.0
+
+
+def test_explicit_local_demo_fallback_completes_with_real_frame_but_no_valid_gaze() -> None:
+    memory = MemoryStore(REPOSITORY_ROOT)
+    dispatcher = ManualJobDispatcher()
+    store = V2RecommendationStore(
+        MemoryStoreRecommendationRepository(memory),
+        allow_insufficient_signal_demo=True,
+    )
+    app = create_app(
+        memory,
+        central_client=DeterministicCentralStub(),
+        job_dispatcher=dispatcher,
+        v2_store=store,
+    )
+    with TestClient(app) as client:
+        session_id = _create_session(client)
+        no_gaze = _frame(
+            0,
+            0.0,
+            gaze=None,
+            gaze_reason="no_face",
+            expression=None,
+            expression_reason="face_not_detected",
+            attention=None,
+            attention_reason="source_gaze_unavailable",
+        )
+        assert client.post(
+            f"/api/v2/sessions/{session_id}/observations",
+            json=_batch(session_id, "batch-demo-fallback", 0, [no_gaze]),
+        ).status_code == 202
+        assert client.post(f"/api/v2/sessions/{session_id}/complete").status_code == 202
+        decision = client.get(f"/api/v2/sessions/{session_id}/recommendation").json()
+
+    assert dispatcher.jobs == []
+    assert decision["status"] == "completed"
+    assert decision["data_quality"]["gaze_valid_ratio"] == 0.0
+    assert decision["reason_codes"] == ["catalog_tag_alignment"]
+    assert decision["evidence"][0]["evidence_refs"][0]["kind"] == "frame"
 
 
 def test_cancelled_job_discards_late_result_and_marks_durable_status_once() -> None:
@@ -973,7 +1029,7 @@ def test_backend_rejects_client_supplied_product_candidates(
     assert client.app.state.v2_store.buffered_observation_count(session_id) == 0
 
 
-def test_actual_video_without_approved_aoi_fails_closed_at_backend(
+def test_actual_video_approved_source_metadata_accepts_intentional_no_aoi_range(
     v2_client: tuple[TestClient, ManualJobDispatcher],
 ) -> None:
     client, _ = v2_client
@@ -998,9 +1054,9 @@ def test_actual_video_without_approved_aoi_fails_closed_at_backend(
         ),
     )
 
-    assert response.status_code == 409
-    assert response.json()["code"] == "aoi_metadata_unapproved"
-    assert client.app.state.v2_store.buffered_observation_count(session_id) == 0
+    assert response.status_code == 202
+    assert response.json()["status"] == "accepted"
+    assert client.app.state.v2_store.buffered_observation_count(session_id) == 1
 
 
 def test_video_identity_time_and_epoch_context_mismatches_are_rejected(

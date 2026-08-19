@@ -93,11 +93,13 @@ class FixedCalibrationSource:
         validation_shift_px: dict[int, int] | None = None,
         validation_invalid_frames: int = 0,
         validation_counts_by_point: dict[tuple[int, int], int] | None = None,
+        validation_flip_axes: bool = False,
     ) -> None:
         self.training_counts = training_counts or {1: 15, 2: 15}
         self.validation_shift_px = validation_shift_px or {1: 0, 2: 0}
         self.validation_invalid_frames = validation_invalid_frames
         self.validation_counts_by_point = validation_counts_by_point or {}
+        self.validation_flip_axes = validation_flip_axes
         self.calls: list[CalibrationCapture] = []
 
     def __call__(self, capture: CalibrationCapture):
@@ -113,6 +115,9 @@ class FixedCalibrationSource:
             shift = self.validation_shift_px[capture.attempt]
         x = int(capture.target_x_norm * 100) + shift
         y = int(capture.target_y_norm * 100)
+        if capture.phase is CalibrationPhase.VALIDATION and self.validation_flip_axes:
+            x = 100 - x
+            y = 100 - y
         for index in range(count):
             flag = 1 if capture.phase is CalibrationPhase.VALIDATION and index < self.validation_invalid_frames else 0
             yield make_frame(x, y, flag)
@@ -187,6 +192,13 @@ def test_config_defaults_and_validation(tmp_path: Path) -> None:
         EyeTraxConfig(100, 100, smoothing_mode="unknown")  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="fixed at 0.25"):
         EyeTraxConfig(100, 100, ema_alpha=0.5)
+
+
+def test_submission_dense5_calibration_plan_runs_once() -> None:
+    assert len(eyetrax_module.FULLSCREEN_TRAINING_POINTS) == 25
+    assert len(eyetrax_module.VALIDATION_POINTS) == 8
+    assert eyetrax_module.CALIBRATION_ATTEMPT_SECONDS == pytest.approx(64.0)
+    assert eyetrax_module.CALIBRATION_MAX_ATTEMPTS == 1
 
 
 def test_initialize_and_warmup_are_separate_and_dispose_is_idempotent(
@@ -347,48 +359,61 @@ def test_dense5_training_excludes_validation_samples(
         assert estimator.model.train_targets is not None
         assert len(estimator.model.train_targets) == 25 * 15
         training_targets = {tuple(value) for value in estimator.model.train_targets.tolist()}
+        assert len(training_targets) == 25
         assert (20.0, 70.0) not in training_targets
         assert sum(call.phase is CalibrationPhase.VALIDATION for call in source.calls) == 8
     finally:
         adapter.dispose()
 
 
-def test_insufficient_training_retries_the_full_calibration_once(
+def test_sparse_training_uses_one_best_effort_calibration(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    source = FixedCalibrationSource(training_counts={1: 14, 2: 15})
+    source = FixedCalibrationSource(training_counts={1: 1})
     adapter, _, _ = initialized_adapter(tmp_path, monkeypatch, source)
     try:
         result = calibrate(adapter)
         assert result.valid is True
-        assert sum(call.attempt == 1 for call in source.calls) == 25
-        assert sum(call.attempt == 2 for call in source.calls) == 33
+        assert sum(call.attempt == 1 for call in source.calls) == 33
+        assert all(call.attempt == 1 for call in source.calls)
     finally:
         adapter.dispose()
 
 
-def test_quality_gate_failure_retries_once_then_returns_invalid(
+def test_zero_face_features_stop_calibration_as_no_face(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    source = FixedCalibrationSource(validation_shift_px={1: 15, 2: 15})
+    source = FixedCalibrationSource(training_counts={1: 0})
     adapter, _, _ = initialized_adapter(tmp_path, monkeypatch, source)
     try:
         result = calibrate(adapter)
         assert result.valid is False
-        assert result.reason == "quality_gate_failed"
-        assert sum(call.attempt == 1 for call in source.calls) == 33
-        assert sum(call.attempt == 2 for call in source.calls) == 33
-        unavailable = adapter.infer(make_frame(50, 50), FrameContext())
-        assert unavailable.valid is False
-        assert unavailable.reason == "gaze_unavailable"
-        assert unavailable.calibration_id == "calibration-test"
+        assert result.reason == "no_face"
+        assert len(source.calls) == 25
+        assert all(call.phase is CalibrationPhase.TRAINING for call in source.calls)
     finally:
         adapter.dispose()
 
 
-def test_missing_validation_points_retry_once_then_fail_gate(
+def test_quality_gate_failure_remains_diagnostic_for_best_effort_model(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = FixedCalibrationSource(validation_flip_axes=True)
+    adapter, _, _ = initialized_adapter(tmp_path, monkeypatch, source)
+    try:
+        result = calibrate(adapter)
+        assert result.valid is True
+        assert result.reason is None
+        assert sum(call.attempt == 1 for call in source.calls) == 33
+        assert all(call.attempt == 1 for call in source.calls)
+    finally:
+        adapter.dispose()
+
+
+def test_missing_validation_points_do_not_block_best_effort_model(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -401,10 +426,10 @@ def test_missing_validation_points_retry_once_then_fail_gate(
     adapter, _, _ = initialized_adapter(tmp_path, monkeypatch, source)
     try:
         result = calibrate(adapter)
-        assert result.valid is False
-        assert result.reason == "quality_gate_failed"
+        assert result.valid is True
+        assert result.reason is None
         assert sum(call.attempt == 1 for call in source.calls) == 33
-        assert sum(call.attempt == 2 for call in source.calls) == 33
+        assert all(call.attempt == 1 for call in source.calls)
     finally:
         adapter.dispose()
 
@@ -438,42 +463,51 @@ def test_participant_cancel_does_not_retry(
         adapter.dispose()
 
 
-def test_simple_percentile_gate_includes_boundary_and_rejects_larger_error(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    passing = FixedCalibrationSource(validation_shift_px={1: 14, 2: 14})
-    adapter, _, _ = initialized_adapter(tmp_path / "pass", monkeypatch, passing)
-    try:
-        assert calibrate(adapter).valid is True
-    finally:
-        adapter.dispose()
+def test_fifty_percent_quality_gates_include_boundary_and_reject_worse_values() -> None:
+    passing = eyetrax_module._ValidationMetrics(
+        total_frames=120,
+        valid_frames=60,
+        frames_per_point=(15,) * 8,
+        valid_ratio=0.50,
+        error_diagonal_p50=0.50,
+        error_diagonal_p95=0.50,
+    )
+    assert passing.passed is True
 
-    failing = FixedCalibrationSource(validation_shift_px={1: 15, 2: 15})
-    adapter, _, _ = initialized_adapter(tmp_path / "fail", monkeypatch, failing)
-    try:
-        assert calibrate(adapter).valid is False
-    finally:
-        adapter.dispose()
+    for field, value in (
+        ("valid_ratio", 0.499),
+        ("error_diagonal_p50", 0.501),
+        ("error_diagonal_p95", 0.501),
+    ):
+        values = {
+            "total_frames": passing.total_frames,
+            "valid_frames": passing.valid_frames,
+            "frames_per_point": passing.frames_per_point,
+            "valid_ratio": passing.valid_ratio,
+            "error_diagonal_p50": passing.error_diagonal_p50,
+            "error_diagonal_p95": passing.error_diagonal_p95,
+        }
+        values[field] = value
+        assert eyetrax_module._ValidationMetrics(**values).passed is False
 
 
 def test_valid_ratio_counts_no_face_frames_as_invalid(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    passing = FixedCalibrationSource(validation_invalid_frames=2)
+    passing = FixedCalibrationSource(validation_invalid_frames=10)
     adapter, _, _ = initialized_adapter(tmp_path / "pass", monkeypatch, passing)
     try:
-        assert calibrate(adapter).valid is True  # exactly 90 percent valid
+        assert calibrate(adapter).valid is True  # exactly 50 percent valid
     finally:
         adapter.dispose()
 
-    failing = FixedCalibrationSource(validation_invalid_frames=3)
+    failing = FixedCalibrationSource(validation_invalid_frames=20)
     adapter, _, _ = initialized_adapter(tmp_path / "fail", monkeypatch, failing)
     try:
         result = calibrate(adapter)
-        assert result.valid is False
-        assert result.reason == "quality_gate_failed"
+        assert result.valid is True
+        assert result.reason is None
     finally:
         adapter.dispose()
 

@@ -18,7 +18,7 @@ from apps.api.app.v2_store import configured_recommendation_repository
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 VIDEO_ID = "mcm-lookbook-v2"
-MANIFEST_VERSION = "mcm-lookbook-v2-2026-08-18"
+MANIFEST_VERSION = "mcm-lookbook-v2-grid-details-v2-2026-08-19"
 PENDING_METADATA = load_aoi_metadata(
     REPOSITORY_ROOT / "data" / "lookbooks" / VIDEO_ID / "aoi-metadata-v2.json"
 )

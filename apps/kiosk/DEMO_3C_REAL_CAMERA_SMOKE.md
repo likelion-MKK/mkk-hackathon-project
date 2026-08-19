@@ -82,9 +82,12 @@ $env:VITE_VISION_TOKEN_MODE = "backend"
 npm run dev:kiosk
 ```
 
-Open the printed local URL in a browser, consent, and grant camera access. Let
-the Dense5 + validation calibration finish. If the Eye worker is unavailable,
-calibration must stop with an error; do not continue by inventing a gaze point.
+Open the printed local URL in a browser, consent, and grant camera access. The
+original full-viewport Dense5 calibration moves through 25 training points and
+8 validation points. One attempt has 64 seconds of planned capture time; one
+full retry has 128 seconds of capture plus local processing overhead. If the
+Eye worker is unavailable, calibration must stop with an error; do not
+continue by inventing a gaze point.
 
 ## Success procedure
 

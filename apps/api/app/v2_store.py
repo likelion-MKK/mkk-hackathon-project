@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
@@ -15,6 +15,16 @@ from typing import Callable, Literal, Mapping, Protocol
 from uuid import uuid4
 
 from apps.api.app.schemas import ManagerProductRequestAccepted
+from apps.api.app.source_aoi import (
+    BoundSourceAoi,
+    ProductMatchingCatalogV1,
+    ResolvedSourceAoiHit,
+    SourceAoiMetadataV1,
+    bind_source_aois,
+    build_source_visual_evidence,
+    load_product_matching_catalog,
+    resolve_source_aoi_hits,
+)
 from apps.api.app.store import DomainError, MemoryStore
 from apps.api.app.v2_aoi import (
     LookbookAoiMetadataV2,
@@ -32,7 +42,9 @@ from apps.api.app.v2_central import (
 from apps.api.app.v2_evidence import FEATURE_VERSION, EvidenceSummary, summarize_observations
 from apps.api.app.v2_models import (
     CentralRecommendationRequestV2,
+    DecisionEvidenceItemV2,
     DecisionReasonV2,
+    EvidenceReferenceV2,
     FrameObservationV2,
     ManagerEventPayloadV2,
     ManagerEventV2,
@@ -44,6 +56,7 @@ from apps.api.app.v2_models import (
     RecommendationAcceptedV2,
     RecommendationDataQualityV2,
     RecommendationDecisionV2,
+    RecommendationStyleV2,
     RecommendationVersionV2,
 )
 from apps.api.app.v2_postgres import (
@@ -65,6 +78,9 @@ class SessionRecommendationContext:
     products: tuple[ProductRecommendationItemV2, ...]
     exposure_product_pairs: frozenset[tuple[str, str]]
     aoi_metadata: LookbookAoiMetadataV2 | None
+    source_aoi_metadata: SourceAoiMetadataV1 | None
+    source_aoi_bindings: tuple[BoundSourceAoi, ...]
+    matching_catalog: ProductMatchingCatalogV1 | None
     already_completed_v1: bool
 
 
@@ -154,9 +170,12 @@ class MemoryStoreRecommendationRepository:
         store: MemoryStore,
         *,
         catalog: ProductRecommendationProfileV2 | None = None,
+        matching_catalog: ProductMatchingCatalogV1 | None = None,
         persistence: DecisionPersistence | None = None,
         database_required: bool | None = None,
         aoi_metadata_paths: Mapping[str, Path] | None = None,
+        source_aoi_metadata_paths: Mapping[str, Path] | None = None,
+        source_aoi_enabled: bool = True,
     ) -> None:
         self._store = store
         self._persistence = persistence
@@ -171,12 +190,18 @@ class MemoryStoreRecommendationRepository:
         self._manager_requests_v2: dict[str, tuple[str, str, str]] = {}
         self._manager_sequence_v2 = 0
         self._aoi_metadata_paths = dict(aoi_metadata_paths or {})
+        self._source_aoi_metadata_paths = dict(source_aoi_metadata_paths or {})
+        self._source_aoi_enabled = source_aoi_enabled
         unsupported_aoi_path_ids = set(self._aoi_metadata_paths) - {
             "mcm-central-ai-replay-v2",
             "mcm-lookbook-v2",
         }
         if unsupported_aoi_path_ids:
             raise ValueError("AOI metadata paths can only target supported lookbooks")
+        if set(self._source_aoi_metadata_paths) - {"mcm-lookbook-v2"}:
+            raise ValueError(
+                "source AOI metadata paths can only target mcm-lookbook-v2"
+            )
         if catalog is None:
             path = (
                 store.repository_root
@@ -195,7 +220,29 @@ class MemoryStoreRecommendationRepository:
         if len(ids) != 10 or len(ids) != len(set(ids)):
             raise RuntimeError("canonical v2 catalog must contain exactly 10 unique products")
         self._products = {product.product_id: product for product in self._catalog.products}
+        if matching_catalog is None:
+            try:
+                matching_catalog = load_product_matching_catalog(
+                    store.repository_root
+                )
+            except (OSError, ValueError) as exc:
+                raise RuntimeError(
+                    "canonical 10-product matching catalog is not ready"
+                ) from exc
+        self._matching_catalog = matching_catalog
+        matching_ids = {
+            product.product_id for product in self._matching_catalog.products
+        }
+        if (
+            matching_ids != set(ids)
+            or self._matching_catalog.catalog_version
+            != self._catalog.catalog_version
+        ):
+            raise RuntimeError(
+                "matching catalog must exactly match the canonical v2 catalog"
+            )
         self._aoi_metadata = self._load_aoi_metadata()
+        self._source_aoi_metadata = self._load_source_aoi_metadata()
         self._verify_configured_media()
 
     def _load_aoi_metadata(self) -> dict[str, LookbookAoiMetadataV2]:
@@ -236,6 +283,43 @@ class MemoryStoreRecommendationRepository:
             / "aoi-metadata-v2.json"
         )
 
+    def _load_source_aoi_metadata(self) -> dict[str, SourceAoiMetadataV1]:
+        if not self._source_aoi_enabled:
+            return {}
+        video_id = "mcm-lookbook-v2"
+        configured = self._source_aoi_metadata_paths.get(video_id)
+        path = (
+            configured
+            if configured is not None and configured.is_absolute()
+            else self._store.repository_root / configured
+            if configured is not None
+            else self._store.repository_root
+            / "data"
+            / "lookbooks"
+            / video_id
+            / "source-aoi-metadata-v1.json"
+        )
+        if not path.is_file():
+            return {}
+        try:
+            metadata = SourceAoiMetadataV1.model_validate(
+                json.loads(path.read_text(encoding="utf-8"))
+            )
+            manifest = self._store._require_lookbook(video_id)
+            bindings = bind_source_aois(manifest, metadata)
+        except (OSError, ValueError) as exc:
+            raise RuntimeError("source AOI metadata is invalid") from exc
+        if not bindings:
+            raise RuntimeError("source AOI metadata requires manifest exposures")
+        if (
+            metadata.feature_taxonomy_version
+            != self._matching_catalog.feature_taxonomy_version
+        ):
+            raise RuntimeError(
+                "source AOI and matching catalog taxonomies differ"
+            )
+        return {metadata.video_id: metadata}
+
     def _verify_configured_media(self) -> None:
         raw_path = os.getenv("LOOKBOOK_VIDEO_PATH", "").strip()
         require_media = os.getenv("REQUIRE_LOOKBOOK_MEDIA_READINESS", "false").strip().lower()
@@ -256,6 +340,12 @@ class MemoryStoreRecommendationRepository:
         with self._store._lock:
             session = self._store._require_session(session_id)
             manifest = self._store._require_lookbook(session.lookbook_id)
+            source_metadata = self._source_aoi_metadata.get(manifest.video_id)
+            source_bindings = (
+                bind_source_aois(manifest, source_metadata)
+                if source_metadata is not None
+                else ()
+            )
             return SessionRecommendationContext(
                 session_id=session.session_id,
                 video_id=manifest.video_id,
@@ -267,6 +357,13 @@ class MemoryStoreRecommendationRepository:
                     for exposure in manifest.exposures
                 ),
                 aoi_metadata=self._aoi_metadata.get(manifest.video_id),
+                source_aoi_metadata=source_metadata,
+                source_aoi_bindings=source_bindings,
+                matching_catalog=(
+                    self._matching_catalog
+                    if source_metadata is not None
+                    else None
+                ),
                 already_completed_v1=session.completed,
             )
 
@@ -432,22 +529,54 @@ def _configured_demo_static_aoi_paths(store: MemoryStore) -> dict[str, Path]:
 
 def configured_recommendation_repository(store: MemoryStore) -> MemoryStoreRecommendationRepository:
     demo_static_aoi_paths = _configured_demo_static_aoi_paths(store)
+    default_catalog_path = Path(
+        "data/products/mcm-demo-recommendation-profile-v2.json"
+    )
+    default_matching_path = Path(
+        "data/products/mcm-recommendation-matching-profiles-v1.json"
+    )
+
+    def configured_path(name: str, default: Path) -> Path:
+        raw = os.getenv(name, "").strip()
+        relative = Path(raw) if raw else default
+        if relative.is_absolute():
+            raise RuntimeError(f"{name} must be repository-relative")
+        root = store.repository_root.resolve()
+        resolved = (root / relative).resolve()
+        try:
+            resolved.relative_to(root)
+        except ValueError as exc:
+            raise RuntimeError(f"{name} must stay inside the repository") from exc
+        return resolved
+
+    catalog_path = configured_path(
+        "RECOMMENDATION_CATALOG_PATH",
+        default_catalog_path,
+    )
+    matching_path = configured_path(
+        "RECOMMENDATION_MATCHING_CATALOG_PATH",
+        default_matching_path,
+    )
+    try:
+        catalog = load_canonical_catalog(catalog_path)
+        matching_catalog = load_product_matching_catalog(
+            store.repository_root,
+            matching_path,
+        )
+    except (OSError, ValueError) as exc:
+        raise RuntimeError("configured recommendation catalogs are not ready") from exc
     database_url = os.getenv("DATABASE_URL", "").strip()
     if not database_url:
         return MemoryStoreRecommendationRepository(
             store,
+            catalog=catalog,
+            matching_catalog=matching_catalog,
             aoi_metadata_paths=demo_static_aoi_paths,
+            source_aoi_enabled=not bool(demo_static_aoi_paths),
         )
     from apps.api.app.v2_postgres import psycopg_persistence
 
-    catalog_path = (
-        store.repository_root
-        / "data"
-        / "products"
-        / "mcm-demo-recommendation-profile-v2.json"
-    )
     try:
-        catalog = load_canonical_catalog(catalog_path)
         persistence = psycopg_persistence(database_url)
     except Exception as exc:
         # Keep liveness available for operators while readiness safely reports
@@ -455,23 +584,31 @@ def configured_recommendation_repository(store: MemoryStore) -> MemoryStoreRecom
         del exc
         return MemoryStoreRecommendationRepository(
             store,
-            catalog=load_canonical_catalog(catalog_path),
+            catalog=catalog,
+            matching_catalog=matching_catalog,
             persistence=None,
             database_required=True,
             aoi_metadata_paths=demo_static_aoi_paths,
+            source_aoi_enabled=not bool(demo_static_aoi_paths),
         )
     return MemoryStoreRecommendationRepository(
         store,
         catalog=catalog,
+        matching_catalog=matching_catalog,
         persistence=persistence,
         database_required=True,
         aoi_metadata_paths=demo_static_aoi_paths,
+        source_aoi_enabled=not bool(demo_static_aoi_paths),
     )
 
 
 @dataclass(slots=True)
 class V2SessionState:
     observations: dict[tuple[int, str], FrameObservationV2] = field(default_factory=dict)
+    resolved_source_hits: dict[
+        tuple[int, str],
+        tuple[ResolvedSourceAoiHit, ...],
+    ] = field(default_factory=dict)
     sequence_index: dict[int, tuple[int, str]] = field(default_factory=dict)
     batch_fingerprints: dict[str, str] = field(default_factory=dict)
     batch_sequence_index: dict[int, str] = field(default_factory=dict)
@@ -487,6 +624,7 @@ class V2SessionState:
 
     def clear_transient(self) -> None:
         self.observations.clear()
+        self.resolved_source_hits.clear()
         self.sequence_index.clear()
         self.batch_fingerprints.clear()
         self.batch_sequence_index.clear()
@@ -574,6 +712,7 @@ class V2RecommendationStore:
         orphan_job_seconds: float = 1_800.0,
         job_retention_seconds: float = 86_400.0,
         input_variant: Literal["A", "B", "C"] = "C",
+        allow_insufficient_signal_demo: bool = False,
     ) -> None:
         if min(
             collecting_ttl_seconds,
@@ -601,6 +740,7 @@ class V2RecommendationStore:
         self._orphan_job_seconds = orphan_job_seconds
         self._job_retention_seconds = job_retention_seconds
         self._input_variant = input_variant
+        self._allow_insufficient_signal_demo = allow_insufficient_signal_demo
         self._lock = RLock()
         self._states: dict[str, V2SessionState] = {}
 
@@ -680,6 +820,7 @@ class V2RecommendationStore:
             raise DomainError(409, "session_completed", "completed sessions cannot accept observations")
 
         metadata = context.aoi_metadata
+        source_metadata = context.source_aoi_metadata
         for observation in batch.observations:
             attention = observation.attention
             if attention is not None:
@@ -702,12 +843,22 @@ class V2RecommendationStore:
                         "Kiosk observations cannot provide product or AOI candidates",
                     )
                 if not attention.outside_video and (
-                    metadata is None or metadata.approval_status != "approved"
+                    (
+                        source_metadata is not None
+                        and source_metadata.approval.status != "approved"
+                    )
+                    or (
+                        source_metadata is None
+                        and (
+                            metadata is None
+                            or metadata.approval_status != "approved"
+                        )
+                    )
                 ):
                     raise DomainError(
                         409,
                         "aoi_metadata_unapproved",
-                        "the canonical video does not have an approved AOI metadata revision",
+                        "the canonical video does not have approved source AOI metadata",
                     )
             if metadata is not None and observation.video_time_ms >= metadata.media_identity.duration_ms:
                 raise DomainError(
@@ -813,7 +964,20 @@ class V2RecommendationStore:
                     )
                 prospective_last_video_time[epoch] = max(video_times)
 
+            prospective_source_hits = (
+                {
+                    (item.playback_epoch, item.frame_id): resolve_source_aoi_hits(
+                        item,
+                        context.source_aoi_bindings,
+                    )
+                    for item in prospective_observations.values()
+                }
+                if source_metadata is not None
+                and source_metadata.approval.status == "approved"
+                else {}
+            )
             state.observations = prospective_observations
+            state.resolved_source_hits = prospective_source_hits
             state.sequence_index = prospective_sequence_index
             state.batch_fingerprints[batch.batch_id] = fingerprint
             state.batch_sequence_index[batch.batch_sequence] = batch.batch_id
@@ -825,12 +989,97 @@ class V2RecommendationStore:
                 status="accepted" if changed else "duplicate",
             )
 
+    def _demo_fallback_decision(
+        self,
+        *,
+        context: SessionRecommendationContext,
+        client: CentralRecommendationClient,
+        recommendation_id: str,
+        decision_request_id: str,
+        summary: EvidenceSummary,
+        version: RecommendationVersionV2,
+    ) -> RecommendationDecisionV2 | None:
+        """Return a clearly labelled, catalog-only local-demo fallback.
+
+        A real captured frame/window is still required. The fallback never runs
+        for a configured model provider and never presents invalid gaze as
+        observation evidence.
+        """
+
+        if (
+            not self._allow_insufficient_signal_demo
+            or client.model_id != "deterministic-test-stub"
+            or not context.products
+        ):
+            return None
+
+        evidence = summary.evidence
+        product = context.products[0]
+        if evidence.input_variant == "B":
+            timeline = evidence.timeline or []
+            if not timeline:
+                return None
+            reference = EvidenceReferenceV2(kind="frame", ref_id=timeline[0].frame_id)
+        else:
+            windows = evidence.evidence_windows or []
+            if not windows:
+                return None
+            window = windows[0]
+            product = next(
+                (item for item in context.products if item.product_id == window.product_id),
+                product,
+            )
+            reference = EvidenceReferenceV2(kind="window", ref_id=window.window_id)
+
+        matched_tags = list(product.controlled_tags[:3])
+        return RecommendationDecisionV2(
+            recommendation_id=recommendation_id,
+            decision_request_id=decision_request_id,
+            status="completed",
+            selected_product_id=product.product_id,
+            reason=DecisionReasonV2(
+                code="grounded_product_match",
+                explanation=(
+                    "로컬 제출 데모에서 유효 시선 신호가 부족해 검수된 상품 "
+                    "카탈로그의 결정론적 기본 추천을 표시했습니다."
+                ),
+            ),
+            reason_codes=["catalog_tag_alignment"],
+            evidence=[
+                DecisionEvidenceItemV2(
+                    code="product_tag_match",
+                    product_id=product.product_id,
+                    evidence_refs=[reference],
+                    statement=(
+                        "실제 프레임 수신은 확인됐지만 시선 품질이 부족해 "
+                        "관찰 근거 대신 로컬 데모 fallback을 사용했습니다."
+                    ),
+                )
+            ],
+            style=RecommendationStyleV2(
+                matched_tags=matched_tags,
+                summary="검수된 카탈로그 태그 기반 로컬 제출 데모 fallback",
+            ),
+            exploration_tendency_code="focused_single_product",
+            data_quality=summary.data_quality,
+            version=version,
+        )
+
     def begin_completion(
         self,
         session_id: str,
         client: CentralRecommendationClient,
     ) -> tuple[RecommendationAcceptedV2, CompletionJob | None]:
         context = self._repository.get_context(session_id)
+        if (
+            context.source_aoi_metadata is not None
+            and context.source_aoi_metadata.approval.status != "approved"
+        ):
+            raise DomainError(
+                409,
+                "aoi_metadata_unapproved",
+                "source AOI metadata must be approved before recommendation completion",
+            )
         self.cleanup_expired()
         with self._lock:
             state = self._states.get(session_id)
@@ -845,6 +1094,7 @@ class V2RecommendationStore:
                 raise DomainError(409, "session_completed", "session has already been completed")
 
             snapshot = tuple(item.model_copy(deep=True) for item in state.observations.values())
+            source_hit_snapshot = dict(state.resolved_source_hits)
             idempotency_digest = sha256(session_id.encode("utf-8")).hexdigest()[:32]
             recommendation_id = f"recommendation-v2-{idempotency_digest}"
             decision_request_id = f"decision-v2-{idempotency_digest}"
@@ -902,14 +1152,80 @@ class V2RecommendationStore:
                 video_id=context.video_id,
                 manifest_version=context.manifest_version,
                 catalog_version=context.catalog_version,
-                aoi_metadata=context.aoi_metadata,
+                aoi_metadata=(
+                    None
+                    if context.source_aoi_metadata is not None
+                    else context.aoi_metadata
+                ),
                 product_ids=[product.product_id for product in context.products],
                 input_variant=self._input_variant,
             )
-            if (
-                summary.data_quality.gaze_valid_ratio == 0
-                or not summary.eligible_product_ids
-            ):
+            source_visual_evidence = None
+            if context.source_aoi_metadata is not None:
+                source_visual_evidence = build_source_visual_evidence(
+                    snapshot,
+                    source_hit_snapshot,
+                    context.source_aoi_metadata,
+                )
+                expected = summary.data_quality.expected_observation_count or 1
+                hit_count = (
+                    source_visual_evidence.total_hit_count
+                    if source_visual_evidence is not None
+                    else 0
+                )
+                ambiguous_count = (
+                    source_visual_evidence.ambiguous_frame_count
+                    if source_visual_evidence is not None
+                    else 0
+                )
+                source_quality = summary.data_quality.model_copy(
+                    update={
+                        "matched_frame_ratio": min(1.0, hit_count / expected),
+                        "ambiguous_product_ratio": min(
+                            1.0,
+                            ambiguous_count / expected,
+                        ),
+                    }
+                )
+                summary = replace(
+                    summary,
+                    evidence=summary.evidence.model_copy(
+                        update={"data_quality": source_quality}
+                    ),
+                )
+
+            version = version.model_copy(
+                update={"input_variant": summary.evidence.input_variant}
+            )
+            source_path_ready = (
+                context.source_aoi_metadata is not None
+                and source_visual_evidence is not None
+                and summary.data_quality.gaze_valid_ratio > 0
+            )
+            legacy_path_ready = (
+                context.source_aoi_metadata is None
+                and summary.data_quality.gaze_valid_ratio > 0
+                and bool(summary.eligible_product_ids)
+            )
+            low_signal_timeline_ready = (
+                client.model_id == "gpt-5.6-luna"
+                and summary.evidence.input_variant == "B"
+                and bool(summary.evidence.timeline)
+            )
+            if not source_path_ready and not legacy_path_ready and not low_signal_timeline_ready:
+                demo_fallback = self._demo_fallback_decision(
+                    context=context,
+                    client=client,
+                    recommendation_id=recommendation_id,
+                    decision_request_id=decision_request_id,
+                    summary=summary,
+                    version=version,
+                )
+                if demo_fallback is not None:
+                    state.decision = demo_fallback
+                    state.status = "terminal"
+                    state.expires_at = self._clock() + self._decision_ttl
+                    return accepted, None
                 code = (
                     "insufficient_valid_signal"
                     if summary.data_quality.gaze_valid_ratio == 0
@@ -918,6 +1234,8 @@ class V2RecommendationStore:
                 explanation = (
                     "추천에 필요한 유효한 시선 신호가 충분하지 않습니다."
                     if code == "insufficient_valid_signal"
+                    else "승인된 source AOI에 안전하게 연결할 수 있는 시선 근거가 없습니다."
+                    if context.source_aoi_metadata is not None
                     else "하나의 상품에 안전하게 연결할 수 있는 관찰 근거가 없습니다."
                 )
                 state.decision = RecommendationDecisionV2(
@@ -947,6 +1265,22 @@ class V2RecommendationStore:
                 evidence_version=FEATURE_VERSION,
                 evidence=summary.evidence,
                 products=list(context.products),
+                source_visual_evidence=(
+                    source_visual_evidence.model_dump(mode="json")
+                    if source_visual_evidence is not None
+                    else None
+                ),
+                matching_products=(
+                    [
+                        product.model_dump(mode="json")
+                        for product in context.matching_catalog.products
+                    ]
+                    if (
+                        context.matching_catalog is not None
+                        and source_visual_evidence is not None
+                    )
+                    else None
+                ),
             )
             job = CompletionJob(
                 session_id=session_id,

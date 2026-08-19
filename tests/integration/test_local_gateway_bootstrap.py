@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+from starlette.websockets import WebSocketDisconnect
 from starlette.testclient import TestClient
 
 from apps.vision_gateway.local_server import LocalVisionGatewayApp
@@ -58,3 +60,15 @@ def test_local_token_bootstrap_rejects_unknown_origin_and_invalid_body() -> None
 
     assert origin_response.status_code == 403
     assert invalid_response.status_code == 400
+
+
+def test_websocket_requires_an_explicit_allowed_origin() -> None:
+    app = LocalVisionGatewayApp(expression_mode="disabled")
+
+    with TestClient(app) as client:
+        for headers in ({}, {"Origin": "https://evil.test"}):
+            with pytest.raises(WebSocketDisconnect) as caught:
+                with client.websocket_connect("/vision/v1/stream", headers=headers):
+                    pass
+            assert caught.value.code == 4403
+            assert caught.value.reason == "origin_not_allowed"

@@ -557,7 +557,12 @@ class ProductRecommendationProfileV2(ContractModel):
 
 
 class CentralRecommendationRequestV2(ContractModel):
-    """Self-hosted transport envelope over the reviewed v2 contracts."""
+    """Derived-only transport envelope over the reviewed v2 contracts.
+
+    Source-AOI evidence stays separate from the ten catalog products. These
+    closed JSON objects avoid a circular import; the store and output validator
+    revalidate them with the dedicated source-AOI models.
+    """
 
     schema_version: Literal["2.0"] = "2.0"
     decision_request_id: Identifier = Field(min_length=1, max_length=128, pattern=IDENTIFIER_PATTERN)
@@ -567,6 +572,20 @@ class CentralRecommendationRequestV2(ContractModel):
     evidence_version: Revision = Field(min_length=1, max_length=128)
     evidence: RecommendationEvidenceV2
     products: list[ProductRecommendationItemV2] = Field(min_length=1, max_length=10)
+    source_visual_evidence: dict[str, object] | None = None
+    matching_products: list[dict[str, object]] | None = Field(
+        default=None,
+        min_length=10,
+        max_length=10,
+    )
+
+    @model_validator(mode="after")
+    def source_matching_payloads_have_joint_presence(self) -> Self:
+        if (self.source_visual_evidence is None) != (self.matching_products is None):
+            raise ValueError(
+                "source_visual_evidence and matching_products must be present or absent together"
+            )
+        return self
 
 
 class EvidenceReferenceV2(ContractModel):

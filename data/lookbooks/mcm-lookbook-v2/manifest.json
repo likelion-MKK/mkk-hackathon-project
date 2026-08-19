@@ -1,7 +1,782 @@
 {
   "schema_version": "1.0",
   "video_id": "mcm-lookbook-v2",
-  "manifest_version": "mcm-lookbook-v2-2026-08-18",
+  "manifest_version": "mcm-lookbook-v2-grid-details-v2-2026-08-19",
   "coordinate_space": "video_normalized",
-  "exposures": []
+  "exposures": [
+    {
+      "exposure_id": "scene-01-toni-brown-top.handle",
+      "product_part": "handle",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 5000,
+      "end_ms": 13000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.2, 0.215], [0.2, 0.12], [0.22, 0.055], [0.25, 0.04], [0.28, 0.055], [0.3, 0.12], [0.3, 0.215], [0.282, 0.215], [0.282, 0.13], [0.27, 0.08], [0.23, 0.08], [0.218, 0.13], [0.218, 0.215]] }
+    },
+    {
+      "exposure_id": "scene-01-toni-brown-top.body",
+      "product_part": "body",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 5000,
+      "end_ms": 13000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.135, 0.225], [0.23, 0.225], [0.23, 0.305], [0.27, 0.305], [0.27, 0.225], [0.345, 0.225], [0.335, 0.45], [0.15, 0.45]] }
+    },
+    {
+      "exposure_id": "scene-01-toni-brown-top.accessory-plaque",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 5000,
+      "end_ms": 13000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.235, 0.245], [0.265, 0.245], [0.265, 0.295], [0.235, 0.295]] }
+    },
+    {
+      "exposure_id": "scene-01-toni-black-top.handle",
+      "product_part": "handle",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 5000,
+      "end_ms": 13000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.7, 0.215], [0.7, 0.12], [0.72, 0.055], [0.75, 0.04], [0.78, 0.055], [0.8, 0.12], [0.8, 0.215], [0.782, 0.215], [0.782, 0.13], [0.77, 0.08], [0.73, 0.08], [0.718, 0.13], [0.718, 0.215]] }
+    },
+    {
+      "exposure_id": "scene-01-toni-black-top.body",
+      "product_part": "body",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 5000,
+      "end_ms": 13000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.635, 0.225], [0.73, 0.225], [0.73, 0.305], [0.77, 0.305], [0.77, 0.225], [0.845, 0.225], [0.835, 0.45], [0.65, 0.45]] }
+    },
+    {
+      "exposure_id": "scene-01-toni-black-top.accessory-plaque",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 5000,
+      "end_ms": 13000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.735, 0.245], [0.765, 0.245], [0.765, 0.295], [0.735, 0.295]] }
+    },
+    {
+      "exposure_id": "scene-01-toni-pink-bottom.handle",
+      "product_part": "handle",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 5000,
+      "end_ms": 13000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.2, 0.715], [0.2, 0.62], [0.22, 0.555], [0.25, 0.54], [0.28, 0.555], [0.3, 0.62], [0.3, 0.715], [0.282, 0.715], [0.282, 0.63], [0.27, 0.58], [0.23, 0.58], [0.218, 0.63], [0.218, 0.715]] }
+    },
+    {
+      "exposure_id": "scene-01-toni-pink-bottom.body",
+      "product_part": "body",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 5000,
+      "end_ms": 13000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.135, 0.725], [0.23, 0.725], [0.23, 0.805], [0.27, 0.805], [0.27, 0.725], [0.345, 0.725], [0.335, 0.95], [0.15, 0.95]] }
+    },
+    {
+      "exposure_id": "scene-01-toni-pink-bottom.accessory-plaque",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 5000,
+      "end_ms": 13000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.235, 0.745], [0.265, 0.745], [0.265, 0.795], [0.235, 0.795]] }
+    },
+    {
+      "exposure_id": "scene-01-toni-tan-bottom.handle",
+      "product_part": "handle",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 5000,
+      "end_ms": 13000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.7, 0.715], [0.7, 0.62], [0.72, 0.555], [0.75, 0.54], [0.78, 0.555], [0.8, 0.62], [0.8, 0.715], [0.782, 0.715], [0.782, 0.63], [0.77, 0.58], [0.73, 0.58], [0.718, 0.63], [0.718, 0.715]] }
+    },
+    {
+      "exposure_id": "scene-01-toni-tan-bottom.body",
+      "product_part": "body",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 5000,
+      "end_ms": 13000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.635, 0.725], [0.73, 0.725], [0.73, 0.805], [0.77, 0.805], [0.77, 0.725], [0.845, 0.725], [0.835, 0.95], [0.65, 0.95]] }
+    },
+    {
+      "exposure_id": "scene-01-toni-tan-bottom.accessory-plaque",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 5000,
+      "end_ms": 13000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.735, 0.745], [0.765, 0.745], [0.765, 0.795], [0.735, 0.795]] }
+    },
+    {
+      "exposure_id": "scene-01-toni-brown-top.accessory-shoulder-strap-left",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 5000,
+      "end_ms": 13000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.147, 0.205], [0.135, 0.205], [0.122, 0.245], [0.118, 0.315], [0.124, 0.37], [0.14, 0.415], [0.15, 0.425], [0.15, 0.395], [0.141, 0.365], [0.137, 0.315], [0.141, 0.26], [0.15, 0.225]] }
+    },
+    {
+      "exposure_id": "scene-01-toni-brown-top.accessory-shoulder-strap-right",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 5000,
+      "end_ms": 13000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.353, 0.205], [0.365, 0.205], [0.378, 0.245], [0.382, 0.315], [0.376, 0.37], [0.36, 0.415], [0.35, 0.425], [0.35, 0.395], [0.359, 0.365], [0.363, 0.315], [0.359, 0.26], [0.35, 0.225]] }
+    },
+    {
+      "exposure_id": "scene-01-toni-black-top.accessory-shoulder-strap-left",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 5000,
+      "end_ms": 13000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.647, 0.205], [0.635, 0.205], [0.622, 0.245], [0.618, 0.315], [0.624, 0.37], [0.64, 0.415], [0.65, 0.425], [0.65, 0.395], [0.641, 0.365], [0.637, 0.315], [0.641, 0.26], [0.65, 0.225]] }
+    },
+    {
+      "exposure_id": "scene-01-toni-black-top.accessory-shoulder-strap-right",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 5000,
+      "end_ms": 13000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.853, 0.205], [0.865, 0.205], [0.878, 0.245], [0.882, 0.315], [0.876, 0.37], [0.86, 0.415], [0.85, 0.425], [0.85, 0.395], [0.859, 0.365], [0.863, 0.315], [0.859, 0.26], [0.85, 0.225]] }
+    },
+    {
+      "exposure_id": "scene-01-toni-pink-bottom.accessory-shoulder-strap-left",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 5000,
+      "end_ms": 13000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.147, 0.705], [0.135, 0.705], [0.122, 0.745], [0.118, 0.815], [0.124, 0.87], [0.14, 0.915], [0.15, 0.925], [0.15, 0.895], [0.141, 0.865], [0.137, 0.815], [0.141, 0.76], [0.15, 0.725]] }
+    },
+    {
+      "exposure_id": "scene-01-toni-pink-bottom.accessory-shoulder-strap-right",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 5000,
+      "end_ms": 13000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.353, 0.705], [0.365, 0.705], [0.378, 0.745], [0.382, 0.815], [0.376, 0.87], [0.36, 0.915], [0.35, 0.925], [0.35, 0.895], [0.359, 0.865], [0.363, 0.815], [0.359, 0.76], [0.35, 0.725]] }
+    },
+    {
+      "exposure_id": "scene-01-toni-tan-bottom.accessory-shoulder-strap-left",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 5000,
+      "end_ms": 13000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.647, 0.705], [0.635, 0.705], [0.622, 0.745], [0.618, 0.815], [0.624, 0.87], [0.64, 0.915], [0.65, 0.925], [0.65, 0.895], [0.641, 0.865], [0.637, 0.815], [0.641, 0.76], [0.65, 0.725]] }
+    },
+    {
+      "exposure_id": "scene-01-toni-tan-bottom.accessory-shoulder-strap-right",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 5000,
+      "end_ms": 13000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.853, 0.705], [0.865, 0.705], [0.878, 0.745], [0.882, 0.815], [0.876, 0.87], [0.86, 0.915], [0.85, 0.925], [0.85, 0.895], [0.859, 0.865], [0.863, 0.815], [0.859, 0.76], [0.85, 0.725]] }
+    },
+    {
+      "exposure_id": "scene-02-ella-top-left.handle",
+      "product_part": "handle",
+      "product_id": "mcm-ella-small-disco-visetos",
+      "start_ms": 13000,
+      "end_ms": 21000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.2, 0.225], [0.2, 0.17], [0.22, 0.125], [0.25, 0.11], [0.285, 0.13], [0.3, 0.18], [0.3, 0.225], [0.282, 0.225], [0.278, 0.18], [0.265, 0.15], [0.235, 0.15], [0.218, 0.18], [0.218, 0.225]] }
+    },
+    {
+      "exposure_id": "scene-02-ella-top-left.body",
+      "product_part": "body",
+      "product_id": "mcm-ella-small-disco-visetos",
+      "start_ms": 13000,
+      "end_ms": 21000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.12, 0.245], [0.28, 0.245], [0.28, 0.435], [0.35, 0.435], [0.35, 0.245], [0.37, 0.255], [0.355, 0.45], [0.13, 0.45]] }
+    },
+    {
+      "exposure_id": "scene-02-ella-top-left.accessory-tag",
+      "product_part": "accessory",
+      "product_id": "mcm-ella-small-disco-visetos",
+      "start_ms": 13000,
+      "end_ms": 21000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.29, 0.27], [0.335, 0.285], [0.34, 0.42], [0.29, 0.42]] }
+    },
+    {
+      "exposure_id": "scene-02-ella-top-left.accessory-shoulder-strap-left",
+      "product_part": "accessory",
+      "product_id": "mcm-ella-small-disco-visetos",
+      "start_ms": 13000,
+      "end_ms": 21000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.13, 0.205], [0.115, 0.21], [0.097, 0.245], [0.087, 0.315], [0.09, 0.375], [0.11, 0.42], [0.13, 0.435], [0.13, 0.41], [0.115, 0.385], [0.105, 0.34], [0.11, 0.285], [0.125, 0.24]] }
+    },
+    {
+      "exposure_id": "scene-02-ella-top-left.accessory-shoulder-strap-right",
+      "product_part": "accessory",
+      "product_id": "mcm-ella-small-disco-visetos",
+      "start_ms": 13000,
+      "end_ms": 21000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.37, 0.205], [0.385, 0.21], [0.403, 0.245], [0.413, 0.315], [0.41, 0.375], [0.39, 0.42], [0.37, 0.435], [0.37, 0.41], [0.385, 0.385], [0.395, 0.34], [0.39, 0.285], [0.375, 0.24]] }
+    },
+    {
+      "exposure_id": "scene-02-aren-east-west-top-right.handle",
+      "product_part": "handle",
+      "product_id": "mcm-aren-east-west-shoulder-visetos",
+      "start_ms": 13000,
+      "end_ms": 21000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.64, 0.235], [0.665, 0.14], [0.705, 0.055], [0.75, 0.025], [0.8, 0.07], [0.845, 0.16], [0.86, 0.235], [0.842, 0.235], [0.825, 0.17], [0.79, 0.095], [0.75, 0.06], [0.715, 0.09], [0.68, 0.16], [0.658, 0.235]] }
+    },
+    {
+      "exposure_id": "scene-02-aren-east-west-top-right.body",
+      "product_part": "body",
+      "product_id": "mcm-aren-east-west-shoulder-visetos",
+      "start_ms": 13000,
+      "end_ms": 21000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.65, 0.25], [0.85, 0.25], [0.845, 0.45], [0.78, 0.45], [0.78, 0.3], [0.73, 0.3], [0.73, 0.45], [0.655, 0.45]] }
+    },
+    {
+      "exposure_id": "scene-02-aren-east-west-top-right.accessory-lock",
+      "product_part": "accessory",
+      "product_id": "mcm-aren-east-west-shoulder-visetos",
+      "start_ms": 13000,
+      "end_ms": 21000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.735, 0.315], [0.775, 0.315], [0.775, 0.42], [0.735, 0.42]] }
+    },
+    {
+      "exposure_id": "scene-02-aren-east-west-top-right.handle-shoulder-strap-left",
+      "product_part": "handle",
+      "product_id": "mcm-aren-east-west-shoulder-visetos",
+      "start_ms": 13000,
+      "end_ms": 21000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.64, 0.23], [0.625, 0.24], [0.61, 0.28], [0.608, 0.34], [0.615, 0.39], [0.63, 0.42], [0.65, 0.43], [0.65, 0.4], [0.638, 0.38], [0.63, 0.34], [0.632, 0.29], [0.646, 0.25]] }
+    },
+    {
+      "exposure_id": "scene-02-aren-east-west-top-right.handle-shoulder-strap-right",
+      "product_part": "handle",
+      "product_id": "mcm-aren-east-west-shoulder-visetos",
+      "start_ms": 13000,
+      "end_ms": 21000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.86, 0.23], [0.875, 0.24], [0.89, 0.28], [0.892, 0.34], [0.885, 0.39], [0.87, 0.42], [0.85, 0.43], [0.85, 0.4], [0.862, 0.38], [0.87, 0.34], [0.868, 0.29], [0.854, 0.25]] }
+    },
+    {
+      "exposure_id": "scene-02-pina-vanity-bottom-left.body",
+      "product_part": "body",
+      "product_id": "mcm-pina-vanity-case-studded-calfskin",
+      "start_ms": 13000,
+      "end_ms": 21000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.145, 0.735], [0.33, 0.735], [0.345, 0.94], [0.15, 0.94]] }
+    },
+    {
+      "exposure_id": "scene-02-pina-vanity-bottom-left.accessory-zipper",
+      "product_part": "accessory",
+      "product_id": "mcm-pina-vanity-case-studded-calfskin",
+      "start_ms": 13000,
+      "end_ms": 21000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.35, 0.705], [0.395, 0.72], [0.39, 0.77], [0.35, 0.755]] }
+    },
+    {
+      "exposure_id": "scene-02-stark-backpack-bottom-right.handle",
+      "product_part": "handle",
+      "product_id": "mcm-stark-side-studs-backpack-gold-crystal-visetos",
+      "start_ms": 13000,
+      "end_ms": 21000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.715, 0.625], [0.72, 0.59], [0.735, 0.565], [0.76, 0.565], [0.775, 0.59], [0.78, 0.625], [0.765, 0.625], [0.76, 0.6], [0.75, 0.585], [0.738, 0.585], [0.73, 0.6], [0.73, 0.625]] }
+    },
+    {
+      "exposure_id": "scene-02-stark-backpack-bottom-right.body",
+      "product_part": "body",
+      "product_id": "mcm-stark-side-studs-backpack-gold-crystal-visetos",
+      "start_ms": 13000,
+      "end_ms": 21000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.68, 0.64], [0.79, 0.64], [0.825, 0.69], [0.83, 0.795], [0.665, 0.795], [0.665, 0.69]] }
+    },
+    {
+      "exposure_id": "scene-02-stark-backpack-bottom-right.accessory-front-pocket",
+      "product_part": "accessory",
+      "product_id": "mcm-stark-side-studs-backpack-gold-crystal-visetos",
+      "start_ms": 13000,
+      "end_ms": 21000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.67, 0.805], [0.825, 0.805], [0.825, 0.95], [0.67, 0.95]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-01-toni-brown.handle",
+      "product_part": "handle",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 21000,
+      "end_ms": 21500,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.145, 0.675], [0.15, 0.61], [0.16, 0.575], [0.18, 0.575], [0.19, 0.61], [0.195, 0.675], [0.183, 0.675], [0.181, 0.62], [0.176, 0.595], [0.164, 0.595], [0.158, 0.62], [0.157, 0.675]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-01-toni-brown.body",
+      "product_part": "body",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 21000,
+      "end_ms": 21500,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.15, 0.685], [0.21, 0.675], [0.22, 0.77], [0.15, 0.78]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-01-toni-brown.accessory-shoulder-strap",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 21000,
+      "end_ms": 21500,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.125, 0.64], [0.143, 0.64], [0.143, 0.75], [0.125, 0.75]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-02-toni-black.handle",
+      "product_part": "handle",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 21500,
+      "end_ms": 22000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.65, 0.675], [0.655, 0.61], [0.665, 0.575], [0.685, 0.575], [0.695, 0.61], [0.7, 0.675], [0.688, 0.675], [0.686, 0.62], [0.681, 0.595], [0.669, 0.595], [0.663, 0.62], [0.662, 0.675]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-02-toni-black.body",
+      "product_part": "body",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 21500,
+      "end_ms": 22000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.645, 0.685], [0.71, 0.675], [0.71, 0.78], [0.645, 0.78]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-02-toni-black.accessory-shoulder-strap",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 21500,
+      "end_ms": 22000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.715, 0.64], [0.735, 0.64], [0.735, 0.75], [0.715, 0.75]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-03-toni-brown.handle",
+      "product_part": "handle",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 22000,
+      "end_ms": 22500,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.145, 0.675], [0.15, 0.61], [0.16, 0.575], [0.18, 0.575], [0.19, 0.61], [0.195, 0.675], [0.183, 0.675], [0.181, 0.62], [0.176, 0.595], [0.164, 0.595], [0.158, 0.62], [0.157, 0.675]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-03-toni-brown.body",
+      "product_part": "body",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 22000,
+      "end_ms": 22500,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.15, 0.685], [0.21, 0.675], [0.22, 0.77], [0.15, 0.78]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-03-toni-brown.accessory-shoulder-strap",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 22000,
+      "end_ms": 22500,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.125, 0.64], [0.143, 0.64], [0.143, 0.75], [0.125, 0.75]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-04-toni-black.handle",
+      "product_part": "handle",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 22500,
+      "end_ms": 23000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.65, 0.675], [0.655, 0.61], [0.665, 0.575], [0.685, 0.575], [0.695, 0.61], [0.7, 0.675], [0.688, 0.675], [0.686, 0.62], [0.681, 0.595], [0.669, 0.595], [0.663, 0.62], [0.662, 0.675]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-04-toni-black.body",
+      "product_part": "body",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 22500,
+      "end_ms": 23000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.645, 0.685], [0.71, 0.675], [0.71, 0.78], [0.645, 0.78]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-04-toni-black.accessory-shoulder-strap",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 22500,
+      "end_ms": 23000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.715, 0.64], [0.735, 0.64], [0.735, 0.75], [0.715, 0.75]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-05-toni-brown.handle",
+      "product_part": "handle",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 23000,
+      "end_ms": 23500,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.145, 0.675], [0.15, 0.61], [0.16, 0.575], [0.18, 0.575], [0.19, 0.61], [0.195, 0.675], [0.183, 0.675], [0.181, 0.62], [0.176, 0.595], [0.164, 0.595], [0.158, 0.62], [0.157, 0.675]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-05-toni-brown.body",
+      "product_part": "body",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 23000,
+      "end_ms": 23500,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.15, 0.685], [0.21, 0.675], [0.22, 0.77], [0.15, 0.78]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-05-toni-brown.accessory-shoulder-strap",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 23000,
+      "end_ms": 23500,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.125, 0.64], [0.143, 0.64], [0.143, 0.75], [0.125, 0.75]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-06-toni-black.handle",
+      "product_part": "handle",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 23500,
+      "end_ms": 24000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.65, 0.675], [0.655, 0.61], [0.665, 0.575], [0.685, 0.575], [0.695, 0.61], [0.7, 0.675], [0.688, 0.675], [0.686, 0.62], [0.681, 0.595], [0.669, 0.595], [0.663, 0.62], [0.662, 0.675]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-06-toni-black.body",
+      "product_part": "body",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 23500,
+      "end_ms": 24000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.645, 0.685], [0.71, 0.675], [0.71, 0.78], [0.645, 0.78]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-06-toni-black.accessory-shoulder-strap",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 23500,
+      "end_ms": 24000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.715, 0.64], [0.735, 0.64], [0.735, 0.75], [0.715, 0.75]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-07-toni-brown.handle",
+      "product_part": "handle",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 24000,
+      "end_ms": 24500,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.145, 0.675], [0.15, 0.61], [0.16, 0.575], [0.18, 0.575], [0.19, 0.61], [0.195, 0.675], [0.183, 0.675], [0.181, 0.62], [0.176, 0.595], [0.164, 0.595], [0.158, 0.62], [0.157, 0.675]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-07-toni-brown.body",
+      "product_part": "body",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 24000,
+      "end_ms": 24500,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.15, 0.685], [0.21, 0.675], [0.22, 0.77], [0.15, 0.78]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-07-toni-brown.accessory-shoulder-strap",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 24000,
+      "end_ms": 24500,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.125, 0.64], [0.143, 0.64], [0.143, 0.75], [0.125, 0.75]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-08-toni-black.handle",
+      "product_part": "handle",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 24500,
+      "end_ms": 25000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.65, 0.675], [0.655, 0.61], [0.665, 0.575], [0.685, 0.575], [0.695, 0.61], [0.7, 0.675], [0.688, 0.675], [0.686, 0.62], [0.681, 0.595], [0.669, 0.595], [0.663, 0.62], [0.662, 0.675]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-08-toni-black.body",
+      "product_part": "body",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 24500,
+      "end_ms": 25000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.645, 0.685], [0.71, 0.675], [0.71, 0.78], [0.645, 0.78]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-08-toni-black.accessory-shoulder-strap",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 24500,
+      "end_ms": 25000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.715, 0.64], [0.735, 0.64], [0.735, 0.75], [0.715, 0.75]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-09-toni-brown.handle",
+      "product_part": "handle",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 25000,
+      "end_ms": 25500,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.145, 0.675], [0.15, 0.61], [0.16, 0.575], [0.18, 0.575], [0.19, 0.61], [0.195, 0.675], [0.183, 0.675], [0.181, 0.62], [0.176, 0.595], [0.164, 0.595], [0.158, 0.62], [0.157, 0.675]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-09-toni-brown.body",
+      "product_part": "body",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 25000,
+      "end_ms": 25500,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.15, 0.685], [0.21, 0.675], [0.22, 0.77], [0.15, 0.78]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-09-toni-brown.accessory-shoulder-strap",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 25000,
+      "end_ms": 25500,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.125, 0.64], [0.143, 0.64], [0.143, 0.75], [0.125, 0.75]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-10-toni-black.handle",
+      "product_part": "handle",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 25500,
+      "end_ms": 26000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.65, 0.675], [0.655, 0.61], [0.665, 0.575], [0.685, 0.575], [0.695, 0.61], [0.7, 0.675], [0.688, 0.675], [0.686, 0.62], [0.681, 0.595], [0.669, 0.595], [0.663, 0.62], [0.662, 0.675]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-10-toni-black.body",
+      "product_part": "body",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 25500,
+      "end_ms": 26000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.645, 0.685], [0.71, 0.675], [0.71, 0.78], [0.645, 0.78]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-10-toni-black.accessory-shoulder-strap",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 25500,
+      "end_ms": 26000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.715, 0.64], [0.735, 0.64], [0.735, 0.75], [0.715, 0.75]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-11-toni-brown.handle",
+      "product_part": "handle",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 26000,
+      "end_ms": 26500,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.145, 0.675], [0.15, 0.61], [0.16, 0.575], [0.18, 0.575], [0.19, 0.61], [0.195, 0.675], [0.183, 0.675], [0.181, 0.62], [0.176, 0.595], [0.164, 0.595], [0.158, 0.62], [0.157, 0.675]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-11-toni-brown.body",
+      "product_part": "body",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 26000,
+      "end_ms": 26500,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.15, 0.685], [0.21, 0.675], [0.22, 0.77], [0.15, 0.78]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-11-toni-brown.accessory-shoulder-strap",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 26000,
+      "end_ms": 26500,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.125, 0.64], [0.143, 0.64], [0.143, 0.75], [0.125, 0.75]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-12-toni-black.handle",
+      "product_part": "handle",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 26500,
+      "end_ms": 27000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.65, 0.675], [0.655, 0.61], [0.665, 0.575], [0.685, 0.575], [0.695, 0.61], [0.7, 0.675], [0.688, 0.675], [0.686, 0.62], [0.681, 0.595], [0.669, 0.595], [0.663, 0.62], [0.662, 0.675]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-12-toni-black.body",
+      "product_part": "body",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 26500,
+      "end_ms": 27000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.645, 0.685], [0.71, 0.675], [0.71, 0.78], [0.645, 0.78]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-12-toni-black.accessory-shoulder-strap",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 26500,
+      "end_ms": 27000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.715, 0.64], [0.735, 0.64], [0.735, 0.75], [0.715, 0.75]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-13-toni-brown.handle",
+      "product_part": "handle",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 27000,
+      "end_ms": 27500,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.145, 0.675], [0.15, 0.61], [0.16, 0.575], [0.18, 0.575], [0.19, 0.61], [0.195, 0.675], [0.183, 0.675], [0.181, 0.62], [0.176, 0.595], [0.164, 0.595], [0.158, 0.62], [0.157, 0.675]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-13-toni-brown.body",
+      "product_part": "body",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 27000,
+      "end_ms": 27500,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.15, 0.685], [0.21, 0.675], [0.22, 0.77], [0.15, 0.78]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-13-toni-brown.accessory-shoulder-strap",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 27000,
+      "end_ms": 27500,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.125, 0.64], [0.143, 0.64], [0.143, 0.75], [0.125, 0.75]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-14-toni-black.handle",
+      "product_part": "handle",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 27500,
+      "end_ms": 28000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.65, 0.675], [0.655, 0.61], [0.665, 0.575], [0.685, 0.575], [0.695, 0.61], [0.7, 0.675], [0.688, 0.675], [0.686, 0.62], [0.681, 0.595], [0.669, 0.595], [0.663, 0.62], [0.662, 0.675]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-14-toni-black.body",
+      "product_part": "body",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 27500,
+      "end_ms": 28000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.645, 0.685], [0.71, 0.675], [0.71, 0.78], [0.645, 0.78]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-14-toni-black.accessory-shoulder-strap",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 27500,
+      "end_ms": 28000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.715, 0.64], [0.735, 0.64], [0.735, 0.75], [0.715, 0.75]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-15-toni-brown.handle",
+      "product_part": "handle",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 28000,
+      "end_ms": 28500,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.145, 0.675], [0.15, 0.61], [0.16, 0.575], [0.18, 0.575], [0.19, 0.61], [0.195, 0.675], [0.183, 0.675], [0.181, 0.62], [0.176, 0.595], [0.164, 0.595], [0.158, 0.62], [0.157, 0.675]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-15-toni-brown.body",
+      "product_part": "body",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 28000,
+      "end_ms": 28500,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.15, 0.685], [0.21, 0.675], [0.22, 0.77], [0.15, 0.78]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-15-toni-brown.accessory-shoulder-strap",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 28000,
+      "end_ms": 28500,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.125, 0.64], [0.143, 0.64], [0.143, 0.75], [0.125, 0.75]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-16-toni-black.handle",
+      "product_part": "handle",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 28500,
+      "end_ms": 29000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.65, 0.675], [0.655, 0.61], [0.665, 0.575], [0.685, 0.575], [0.695, 0.61], [0.7, 0.675], [0.688, 0.675], [0.686, 0.62], [0.681, 0.595], [0.669, 0.595], [0.663, 0.62], [0.662, 0.675]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-16-toni-black.body",
+      "product_part": "body",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 28500,
+      "end_ms": 29000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.645, 0.685], [0.71, 0.675], [0.71, 0.78], [0.645, 0.78]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-16-toni-black.accessory-shoulder-strap",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 28500,
+      "end_ms": 29000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.715, 0.64], [0.735, 0.64], [0.735, 0.75], [0.715, 0.75]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-17-toni-brown.handle",
+      "product_part": "handle",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 29000,
+      "end_ms": 29400,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.145, 0.675], [0.15, 0.61], [0.16, 0.575], [0.18, 0.575], [0.19, 0.61], [0.195, 0.675], [0.183, 0.675], [0.181, 0.62], [0.176, 0.595], [0.164, 0.595], [0.158, 0.62], [0.157, 0.675]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-17-toni-brown.body",
+      "product_part": "body",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 29000,
+      "end_ms": 29400,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.15, 0.685], [0.21, 0.675], [0.22, 0.77], [0.15, 0.78]] }
+    },
+    {
+      "exposure_id": "scene-03-shot-17-toni-brown.accessory-shoulder-strap",
+      "product_part": "accessory",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 29000,
+      "end_ms": 29400,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0.125, 0.64], [0.143, 0.64], [0.143, 0.75], [0.125, 0.75]] }
+    }
+  ]
 }

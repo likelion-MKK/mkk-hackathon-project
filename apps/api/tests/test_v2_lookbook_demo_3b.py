@@ -15,7 +15,7 @@ from apps.api.app.v2_models import CentralRecommendationRequestV2
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 VIDEO_ID = "mcm-lookbook-v2"
-MANIFEST_VERSION = "mcm-lookbook-v2-2026-08-18"
+MANIFEST_VERSION = "mcm-lookbook-v2-grid-details-v2-2026-08-19"
 TONI_PRODUCT_ID = "mcm-toni-medium-disco-visetos"
 
 
@@ -238,7 +238,7 @@ def test_demo_static_3b_reaches_grounded_variant_c_top_one_from_api_boundary(
         assert raw_field not in variant_c_payload
 
 
-def test_demo_static_3b_opt_in_absent_keeps_the_default_api_fail_closed(
+def test_demo_static_3b_opt_in_absent_uses_approved_canonical_source_metadata(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _configure_local_memory(monkeypatch, demo=False)
@@ -255,7 +255,7 @@ def test_demo_static_3b_opt_in_absent_keeps_the_default_api_fail_closed(
             f"/api/v2/sessions/{session_id}/observations",
             json={
                 "schema_version": "2.0",
-                "batch_id": "demo-3b-default-pending",
+                "batch_id": "demo-3b-default-approved-source",
                 "batch_sequence": 0,
                 "session_id": session_id,
                 "video_id": VIDEO_ID,
@@ -264,8 +264,8 @@ def test_demo_static_3b_opt_in_absent_keeps_the_default_api_fail_closed(
                 ],
             },
         )
-        assert response.status_code == 409
-        assert response.json()["code"] == "aoi_metadata_unapproved"
+        assert response.status_code == 202
+        assert response.json()["status"] == "accepted"
 
     assert dispatcher.jobs == []
     assert model.requests == []

@@ -106,7 +106,7 @@ class HttpEyeWorkerClient:
             "pattern": dict(pattern),
         }
         try:
-            # EyeTrax's fixed Dense5 training/validation calibration is a
+            # EyeTrax's fixed full-viewport training/validation calibration is a
             # user-driven operation and intentionally has no inference
             # deadline. It uses a separate connection/semaphore so frame
             # ingress can continue while this request waits for completion.

@@ -1,0 +1,87 @@
+{
+  "schema_version": "1.0",
+  "catalog_version": "mcm-us-pdp-verified-v3-2026-08-18",
+  "feature_taxonomy_version": "mcm-bag-visual-features-v1",
+  "products": [
+    {
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "display_name": "Medium Toni Top-Zip Shopper in Disco Visetos",
+      "brand": "MCM",
+      "official_product_url": "https://us.mcmworldwide.com/en_US/women/bags/totes-shoppers/toni-top-zip-shopper-in-disco-visetos/MWPGAMT01CO001.html",
+      "recommendation_profile": { "color_primary": "cognac", "color_family": "brown", "silhouette": "shopper", "category_type": "tote_bag", "patterns": ["monogram"], "bag_accessories": ["logo_plaque", "shoulder_strap", "top_handle", "zipper"] },
+      "controlled_tags": ["cognac", "daily", "monogram", "shopper", "tote"]
+    },
+    {
+      "product_id": "mcm-pina-vanity-case-studded-calfskin",
+      "display_name": "Pina Vanity Case in Studded Calfskin",
+      "brand": "MCM",
+      "official_product_url": "https://us.mcmworldwide.com/en_US/bags/shoulder-crossbody-bags/pina-vanity-case-in-studded-calfskin/MWRGATA01BK001.html",
+      "recommendation_profile": { "color_primary": "black", "color_family": "black", "silhouette": "vanity_case", "category_type": "vanity_case", "patterns": ["solid", "studded"], "bag_accessories": ["shoulder_strap", "zipper"] },
+      "controlled_tags": ["black", "shoulder", "studded", "structured", "vanity_case"]
+    },
+    {
+      "product_id": "mcm-milla-small-grained-leather",
+      "display_name": "Small Milla Tote in Grained Leather",
+      "brand": "MCM",
+      "official_product_url": "https://us.mcmworldwide.com/en_US/women/bags/totes-shoppers/milla-tote-in-grained-leather/MWTGAMA02OQ001.html",
+      "recommendation_profile": { "color_primary": "beige", "color_family": "beige", "silhouette": "tote", "category_type": "tote_bag", "patterns": ["grained_leather"], "bag_accessories": ["top_handle"] },
+      "controlled_tags": ["beige", "grained_leather", "structured", "tote", "work"]
+    },
+    {
+      "product_id": "mcm-ella-small-disco-visetos",
+      "display_name": "Small Ella Boston Bag in Disco Visetos",
+      "brand": "MCM",
+      "official_product_url": "https://us.mcmworldwide.com/en_US/women/bags/top-handle-bags/ella-boston-bag-in-visetos/MWBFAEA03PZ001.html",
+      "recommendation_profile": { "color_primary": "pink", "color_family": "pink", "silhouette": "boston", "category_type": "top_handle_bag", "patterns": ["monogram"], "bag_accessories": ["shoulder_strap", "tag", "top_handle", "zipper"] },
+      "controlled_tags": ["boston", "monogram", "pink", "top_handle"]
+    },
+    {
+      "product_id": "mcm-aren-east-west-shoulder-visetos",
+      "display_name": "Aren East-West Shoulder Bag in Visetos",
+      "brand": "MCM",
+      "official_product_url": "https://us.mcmworldwide.com/en_US/bags/shoulder-crossbody-bags/aren-east-west-shoulder-bag-in-visetos/MWSGATA01I8001.html",
+      "recommendation_profile": { "color_primary": "cognac", "color_family": "brown", "silhouette": "east_west_shoulder", "category_type": "shoulder_bag", "patterns": ["monogram"], "bag_accessories": ["lock", "shoulder_strap"] },
+      "controlled_tags": ["cognac", "east_west_shoulder", "monogram", "shoulder"]
+    },
+    {
+      "product_id": "mcm-ottomar-nova-55cm-monogram-econyl",
+      "display_name": "55cm Ottomar Nova Weekender in Monogram ECONYL",
+      "brand": "MCM",
+      "official_product_url": "https://us.mcmworldwide.com/en_US/travel/travel-bags/ottomar-nova-weekender-bag-in-monogram-econyl%C2%AE/MMVGATT06BK001.html",
+      "recommendation_profile": { "color_primary": "black", "color_family": "black", "silhouette": "weekender", "category_type": "travel_bag", "patterns": ["monogram"], "bag_accessories": ["shoulder_strap", "top_handle", "zipper"] },
+      "controlled_tags": ["black", "monogram", "travel", "weekender"]
+    },
+    {
+      "product_id": "mcm-aren-nova-medium-backpack-econyl",
+      "display_name": "Medium Aren Nova Backpack in Monogram ECONYL",
+      "brand": "MCM",
+      "official_product_url": "https://us.mcmworldwide.com/en_US/men/bags/backpacks/aren-nova-backpack-in-monogram-econyl%C2%AE/MMKGATA02BK001.html",
+      "recommendation_profile": { "color_primary": "black", "color_family": "black", "silhouette": "backpack", "category_type": "backpack", "patterns": ["monogram"], "bag_accessories": ["front_pocket", "top_handle", "zipper"] },
+      "controlled_tags": ["backpack", "black", "monogram", "travel"]
+    },
+    {
+      "product_id": "mcm-pina-studded-tote-visetos",
+      "display_name": "Pina Studded Tote in Visetos",
+      "brand": "MCM",
+      "official_product_url": "https://us.mcmworldwide.com/en_US/bags/new-arrivals/pina-studded-tote-in-visetos/MWTGATA01CO001.html",
+      "recommendation_profile": { "color_primary": "cognac", "color_family": "brown", "silhouette": "tote", "category_type": "tote_bag", "patterns": ["monogram", "studded"], "bag_accessories": ["side_studs", "top_handle"] },
+      "controlled_tags": ["cognac", "monogram", "studded", "tote"]
+    },
+    {
+      "product_id": "mcm-pina-small-tambourine-visetos",
+      "display_name": "Small Pina Tambourine Bag in Visetos",
+      "brand": "MCM",
+      "official_product_url": "https://us.mcmworldwide.com/en_US/women/bags/shoulder-crossbody-bags/pina-tambourine-bag-in-visetos/MWRGAOB01CO001.html",
+      "recommendation_profile": { "color_primary": "cognac", "color_family": "brown", "silhouette": "tambourine", "category_type": "crossbody_bag", "patterns": ["monogram"], "bag_accessories": ["shoulder_strap", "zipper"] },
+      "controlled_tags": ["cognac", "crossbody", "monogram", "tambourine"]
+    },
+    {
+      "product_id": "mcm-stark-side-studs-backpack-gold-crystal-visetos",
+      "display_name": "Stark Side Studs Backpack in Gold Crystal Visetos",
+      "brand": "MCM",
+      "official_product_url": "https://us.mcmworldwide.com/en_US/bags/new-arrivals/stark-side-studs-backpack-in-gold-crystal-visetos/MMKGAVE07CO001.html",
+      "recommendation_profile": { "color_primary": "gold", "color_family": "metallic", "silhouette": "backpack", "category_type": "backpack", "patterns": ["crystal", "monogram"], "bag_accessories": ["front_pocket", "side_studs", "top_handle", "zipper"] },
+      "controlled_tags": ["backpack", "crystal", "gold", "monogram", "side_studs"]
+    }
+  ]
+}

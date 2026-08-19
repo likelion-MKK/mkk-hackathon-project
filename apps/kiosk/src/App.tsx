@@ -31,6 +31,14 @@ import {
   SessionStartTimeoutError,
 } from "./app/consent-flow.ts";
 import {
+  CALIBRATION_CAPTURE_INTERVAL_MS,
+  CALIBRATION_PATTERN,
+  CALIBRATION_TARGET_TRANSITION_MS,
+  FULLSCREEN_TRAINING_POINTS,
+  calibrationFailureMessage,
+  calibrationDwellMs,
+} from "./app/calibration-plan.ts";
+import {
   INITIAL_KIOSK_SCREEN,
   transitionKioskScreen,
   type KioskEvent,
@@ -56,6 +64,7 @@ import {
 } from "./app/video-context.ts";
 import type {
   GazeSample,
+  GazeUnavailableSample,
   KioskScreen,
   LookbookManifest,
   Product,
@@ -143,29 +152,6 @@ type ConsentIssue =
   | "session-error"
   | "camera-denied"
   | "camera-error";
-
-const dense5CalibrationPoints: [number, number][] = [
-  ...[0.1, 0.3, 0.5, 0.7, 0.9].flatMap((y, row) =>
-    (row % 2 === 0 ? [0.1, 0.3, 0.5, 0.7, 0.9] : [0.9, 0.7, 0.5, 0.3, 0.1]).map(
-      (x) => [x, y] as [number, number],
-    ),
-  ),
-];
-const validationCalibrationPoints: [number, number][] = [
-  [0.2, 0.3],
-  [0.38, 0.3],
-  [0.2, 0.7],
-  [0.42, 0.7],
-  [0.8, 0.3],
-  [0.62, 0.3],
-  [0.8, 0.7],
-  [0.58, 0.7],
-];
-const calibrationPattern = {
-  pattern_id: "dense5-validation-v1",
-  points: [...dense5CalibrationPoints, ...validationCalibrationPoints],
-};
-const CALIBRATION_CAPTURE_INTERVAL_MS = 50;
 
 type CategoryOption = {
   name: ProductCategory;
@@ -597,8 +583,9 @@ function CameraConsent({
           </h1>
           <p className="consent-page__lead">
             <strong>{category ?? "선택한 카테고리"}</strong> 룩북을 감상하는 동안
-            시선과 표정 관련 신호를 분석해 관심 있는 스타일을 찾습니다. 아래 내용에
-            동의하기 전에는 카메라와 세션이 시작되지 않습니다.
+            시선의 관찰 가능한 신호만 분석해 관심 있는 스타일을 찾습니다. 표정 분석은
+            사용하지 않습니다. 아래 내용에 동의하기 전에는 카메라와 세션이 시작되지
+            않습니다.
           </p>
 
           <dl className="privacy-list">
@@ -612,10 +599,10 @@ function CameraConsent({
             <div>
               <dt>02</dt>
               <dd>
-                <strong>현재는 local/replay 분석 경계를 사용합니다</strong>
+                <strong>현재는 local gaze-only 분석 경계를 사용합니다</strong>
                 <span>
-                  원본 프레임은 중앙 추천 서버로 보내지 않으며 정형화된 시선·표정 파생
-                  JSON만 Backend에 전달합니다.
+                  원본 프레임은 중앙 추천 서버로 보내지 않으며 정형화된 시선 파생 JSON만
+                  Backend에 전달합니다. 표정 필드는 null과 not_observed 사유를 보존합니다.
                 </span>
               </dd>
             </div>
@@ -634,16 +621,17 @@ function CameraConsent({
               <dd>
                 <strong>개별 파생 신호는 저장하지 않습니다</strong>
                 <span>
-                  시선·표정 관련 신호는 현재 세션에서 관심도를 집계하는 데만 사용하고 추천
-                  생성 후 폐기합니다. 최종 추천은 최소 운영 metadata만 Backend 정책에 따라
-                  처리합니다.
+                  시선 관련 신호는 현재 세션에서 관심도를 집계하는 데만 사용하고 추천 생성
+                  후 폐기합니다. 최종 추천은 최소 운영 metadata만 Backend 정책에 따라 처리합니다.
                 </span>
               </dd>
             </div>
           </dl>
 
           <div className="consent-meta">
-            <span>CENTRAL V2 · LOCAL IN-PROCESS REPLAY VISION</span>
+            <span>
+              CENTRAL V2 · {configuredVisionMode === "live" ? "LOCAL LIVE GAZE-ONLY" : "REPLAY VISION"}
+            </span>
             <span role="timer" aria-label={`자동 종료까지 ${secondsRemaining}초`}>
               AUTO CLOSE · {String(secondsRemaining).padStart(2, "0")}S
             </span>
@@ -756,10 +744,10 @@ function Calibration({
     let currentIndex = 0;
     let targetTimer: number | undefined;
     const scheduleNextTarget = () => {
-      const duration = currentIndex < dense5CalibrationPoints.length ? 2_000 : 1_750;
+      const duration = calibrationDwellMs(currentIndex);
       targetTimer = window.setTimeout(() => {
         if (!active) return;
-        currentIndex = (currentIndex + 1) % calibrationPattern.points.length;
+        currentIndex = (currentIndex + 1) % CALIBRATION_PATTERN.points.length;
         setTargetIndex(currentIndex);
         scheduleNextTarget();
       }, duration);
@@ -770,42 +758,43 @@ function Calibration({
       if (targetTimer !== undefined) window.clearTimeout(targetTimer);
     };
   }, []);
-  const [targetX, targetY] = calibrationPattern.points[targetIndex] ?? [0.5, 0.5];
+  const [targetX, targetY] = CALIBRATION_PATTERN.points[targetIndex] ?? [0.5, 0.5];
+  const isTrainingTarget = targetIndex < FULLSCREEN_TRAINING_POINTS.length;
+  const phaseIndex = isTrainingTarget ? targetIndex + 1 : targetIndex - FULLSCREEN_TRAINING_POINTS.length + 1;
+  const phaseCount = isTrainingTarget
+    ? FULLSCREEN_TRAINING_POINTS.length
+    : CALIBRATION_PATTERN.points.length - FULLSCREEN_TRAINING_POINTS.length;
 
   return (
     <main className="store-screen calibration-screen screen-enter">
-      <StoreChrome onHome={onHome} step="03" />
-
       <section className="calibration-page" aria-labelledby="calibration-title">
         <div className="calibration-page__copy">
           <p className="section-label">EYE CALIBRATION</p>
           <h1 id="calibration-title">
-            <span>움직이는 점을</span>
-            <span>눈으로 따라가세요</span>
+            화면 전체를 쓰는<br />
+            정밀 시선 보정
           </h1>
           <p>
-            고개는 편안하게 두고 화면 위의 검은 점만 바라봐주세요.
-            보정이 끝날 때까지 점의 움직임을 눈으로 따라가 주세요.
+            고개는 편안히 두고 점만 눈으로 따라가세요. 점은 부드럽게 이동하며,
+            한 번에 약 64초가 걸리며, 점이 멈춘 동안 계속 바라봐 주세요.
           </p>
-          <span className="preview-label">CALIBRATION PREVIEW</span>
+          <p className="calibration-page__progress" aria-live="polite">
+            {isTrainingTarget ? "보정" : "확인"} {phaseIndex}/{phaseCount}
+          </p>
           <button className="back-link" type="button" onClick={onHome}>
             ← 처음으로 돌아가기
           </button>
         </div>
 
         <div className="calibration-stage" aria-hidden="true">
-          <div className="calibration-stage__guide">
-            <span />
-            <span />
-            <span />
-            <span />
-            <span />
-          </div>
           <span
             className="calibration-target"
-            style={{ left: `${targetX * 100}%`, top: `${targetY * 100}%` }}
+            style={{
+              left: `${targetX * 100}%`,
+              top: `${targetY * 100}%`,
+              transitionDuration: `${CALIBRATION_TARGET_TRANSITION_MS}ms`,
+            }}
           />
-          <p>FOLLOW THE DOT WITH YOUR EYES</p>
         </div>
       </section>
     </main>
@@ -943,7 +932,15 @@ function ReportScreen({
         </div>
         <div className="report-copy">
           <p className="section-label">YOUR RECOMMENDATION</p>
-          <h1>{hasApprovedProductDetails ? "이번 룩북의 관찰을 바탕으로 선정했습니다" : "상품 정보 준비 중"}</h1>
+          <h1>
+            {hasApprovedProductDetails
+              ? recommendation.mode === "demo_fallback_v2"
+                ? "신호 부족으로 제출용 기본 추천을 표시합니다"
+                : recommendation.mode === "central_low_signal_v2"
+                  ? "제한된 관찰을 바탕으로 Luna가 선정했습니다"
+                : "이번 룩북의 관찰을 바탕으로 선정했습니다"
+              : "상품 정보 준비 중"}
+          </h1>
           {hasApprovedProductDetails ? (
             <>
               <p className="report-tendency">
@@ -974,6 +971,16 @@ function ReportScreen({
           {recommendation.mode === "replay_v2" && (
             <p className="report-disclaimer">
               개발 검증용 replay 파생 신호 결과이며 실제 고객 분석 결과가 아닙니다.
+            </p>
+          )}
+          {recommendation.mode === "demo_fallback_v2" && (
+            <p className="report-disclaimer">
+              유효 시선이 부족한 로컬 제출 데모 결과이며 실제 시선 기반 추천으로 해석하지 않습니다.
+            </p>
+          )}
+          {recommendation.mode === "central_low_signal_v2" && (
+            <p className="report-disclaimer">
+              유효 시선 좌표가 없는 저신호 결과입니다. 결측을 무관심·감정·선호로 해석하지 않았습니다.
             </p>
           )}
           {displayPolicy.unavailableMessage && (
@@ -1051,8 +1058,10 @@ function App() {
   const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatus>("idle");
   const [latestGazeSample, setLatestGazeSample] = useState<GazeSample | null>(null);
   const [latestGazeLayout, setLatestGazeLayout] = useState<VideoLayout | null>(null);
+  const [latestGazeReason, setLatestGazeReason] = useState<string | null>(null);
   const [flowController] = useState(() => new AsyncFlowController());
   const gazeSamples = useRef<GazeSample[]>([]);
+  const gazeUnavailableSamples = useRef<GazeUnavailableSample[]>([]);
   const videoLayoutsByFrameId = useRef<Map<string, VideoLayout>>(new Map());
   const sessionStartAbortController = useRef<AbortController | null>(null);
   const recommendationAbortController = useRef<AbortController | null>(null);
@@ -1075,9 +1084,22 @@ function App() {
       gazeSamples.current.push(sample);
       setLatestGazeSample(sample);
       setLatestGazeLayout(layoutsByFrameId.get(sample.frame_id) ?? null);
+      setLatestGazeReason(null);
     });
+    const removeGazeUnavailableListener =
+      "onGazeUnavailable" in visionClient
+        ? visionClient.onGazeUnavailable((sample) => {
+            if (layoutsByFrameId.has(sample.frame_id)) {
+              gazeUnavailableSamples.current.push(sample);
+            }
+            setLatestGazeSample(null);
+            setLatestGazeLayout(null);
+            setLatestGazeReason(sample.reason);
+          })
+        : () => undefined;
     return () => {
       removeGazeListener();
+      removeGazeUnavailableListener();
       flowController.invalidateCurrentFlow();
       abortSessionStart();
       recommendationAbortController.current?.abort();
@@ -1106,6 +1128,7 @@ function App() {
       else void discardCentralSessionBestEffort(httpApiClient, session.session_id);
     }
     gazeSamples.current.length = 0;
+    gazeUnavailableSamples.current.length = 0;
     videoLayoutsByFrameId.current.clear();
     pollingSessionId.current = null;
     setSelectedCategory(null);
@@ -1120,6 +1143,7 @@ function App() {
     setAnalysisStatus("idle");
     setLatestGazeSample(null);
     setLatestGazeLayout(null);
+    setLatestGazeReason(null);
     send("RESTART");
 
     try {
@@ -1140,6 +1164,7 @@ function App() {
     calibrationSequence.current = 0;
     frameSource.stop();
     gazeSamples.current.length = 0;
+    gazeUnavailableSamples.current.length = 0;
     videoLayoutsByFrameId.current.clear();
     pollingSessionId.current = null;
     setSelectedCategory(null);
@@ -1154,6 +1179,7 @@ function App() {
     setAnalysisStatus("idle");
     setLatestGazeSample(null);
     setLatestGazeLayout(null);
+    setLatestGazeReason(null);
     send("CANCEL");
 
     try {
@@ -1170,6 +1196,7 @@ function App() {
     abortSessionStart();
     frameSource.stop();
     gazeSamples.current.length = 0;
+    gazeUnavailableSamples.current.length = 0;
     videoLayoutsByFrameId.current.clear();
     pollingSessionId.current = null;
     setIsStarting(false);
@@ -1177,6 +1204,7 @@ function App() {
     setAnalysisStatus("idle");
     setLatestGazeSample(null);
     setLatestGazeLayout(null);
+    setLatestGazeReason(null);
     setConsentIssue("idle-timeout");
 
     void flowController.runSerialized(() => visionClient.stopSession()).catch(() => {
@@ -1190,10 +1218,12 @@ function App() {
     if (!selectedCategory || isStarting || sessionStartAbortController.current) return;
 
     gazeSamples.current.length = 0;
+    gazeUnavailableSamples.current.length = 0;
     videoLayoutsByFrameId.current.clear();
     pollingSessionId.current = null;
     setLatestGazeSample(null);
     setLatestGazeLayout(null);
+    setLatestGazeReason(null);
     const generation = flowController.invalidateCurrentFlow();
     const abortController = new AbortController();
     sessionStartAbortController.current = abortController;
@@ -1296,7 +1326,7 @@ function App() {
     if (calibrationPromise.current) return calibrationPromise.current;
     calibrationSequence.current = 0;
     const promise = flowController.runSerialized(() =>
-      visionClient.startCalibration(calibrationPattern),
+      visionClient.startCalibration(CALIBRATION_PATTERN),
     );
     calibrationPromise.current = promise;
     return promise;
@@ -1317,12 +1347,14 @@ function App() {
       await flowController.runSerialized(() => visionClient.startInference());
 
       if (flowController.isCurrent(generation)) send("CALIBRATION_SUCCESS");
-    } catch {
+    } catch (error) {
       calibrationPromise.current = null;
       frameSource.stop();
       if (flowController.isCurrent(generation)) {
         setCameraState("error");
-        setFlowError("로컬 시선 보정을 완료하지 못했습니다.");
+        setFlowError(
+          calibrationFailureMessage(error instanceof Error ? error.message : undefined),
+        );
       }
     }
   }, [beginCalibration, flowController, send]);
@@ -1409,6 +1441,7 @@ function App() {
           sessionId: session.session_id,
           manifest,
           gazeSamples: gazeSamples.current,
+          gazeUnavailableSamples: gazeUnavailableSamples.current,
           expressionSamples: [],
           videoLayoutsByFrameId: videoLayoutsByFrameId.current,
         });
@@ -1437,10 +1470,12 @@ function App() {
       }
       if (flowController.isCurrent(generation)) {
         gazeSamples.current.length = 0;
+        gazeUnavailableSamples.current.length = 0;
         videoLayoutsByFrameId.current.clear();
         pollingSessionId.current = null;
         setLatestGazeSample(null);
         setLatestGazeLayout(null);
+        setLatestGazeReason(null);
       }
     }
   }, [flowController, manifest, send, session]);
@@ -1457,7 +1492,25 @@ function App() {
             return context;
           },
           async (frame, frameContext, signal) => {
-            await visionClient.sendFrame(frame, frameContext, { signal });
+            const delivery = await visionClient.sendFrame(frame, frameContext, { signal });
+            const hasGazeResult = gazeSamples.current.some(
+              (sample) => sample.frame_id === frameContext.frame_id,
+            );
+            const hasUnavailableResult = gazeUnavailableSamples.current.some(
+              (sample) => sample.frame_id === frameContext.frame_id,
+            );
+            if (!hasGazeResult && !hasUnavailableResult) {
+              gazeUnavailableSamples.current.push({
+                session_id: frameContext.session_id,
+                sequence: frameContext.sequence,
+                frame_id: frameContext.frame_id,
+                captured_at_mono_ms: frameContext.captured_at_mono_ms,
+                video_id: frameContext.video_id,
+                video_time_ms: frameContext.video_time_ms,
+                playback_epoch: frameContext.playback_epoch,
+                reason: delivery.reason ?? "not_observed",
+              });
+            }
           },
         );
       } catch (error: unknown) {
@@ -1595,9 +1648,11 @@ function App() {
     pollingSessionId.current = null;
     frameSource.stop();
     gazeSamples.current.length = 0;
+    gazeUnavailableSamples.current.length = 0;
     videoLayoutsByFrameId.current.clear();
     setLatestGazeSample(null);
     setLatestGazeLayout(null);
+    setLatestGazeReason(null);
     setCameraState("idle");
     setAnalysisStatus("cancelled");
 
@@ -1679,6 +1734,7 @@ function App() {
         chrome={<StoreChrome onHome={restart} step="03" overlay />}
         debugEnabled={enableAoiDebugOverlay}
         debugGazeLayout={latestGazeLayout}
+        debugGazeReason={latestGazeReason}
         debugGazeSample={latestGazeSample}
         posterUrl={getLookbookPoster(selectedCategory)}
         sessionId={session.session_id}
