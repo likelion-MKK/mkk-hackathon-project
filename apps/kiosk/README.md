@@ -28,7 +28,12 @@ S04는 `completed` 결과의 단일 `selected_product_id`만 표시한다. `insu
 
 고객 문구는 AI 자유 문장을 그대로 표시하지 않는다. 서버가 검증한 `exploration_tendency_code`, `reason_codes`와 DB의 `controlled_tags`를 Frontend allowlist 템플릿에 매핑한다. 감정·성격·심리 유형이나 구매 의도를 단정하지 않는다.
 
-개별 상품 URL·이미지·QR이 검수 전 `null + reason`이면 bundled 가방 placeholder와 공식 전체 가방 listing 링크를 사용한다. 이미지나 QR이 준비된 것처럼 표시하지 않는다.
+개별 상품은 `source_status=team_approved_catalog_record`이고 `approved_asset=true`일 때만
+상세 정보와 `assets/products/<product_id>.jpeg`를
+`/media/products/<product_id>.jpeg`로 변환해 표시한다. 경로가 product ID와 일치하지 않거나
+이미지 로드에 실패하면 임의 placeholder 상품 이미지로 대체하지 않고 준비 중 상태를
+보존한다. 공식 상품 URL이 없으면 링크와 Manager 요청을 숨기고, 검수된 QR 경로가 있을
+때만 QR을 표시한다.
 
 ## 데이터 수명과 취소
 

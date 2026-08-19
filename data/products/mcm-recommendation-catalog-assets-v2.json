@@ -1,0 +1,86 @@
+{
+  "schema_version": "2.0",
+  "catalog_version": "mcm-us-pdp-verified-v3-2026-08-18",
+  "assets": [
+    {
+      "asset_kind": "image",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "relative_path": "media/products/mcm-toni-medium-disco-visetos.jpeg",
+      "source_url": "https://us.mcmworldwide.com/en_US/women/bags/totes-shoppers/toni-top-zip-shopper-in-disco-visetos/MWPGAMT01CO001.html",
+      "sha256": "d213b223d8ee28e910f7a21f98a71cd411a110a1c9c6f7fc3aed04fbec436654",
+      "approval_note": "팀 승인 상품 이미지 자산을 product_id 기반 파일명으로 연결함"
+    },
+    {
+      "asset_kind": "image",
+      "product_id": "mcm-pina-vanity-case-studded-calfskin",
+      "relative_path": "media/products/mcm-pina-vanity-case-studded-calfskin.jpeg",
+      "source_url": "https://us.mcmworldwide.com/en_US/bags/shoulder-crossbody-bags/pina-vanity-case-in-studded-calfskin/MWRGATA01BK001.html",
+      "sha256": "ba32c483d3001fb5a7b9395f2f7ffe67a8a87d920c7c2d74863d132e0868de26",
+      "approval_note": "팀 승인 상품 이미지 자산을 product_id 기반 파일명으로 연결함"
+    },
+    {
+      "asset_kind": "image",
+      "product_id": "mcm-milla-small-grained-leather",
+      "relative_path": "media/products/mcm-milla-small-grained-leather.jpeg",
+      "source_url": "https://us.mcmworldwide.com/en_US/women/bags/totes-shoppers/milla-tote-in-grained-leather/MWTGAMA02OQ001.html",
+      "sha256": "4475381280d6c43704495b67d9c6d156568c39c426e787cd3915d59ab8bab341",
+      "approval_note": "팀 승인 상품 이미지 자산을 product_id 기반 파일명으로 연결함"
+    },
+    {
+      "asset_kind": "image",
+      "product_id": "mcm-ella-small-disco-visetos",
+      "relative_path": "media/products/mcm-ella-small-disco-visetos.jpeg",
+      "source_url": "https://us.mcmworldwide.com/en_US/women/bags/top-handle-bags/ella-boston-bag-in-visetos/MWBFAEA03PZ001.html",
+      "sha256": "53ac4398fbd9f12d4b1bb2cccdbccc54ecc1e5e973d6b0c1adfb32b76c80901d",
+      "approval_note": "팀 승인 상품 이미지 자산을 product_id 기반 파일명으로 연결함"
+    },
+    {
+      "asset_kind": "image",
+      "product_id": "mcm-aren-east-west-shoulder-visetos",
+      "relative_path": "media/products/mcm-aren-east-west-shoulder-visetos.jpeg",
+      "source_url": "https://us.mcmworldwide.com/en_US/bags/shoulder-crossbody-bags/aren-east-west-shoulder-bag-in-visetos/MWSGATA01I8001.html",
+      "sha256": "02603e64a4598d3bfcf270160e5e7bbfd8e6d043930447946231bd1e0e9a9348",
+      "approval_note": "팀 승인 상품 이미지 자산을 product_id 기반 파일명으로 연결함"
+    },
+    {
+      "asset_kind": "image",
+      "product_id": "mcm-ottomar-nova-55cm-monogram-econyl",
+      "relative_path": "media/products/mcm-ottomar-nova-55cm-monogram-econyl.jpeg",
+      "source_url": "https://us.mcmworldwide.com/en_US/travel/travel-bags/ottomar-nova-weekender-bag-in-monogram-econyl%C2%AE/MMVGATT06BK001.html",
+      "sha256": "8f7e708945ad1c9cab5f5407584b861fb88700045c4ec37f201b77b4f2c16899",
+      "approval_note": "팀 승인 상품 이미지 자산을 product_id 기반 파일명으로 연결함"
+    },
+    {
+      "asset_kind": "image",
+      "product_id": "mcm-aren-nova-medium-backpack-econyl",
+      "relative_path": "media/products/mcm-aren-nova-medium-backpack-econyl.jpeg",
+      "source_url": "https://us.mcmworldwide.com/en_US/men/bags/backpacks/aren-nova-backpack-in-monogram-econyl%C2%AE/MMKGATA02BK001.html",
+      "sha256": "7447ba7b74e910a61567a8648615dfe432473c0f02d6773b1f4e943997060728",
+      "approval_note": "팀 승인 상품 이미지 자산을 product_id 기반 파일명으로 연결함"
+    },
+    {
+      "asset_kind": "image",
+      "product_id": "mcm-pina-studded-tote-visetos",
+      "relative_path": "media/products/mcm-pina-studded-tote-visetos.jpeg",
+      "source_url": "https://us.mcmworldwide.com/en_US/bags/new-arrivals/pina-studded-tote-in-visetos/MWTGATA01CO001.html",
+      "sha256": "b61be262e4e3966e5dbc0c37e578a2968d20380ff29cf8feb9994ebfec562d1b",
+      "approval_note": "팀 승인 상품 이미지 자산을 product_id 기반 파일명으로 연결함"
+    },
+    {
+      "asset_kind": "image",
+      "product_id": "mcm-pina-small-tambourine-visetos",
+      "relative_path": "media/products/mcm-pina-small-tambourine-visetos.jpeg",
+      "source_url": "https://us.mcmworldwide.com/en_US/women/bags/shoulder-crossbody-bags/pina-tambourine-bag-in-visetos/MWRGAOB01CO001.html",
+      "sha256": "5f489c8149d8a61736080d0ed48fb04ba7808cc03e184695c85bbcf61dd587d3",
+      "approval_note": "팀 승인 상품 이미지 자산을 product_id 기반 파일명으로 연결함"
+    },
+    {
+      "asset_kind": "image",
+      "product_id": "mcm-stark-side-studs-backpack-gold-crystal-visetos",
+      "relative_path": "media/products/mcm-stark-side-studs-backpack-gold-crystal-visetos.jpeg",
+      "source_url": "https://us.mcmworldwide.com/en_US/bags/new-arrivals/stark-side-studs-backpack-in-gold-crystal-visetos/MMKGAVE07CO001.html",
+      "sha256": "5846d148f2464ba7972d454eb7888089ab5f99b7912fbcd4f6db7fe70605bf7d",
+      "approval_note": "팀 승인 상품 이미지 자산을 product_id 기반 파일명으로 연결함"
+    }
+  ]
+}

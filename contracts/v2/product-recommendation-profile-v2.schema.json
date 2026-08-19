@@ -218,7 +218,7 @@
     "imageAssetPath": {
       "type": "string",
       "maxLength": 300,
-      "pattern": "^assets/products/[A-Za-z0-9][A-Za-z0-9_-]*(?:/[A-Za-z0-9][A-Za-z0-9._-]*)*$"
+      "pattern": "^assets/products/[A-Za-z0-9][A-Za-z0-9_-]*(?:\\.[A-Za-z0-9]+|/[A-Za-z0-9][A-Za-z0-9._-]*)*$"
     },
     "qrAssetPath": {
       "type": "string",

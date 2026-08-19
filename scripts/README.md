@@ -5,7 +5,12 @@
 ```powershell
 python -m pip install -r requirements-contracts.txt
 python scripts/validate_contracts.py
+python scripts/verify_product_assets.py
 ```
+
+`verify_product_assets.py`는 v2 asset manifest의 정확히 10개 product ID, canonical
+`media/products/<product_id>.jpeg` 경로와 실제 JPEG SHA-256을 검증한다. DB에는 이 metadata만
+적재하고 이미지 bytes는 적재하지 않는다.
 
 검증 항목:
 

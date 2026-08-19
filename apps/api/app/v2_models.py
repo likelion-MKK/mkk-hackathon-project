@@ -474,7 +474,7 @@ class ProductRecommendationItemV2(ContractModel):
     @classmethod
     def image_asset_path_is_scoped(cls, value: str | None) -> str | None:
         if value is not None and re.fullmatch(
-            r"assets/products/[A-Za-z0-9][A-Za-z0-9_-]*(?:/[A-Za-z0-9][A-Za-z0-9._-]*)*",
+            r"assets/products/[A-Za-z0-9][A-Za-z0-9_-]*(?:\.[A-Za-z0-9]+|/[A-Za-z0-9][A-Za-z0-9._-]*)*",
             value,
         ) is None:
             raise ValueError("image_asset_path must use the reviewed product asset directory")
