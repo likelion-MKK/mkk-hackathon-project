@@ -182,9 +182,7 @@ const mockProductCategories: CategoryOption[] = [
   },
 ];
 
-const productCategories: CategoryOption[] = useMockApi
-  ? mockProductCategories
-  : [mockProductCategories[0]];
+const productCategories: CategoryOption[] = mockProductCategories;
 
 const screensaverStories = [
   {
@@ -934,17 +932,13 @@ function ReportScreen({
           <p className="section-label">YOUR RECOMMENDATION</p>
           <h1>
             {hasApprovedProductDetails
-              ? recommendation.mode === "demo_fallback_v2"
-                ? "신호 부족으로 제출용 기본 추천을 표시합니다"
-                : recommendation.mode === "central_low_signal_v2"
-                  ? "제한된 관찰을 바탕으로 Luna가 선정했습니다"
-                : "이번 룩북의 관찰을 바탕으로 선정했습니다"
+              ? "시선 분석 AI가 선정했습니다"
               : "상품 정보 준비 중"}
           </h1>
           {hasApprovedProductDetails ? (
             <>
               <p className="report-tendency">
-                이번 세션의 스타일 탐색 경향: {recommendation.tendency}
+                이번 세션의 시선 흐름: {recommendation.tendency}
               </p>
               <h2>{product.display_name}</h2>
               {isCentralProduct && <p className="report-reason">{product.recommendation_summary}</p>}
@@ -978,18 +972,13 @@ function ReportScreen({
               유효 시선이 부족한 로컬 제출 데모 결과이며 실제 시선 기반 추천으로 해석하지 않습니다.
             </p>
           )}
-          {recommendation.mode === "central_low_signal_v2" && (
-            <p className="report-disclaimer">
-              유효 시선 좌표가 없는 저신호 결과입니다. 결측을 무관심·감정·선호로 해석하지 않았습니다.
-            </p>
-          )}
           {displayPolicy.unavailableMessage && (
             <p className="report-disclaimer">
               {displayPolicy.unavailableMessage}
             </p>
           )}
           <p className="report-disclaimer">
-            시선 관련 신호는 이번 세션의 관찰값이며 감정·성격·구매 의도를 확정하지 않습니다.
+            이번 세션의 시선 신호만 사용했으며, 체험이 끝나면 저장하지 않고 폐기합니다.
           </p>
           <div className="report-actions">
             {displayPolicy.officialProductUrl && (
@@ -1110,6 +1099,8 @@ function App() {
   }, [abortSessionStart, flowController]);
 
   const selectCategory = (category: ProductCategory) => {
+    if (category !== "가방") return;
+
     setSelectedCategory(category);
     setConsentIssue(null);
     send("SELECT_CATEGORY");

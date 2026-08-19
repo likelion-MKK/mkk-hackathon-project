@@ -73,7 +73,7 @@ def _client() -> OpenAILunaCentralClient:
         model_id=MODEL_ID,
         reasoning_effort="max",
         reasoning_context="current_turn",
-        prompt_version="central-recommender-ko-v6",
+        prompt_version="central-recommender-ko-v7",
     )
 
 

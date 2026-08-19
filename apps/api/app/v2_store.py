@@ -743,6 +743,12 @@ class V2RecommendationStore:
         self._allow_insufficient_signal_demo = allow_insufficient_signal_demo
         self._lock = RLock()
         self._states: dict[str, V2SessionState] = {}
+        # Session identifiers restart from session-0001 whenever this process
+        # restarts, so a session-only digest collides with a durable row from an
+        # earlier run and the job can never start. Scoping the digest to this
+        # run keeps `complete` idempotent for retries of the same live session
+        # while never reusing a previous run's decision_request_id.
+        self._run_scope = uuid4().hex
 
     @property
     def durable_mode(self) -> bool:
@@ -1095,7 +1101,9 @@ class V2RecommendationStore:
 
             snapshot = tuple(item.model_copy(deep=True) for item in state.observations.values())
             source_hit_snapshot = dict(state.resolved_source_hits)
-            idempotency_digest = sha256(session_id.encode("utf-8")).hexdigest()[:32]
+            idempotency_digest = sha256(
+                f"{self._run_scope}:{session_id}".encode("utf-8")
+            ).hexdigest()[:32]
             recommendation_id = f"recommendation-v2-{idempotency_digest}"
             decision_request_id = f"decision-v2-{idempotency_digest}"
             accepted = RecommendationAcceptedV2(

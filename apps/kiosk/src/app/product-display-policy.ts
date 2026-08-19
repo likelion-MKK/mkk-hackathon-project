@@ -77,9 +77,10 @@ export function resolveProductDisplayPolicy(
     officialProductUrl,
     qrUrl,
     canRequestManager: officialProductUrl !== null,
-    unavailableMessage:
-      imageUrl && qrUrl
-        ? null
-        : "검수된 상품 이미지·공식 URL·QR 정보를 준비하고 있습니다.",
+    // The reviewed image is what this screen actually promises. A missing QR
+    // asset is not a reason to tell the visitor the product is unprepared.
+    unavailableMessage: imageUrl
+      ? null
+      : "검수된 상품 이미지를 준비하고 있습니다.",
   };
 }

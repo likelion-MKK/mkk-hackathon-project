@@ -1,0 +1,316 @@
+{
+  "schema_version": "2.0",
+  "catalog_version": "mcm-us-pdp-verified-v4-2026-08-20",
+  "products": [
+    {
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "display_name": "Medium Toni Top-Zip Shopper in Disco Visetos",
+      "category": "bag",
+      "controlled_tags": [
+        "daily",
+        "monogram",
+        "shopper",
+        "spacious",
+        "tote"
+      ],
+      "recommendation_summary": "넉넉한 데일리 토트·쇼퍼 방향을 비교하기 위한 팀 작성 추천 profile입니다.",
+      "style": {
+        "silhouette": "trapezoid",
+        "visual_tone": "bold",
+        "use_cases": [
+          "daily",
+          "work"
+        ]
+      },
+      "approved_asset": true,
+      "source_status": "team_approved_catalog_record",
+      "official_product_url": "https://us.mcmworldwide.com/en_US/women/bags/totes-shoppers/toni-top-zip-shopper-in-disco-visetos/MWPGAMT01CO001.html",
+      "official_product_url_reason": null,
+      "official_listing_url": "https://us.mcmworldwide.com/en_US/women/bags/all-bags",
+      "image_asset_path": "assets/products/mcm-toni-medium-disco-visetos/mcm-toni-medium-disco-visetos.jpeg",
+      "image_asset_path_reason": null,
+      "qr_asset_path": null,
+      "qr_asset_path_reason": "qr_asset_generation_pending",
+      "source_note": "팀이 검수한 공식 PDP identity와 상품 이미지 자산을 함께 승인한 revision입니다. 이미지는 product_id 기준 파일명으로 SHA-256 검증을 통과했습니다."
+    },
+    {
+      "product_id": "mcm-pina-vanity-case-studded-calfskin",
+      "display_name": "Pina Vanity Case in Studded Calfskin",
+      "category": "bag",
+      "controlled_tags": [
+        "compact",
+        "evening",
+        "leather",
+        "shoulder",
+        "structured"
+      ],
+      "recommendation_summary": "컴팩트한 스터드 장식 가죽 베니티 케이스와 구조적인 숄더 스타일 방향을 비교하기 위한 팀 작성 추천 profile입니다.",
+      "style": {
+        "silhouette": "boxy",
+        "visual_tone": "refined",
+        "use_cases": [
+          "evening",
+          "weekend"
+        ]
+      },
+      "approved_asset": true,
+      "source_status": "team_approved_catalog_record",
+      "official_product_url": "https://us.mcmworldwide.com/en_US/bags/shoulder-crossbody-bags/pina-vanity-case-in-studded-calfskin/MWRGATA01BK001.html",
+      "official_product_url_reason": null,
+      "official_listing_url": "https://us.mcmworldwide.com/en_US/women/bags/all-bags",
+      "image_asset_path": "assets/products/mcm-pina-vanity-case-studded-calfskin/mcm-pina-vanity-case-studded-calfskin.jpeg",
+      "image_asset_path_reason": null,
+      "qr_asset_path": null,
+      "qr_asset_path_reason": "qr_asset_generation_pending",
+      "source_note": "팀이 검수한 공식 PDP identity와 상품 이미지 자산을 함께 승인한 revision입니다. 이미지는 product_id 기준 파일명으로 SHA-256 검증을 통과했습니다."
+    },
+    {
+      "product_id": "mcm-milla-small-grained-leather",
+      "display_name": "Small Milla Tote in Grained Leather",
+      "category": "bag",
+      "controlled_tags": [
+        "classic",
+        "compact",
+        "leather",
+        "structured",
+        "tote",
+        "work"
+      ],
+      "recommendation_summary": "작은 가죽 토트와 클래식한 업무·일상 스타일 방향을 비교하기 위한 팀 작성 추천 profile입니다.",
+      "style": {
+        "silhouette": "trapezoid",
+        "visual_tone": "classic",
+        "use_cases": [
+          "daily",
+          "work"
+        ]
+      },
+      "approved_asset": true,
+      "source_status": "team_approved_catalog_record",
+      "official_product_url": "https://us.mcmworldwide.com/en_US/women/bags/totes-shoppers/milla-tote-in-grained-leather/MWTGAMA02OQ001.html",
+      "official_product_url_reason": null,
+      "official_listing_url": "https://us.mcmworldwide.com/en_US/women/bags/all-bags",
+      "image_asset_path": "assets/products/mcm-milla-small-grained-leather/mcm-milla-small-grained-leather.jpeg",
+      "image_asset_path_reason": null,
+      "qr_asset_path": null,
+      "qr_asset_path_reason": "qr_asset_generation_pending",
+      "source_note": "팀이 검수한 공식 PDP identity와 상품 이미지 자산을 함께 승인한 revision입니다. 이미지는 product_id 기준 파일명으로 SHA-256 검증을 통과했습니다."
+    },
+    {
+      "product_id": "mcm-ella-small-disco-visetos",
+      "display_name": "Small Ella Boston Bag in Disco Visetos",
+      "category": "bag",
+      "controlled_tags": [
+        "boston",
+        "compact",
+        "daily",
+        "monogram",
+        "top_handle"
+      ],
+      "recommendation_summary": "컴팩트한 보스턴 형태와 모노그램 데일리 스타일 방향을 비교하기 위한 팀 작성 추천 profile입니다.",
+      "style": {
+        "silhouette": "rounded",
+        "visual_tone": "bold",
+        "use_cases": [
+          "daily",
+          "weekend"
+        ]
+      },
+      "approved_asset": true,
+      "source_status": "team_approved_catalog_record",
+      "official_product_url": "https://us.mcmworldwide.com/en_US/women/bags/top-handle-bags/ella-boston-bag-in-visetos/MWBFAEA03PZ001.html",
+      "official_product_url_reason": null,
+      "official_listing_url": "https://us.mcmworldwide.com/en_US/women/bags/all-bags",
+      "image_asset_path": "assets/products/mcm-ella-small-disco-visetos/mcm-ella-small-disco-visetos.jpeg",
+      "image_asset_path_reason": null,
+      "qr_asset_path": null,
+      "qr_asset_path_reason": "qr_asset_generation_pending",
+      "source_note": "팀이 검수한 공식 PDP identity와 상품 이미지 자산을 함께 승인한 revision입니다. 이미지는 product_id 기준 파일명으로 SHA-256 검증을 통과했습니다."
+    },
+    {
+      "product_id": "mcm-aren-east-west-shoulder-visetos",
+      "display_name": "Aren East-West Shoulder Bag in Visetos",
+      "category": "bag",
+      "controlled_tags": [
+        "compact",
+        "daily",
+        "monogram",
+        "shoulder",
+        "structured"
+      ],
+      "recommendation_summary": "가로형 모노그램 숄더백과 컴팩트한 데일리 스타일 방향을 비교하기 위한 팀 작성 추천 profile입니다.",
+      "style": {
+        "silhouette": "boxy",
+        "visual_tone": "classic",
+        "use_cases": [
+          "daily",
+          "weekend"
+        ]
+      },
+      "approved_asset": true,
+      "source_status": "team_approved_catalog_record",
+      "official_product_url": "https://us.mcmworldwide.com/en_US/bags/shoulder-crossbody-bags/aren-east-west-shoulder-bag-in-visetos/MWSGATA01I8001.html",
+      "official_product_url_reason": null,
+      "official_listing_url": "https://us.mcmworldwide.com/en_US/women/bags/all-bags",
+      "image_asset_path": "assets/products/mcm-aren-east-west-shoulder-visetos/mcm-aren-east-west-shoulder-visetos.jpeg",
+      "image_asset_path_reason": null,
+      "qr_asset_path": null,
+      "qr_asset_path_reason": "qr_asset_generation_pending",
+      "source_note": "팀이 검수한 공식 PDP identity와 상품 이미지 자산을 함께 승인한 revision입니다. 이미지는 product_id 기준 파일명으로 SHA-256 검증을 통과했습니다."
+    },
+    {
+      "product_id": "mcm-ottomar-nova-55cm-monogram-econyl",
+      "display_name": "55cm Ottomar Nova Weekender in Monogram ECONYL",
+      "category": "bag",
+      "controlled_tags": [
+        "monogram",
+        "recycled_material",
+        "spacious",
+        "travel",
+        "weekender"
+      ],
+      "recommendation_summary": "넉넉한 위켄더와 여행 중심 스타일 방향을 비교하기 위한 팀 작성 추천 profile입니다.",
+      "style": {
+        "silhouette": "cylindrical",
+        "visual_tone": "sporty",
+        "use_cases": [
+          "travel",
+          "weekend"
+        ]
+      },
+      "approved_asset": true,
+      "source_status": "team_approved_catalog_record",
+      "official_product_url": "https://us.mcmworldwide.com/en_US/travel/travel-bags/ottomar-nova-weekender-bag-in-monogram-econyl%C2%AE/MMVGATT06BK001.html",
+      "official_product_url_reason": null,
+      "official_listing_url": "https://us.mcmworldwide.com/en_US/women/bags/all-bags",
+      "image_asset_path": "assets/products/mcm-ottomar-nova-55cm-monogram-econyl/mcm-ottomar-nova-55cm-monogram-econyl.jpeg",
+      "image_asset_path_reason": null,
+      "qr_asset_path": null,
+      "qr_asset_path_reason": "qr_asset_generation_pending",
+      "source_note": "팀이 검수한 공식 PDP identity와 상품 이미지 자산을 함께 승인한 revision입니다. 이미지는 product_id 기준 파일명으로 SHA-256 검증을 통과했습니다."
+    },
+    {
+      "product_id": "mcm-aren-nova-medium-backpack-econyl",
+      "display_name": "Medium Aren Nova Backpack in Monogram ECONYL",
+      "category": "bag",
+      "controlled_tags": [
+        "backpack",
+        "monogram",
+        "recycled_material",
+        "spacious",
+        "travel"
+      ],
+      "recommendation_summary": "중간 크기 백팩과 수납·이동 중심 스타일 방향을 비교하기 위한 팀 작성 추천 profile입니다.",
+      "style": {
+        "silhouette": "boxy",
+        "visual_tone": "sporty",
+        "use_cases": [
+          "daily",
+          "travel"
+        ]
+      },
+      "approved_asset": true,
+      "source_status": "team_approved_catalog_record",
+      "official_product_url": "https://us.mcmworldwide.com/en_US/men/bags/backpacks/aren-nova-backpack-in-monogram-econyl%C2%AE/MMKGATA02BK001.html",
+      "official_product_url_reason": null,
+      "official_listing_url": "https://us.mcmworldwide.com/en_US/women/bags/all-bags",
+      "image_asset_path": "assets/products/mcm-aren-nova-medium-backpack-econyl/mcm-aren-nova-medium-backpack-econyl.jpeg",
+      "image_asset_path_reason": null,
+      "qr_asset_path": null,
+      "qr_asset_path_reason": "qr_asset_generation_pending",
+      "source_note": "팀이 검수한 공식 PDP identity와 상품 이미지 자산을 함께 승인한 revision입니다. 이미지는 product_id 기준 파일명으로 SHA-256 검증을 통과했습니다."
+    },
+    {
+      "product_id": "mcm-pina-studded-tote-visetos",
+      "display_name": "Pina Studded Tote in Visetos",
+      "category": "bag",
+      "controlled_tags": [
+        "bold",
+        "daily",
+        "monogram",
+        "structured",
+        "tote"
+      ],
+      "recommendation_summary": "스터드 장식 모노그램 토트와 대담한 데일리 스타일 방향을 비교하기 위한 팀 작성 추천 profile입니다.",
+      "style": {
+        "silhouette": "trapezoid",
+        "visual_tone": "bold",
+        "use_cases": [
+          "daily",
+          "weekend"
+        ]
+      },
+      "approved_asset": true,
+      "source_status": "team_approved_catalog_record",
+      "official_product_url": "https://us.mcmworldwide.com/en_US/bags/new-arrivals/pina-studded-tote-in-visetos/MWTGATA01CO001.html",
+      "official_product_url_reason": null,
+      "official_listing_url": "https://us.mcmworldwide.com/en_US/women/bags/all-bags",
+      "image_asset_path": "assets/products/mcm-pina-studded-tote-visetos/mcm-pina-studded-tote-visetos.jpeg",
+      "image_asset_path_reason": null,
+      "qr_asset_path": null,
+      "qr_asset_path_reason": "qr_asset_generation_pending",
+      "source_note": "팀이 검수한 공식 PDP identity와 상품 이미지 자산을 함께 승인한 revision입니다. 이미지는 product_id 기준 파일명으로 SHA-256 검증을 통과했습니다."
+    },
+    {
+      "product_id": "mcm-pina-small-tambourine-visetos",
+      "display_name": "Small Pina Tambourine Bag in Visetos",
+      "category": "bag",
+      "controlled_tags": [
+        "compact",
+        "crossbody",
+        "monogram",
+        "tambourine"
+      ],
+      "recommendation_summary": "작은 원형 탬버린 형태와 포인트 크로스바디 방향을 비교하기 위한 팀 작성 추천 profile입니다.",
+      "style": {
+        "silhouette": "rounded",
+        "visual_tone": "classic",
+        "use_cases": [
+          "evening",
+          "weekend"
+        ]
+      },
+      "approved_asset": true,
+      "source_status": "team_approved_catalog_record",
+      "official_product_url": "https://us.mcmworldwide.com/en_US/women/bags/shoulder-crossbody-bags/pina-tambourine-bag-in-visetos/MWRGAOB01CO001.html",
+      "official_product_url_reason": null,
+      "official_listing_url": "https://us.mcmworldwide.com/en_US/women/bags/all-bags",
+      "image_asset_path": "assets/products/mcm-pina-small-tambourine-visetos/mcm-pina-small-tambourine-visetos.jpeg",
+      "image_asset_path_reason": null,
+      "qr_asset_path": null,
+      "qr_asset_path_reason": "qr_asset_generation_pending",
+      "source_note": "팀이 검수한 공식 PDP identity와 상품 이미지 자산을 함께 승인한 revision입니다. 이미지는 product_id 기준 파일명으로 SHA-256 검증을 통과했습니다."
+    },
+    {
+      "product_id": "mcm-stark-side-studs-backpack-gold-crystal-visetos",
+      "display_name": "Stark Side Studs Backpack in Gold Crystal Visetos",
+      "category": "bag",
+      "controlled_tags": [
+        "backpack",
+        "bold",
+        "monogram",
+        "spacious",
+        "travel"
+      ],
+      "recommendation_summary": "골드 크리스털 Visetos와 사이드 스터드가 강조된 백팩 스타일 방향을 비교하기 위한 팀 작성 추천 profile입니다.",
+      "style": {
+        "silhouette": "boxy",
+        "visual_tone": "bold",
+        "use_cases": [
+          "daily",
+          "travel"
+        ]
+      },
+      "approved_asset": true,
+      "source_status": "team_approved_catalog_record",
+      "official_product_url": "https://us.mcmworldwide.com/en_US/bags/new-arrivals/stark-side-studs-backpack-in-gold-crystal-visetos/MMKGAVE07CO001.html",
+      "official_product_url_reason": null,
+      "official_listing_url": "https://us.mcmworldwide.com/en_US/women/bags/all-bags",
+      "image_asset_path": "assets/products/mcm-stark-side-studs-backpack-gold-crystal-visetos/mcm-stark-side-studs-backpack-gold-crystal-visetos.jpeg",
+      "image_asset_path_reason": null,
+      "qr_asset_path": null,
+      "qr_asset_path_reason": "qr_asset_generation_pending",
+      "source_note": "팀이 검수한 공식 PDP identity와 상품 이미지 자산을 함께 승인한 revision입니다. 이미지는 product_id 기준 파일명으로 SHA-256 검증을 통과했습니다."
+    }
+  ]
+}

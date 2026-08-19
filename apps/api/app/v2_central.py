@@ -32,19 +32,19 @@ from apps.api.app.v2_models import (
 
 MAX_MODEL_RESPONSE_BYTES = 64 * 1024
 MAX_PROVIDER_ERROR_BODY_BYTES = 8 * 1024
-APPROVED_PROMPT_VERSION = "central-recommender-ko-v6"
+APPROVED_PROMPT_VERSION = "central-recommender-ko-v7"
 LUNA_MODEL_ID = "gpt-5.6-luna"
 LUNA_REASONING_EFFORT = "max"
 LUNA_REASONING_CONTEXT = "current_turn"
 LUNA_INPUT_VARIANT = "C"
 LUNA_RESPONSES_URL = "https://api.openai.com/v1/responses"
-LUNA_PROMPT_SHA256 = "67a3dbeffded1e8bb290cb5286ee6cf487b3b92b73f3c808ee7683c8a132e762"
+LUNA_PROMPT_SHA256 = "2ab67dd66ae801969357c007d14070de3cb130153e12cfddab3fbae109575804"
 LUNA_PROMPT_PATH = (
     Path(__file__).resolve().parents[3]
     / "experiments"
     / "recommendation"
     / "prompts"
-    / "central-recommender.ko.v6.txt"
+    / "central-recommender.ko.v7.txt"
 )
 _SAFE_PROVIDER_ERROR_TOKEN = re.compile(r"^[A-Za-z0-9_.-]{1,120}$")
 _SAFE_PROVIDER_ERROR_PARAM = re.compile(r"^[A-Za-z0-9_.\[\]-]{1,200}$")

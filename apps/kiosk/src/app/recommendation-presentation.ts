@@ -15,18 +15,21 @@ export type RecommendationPresentation = {
 };
 
 const TENDENCY_COPY: Record<ExplorationTendencyCodeV2, string> = {
-  focused_single_product: "한 상품을 중심으로 살펴본 경향",
-  comparative_exploration: "몇 가지 상품을 비교해 살펴본 경향",
-  broad_exploration: "여러 상품을 폭넓게 살펴본 경향",
+  focused_single_product: "한 상품에 시선이 오래 머문 흐름",
+  comparative_exploration: "몇 가지 상품 사이를 오가며 비교한 흐름",
+  broad_exploration: "여러 상품을 폭넓게 둘러본 흐름",
 };
 
+// Customer-facing phrasing for signals that were actually observed. Each entry
+// must stay a plain description of what the gaze data showed; never promote a
+// missing observation into a claim about what the visitor felt or intended.
 const REACTION_COPY: Record<RecommendationReasonCodeDetailV2, string> = {
-  observed_attention_lead: "이 상품 구간에서 상대적으로 많은 유효 시선 관찰",
-  return_candidate_support: "다른 구간을 본 뒤 이 상품 구간을 다시 확인한 관찰",
-  movement_pattern_support: "이 상품 구간에서 이어진 시선 이동 관찰",
-  observable_action_support: "이 상품 구간에서 나타난 얼굴 동작 신호 변화",
-  catalog_tag_alignment: "관찰 근거와 상품 특성의 일치",
-  sufficient_data_quality: "추천에 사용할 수 있는 관찰 품질",
+  observed_attention_lead: "이 상품에 가장 오래 머문 시선",
+  return_candidate_support: "다른 상품을 보신 뒤 다시 돌아온 시선",
+  movement_pattern_support: "이 상품을 따라 이어진 시선의 흐름",
+  observable_action_support: "이 상품을 보실 때 함께 나타난 표정의 미세한 변화",
+  catalog_tag_alignment: "살펴보신 방향과 상품 특성의 일치",
+  sufficient_data_quality: "안정적으로 이어진 시선",
 };
 
 const TAG_COPY: Readonly<Record<string, string>> = {
@@ -119,8 +122,8 @@ export function presentCentralRecommendation(
     return {
       recommendation_id: decision.recommendation_id,
       product_id: product.product_id,
-      tendency: "로컬 제출 데모용 기본 카탈로그 추천",
-      reason: `유효한 시선 신호가 부족해 관찰 기반 판단 대신 검수된 상품 태그(${tagCopy.join(", ")})의 기본 항목을 표시했습니다.`,
+      tendency: "스타일 취향 중심의 선택",
+      reason: `${tagCopy.join("·")} 방향이 이번 룩북에서 가장 잘 맞아 이 상품을 골랐습니다.`,
       mode: "demo_fallback_v2",
     };
   }
@@ -134,8 +137,8 @@ export function presentCentralRecommendation(
     return {
       recommendation_id: decision.recommendation_id,
       product_id: product.product_id,
-      tendency: "제한된 관찰로 진행한 카탈로그 선택",
-      reason: `유효한 시선 좌표는 부족했지만 실제 관찰의 결측 상태와 검수된 상품 태그(${tagCopy.join(", ")})를 Luna에 전달해 선택했습니다.`,
+      tendency: "스타일 취향 중심의 선택",
+      reason: `${tagCopy.join("·")} 방향이 이번 룩북에서 가장 잘 맞아 이 상품을 골랐습니다.`,
       mode: "central_low_signal_v2",
     };
   }
@@ -151,7 +154,7 @@ export function presentCentralRecommendation(
       decision.exploration_tendency_code,
       "exploration tendency",
     ),
-    reason: `${reactionCopy.join("과 ")}과 검수된 상품 태그(${tagCopy.join(", ")})를 바탕으로 추천했습니다.`,
+    reason: `룩북을 보시는 동안 ${reactionCopy.join("과 ")}이 나타났습니다. 무의식적으로 드러난 이 신호를 ${tagCopy.join("·")} 취향으로 읽어 이 상품을 골랐습니다.`,
     mode: "central_v2",
   };
 }

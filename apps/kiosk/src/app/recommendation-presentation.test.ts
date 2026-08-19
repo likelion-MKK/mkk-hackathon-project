@@ -75,10 +75,10 @@ const decision: RecommendationDecisionV2 = {
 
 test("고객 문구는 code와 DB controlled tag 템플릿으로만 만든다", () => {
   const presentation = presentCentralRecommendation(decision, product);
-  assert.equal(presentation.tendency, "한 상품을 중심으로 살펴본 경향");
-  assert.match(presentation.reason, /상대적으로 많은 유효 시선 관찰/);
-  assert.match(presentation.reason, /컴팩트, 구조적인 형태/);
-  assert.doesNotMatch(presentation.reason, /감정|성격|AI 자유 생성/);
+  assert.equal(presentation.tendency, "한 상품에 시선이 오래 머문 흐름");
+  assert.match(presentation.reason, /가장 오래 머문 시선/);
+  assert.match(presentation.reason, /컴팩트·구조적인 형태/);
+  assert.doesNotMatch(presentation.reason, /감정|성격|구매 의도|AI 자유 생성/);
 });
 
 test("명시적 로컬 데모 fallback은 시선 기반 추천으로 표시하지 않는다", () => {
@@ -92,9 +92,10 @@ test("명시적 로컬 데모 fallback은 시선 기반 추천으로 표시하�
     product,
   );
   assert.equal(presentation.mode, "demo_fallback_v2");
-  assert.match(presentation.tendency, /로컬 제출 데모/);
-  assert.match(presentation.reason, /유효한 시선 신호가 부족/);
-  assert.doesNotMatch(presentation.reason, /유효 시선 관찰/);
+  // Without observed gaze the copy may only talk about reviewed catalog style.
+  assert.equal(presentation.tendency, "스타일 취향 중심의 선택");
+  assert.match(presentation.reason, /컴팩트·구조적인 형태/);
+  assert.doesNotMatch(presentation.reason, /시선|응시|바라보|다시 돌아온/);
 });
 
 test("Luna 저신호 variant B는 유효 시선 추천으로 표현하지 않는다", () => {
@@ -120,9 +121,11 @@ test("Luna 저신호 variant B는 유효 시선 추천으로 표현하지 않는
     product,
   );
   assert.equal(presentation.mode, "central_low_signal_v2");
-  assert.match(presentation.tendency, /제한된 관찰/);
-  assert.match(presentation.reason, /유효한 시선 좌표는 부족/);
-  assert.doesNotMatch(presentation.reason, /많은 유효 시선 관찰/);
+  // Variant B ran without a single valid gaze coordinate, so the customer copy
+  // must never imply that a gaze observation happened.
+  assert.equal(presentation.tendency, "스타일 취향 중심의 선택");
+  assert.match(presentation.reason, /컴팩트·구조적인 형태/);
+  assert.doesNotMatch(presentation.reason, /시선|응시|바라보|다시 돌아온/);
 });
 
 test("다른 상품 근거나 통제되지 않은 tag를 표시하지 않는다", () => {
