@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcm-lookbook.example/contracts/v2/manager-event-v2.schema.json",
+  "title": "ManagerEventV2",
+  "description": "명시적인 고객 Top 1 상품 요청만 매니저에게 전달하는 polling event입니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "sequence", "session_id", "kiosk_id", "event_type", "emitted_at", "payload"],
+  "properties": {
+    "schema_version": { "const": "2.0" },
+    "event_id": { "$ref": "#/$defs/id" },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "session_id": { "$ref": "#/$defs/id" },
+    "kiosk_id": { "$ref": "#/$defs/id" },
+    "event_type": { "const": "customer_product_request" },
+    "emitted_at": { "type": "string", "format": "date-time" },
+    "payload": { "$ref": "#/$defs/payload" }
+  },
+  "$defs": {
+    "id": {
+      "type": "string", "minLength": 1, "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recommendation_id", "selected_product_id", "intent"],
+      "properties": {
+        "recommendation_id": { "$ref": "#/$defs/id" },
+        "selected_product_id": { "$ref": "#/$defs/id" },
+        "intent": { "const": "view_recommended_product" }
+      }
+    }
+  }
+}

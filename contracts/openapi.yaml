@@ -3,7 +3,7 @@ jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 
 info:
   title: MCM AI Lookbook Kiosk API
-  version: 0.1.0
+  version: 0.2.0
   summary: Kiosk, recommendation, product, conversion and manager API contract
   description: >-
     Contract-first scaffold for parallel FE, BE, Eye and Face development.
@@ -45,6 +45,29 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
 
+  /api/v1/sessions/{session_id}/vision-stream-token:
+    post:
+      tags: [Sessions]
+      operationId: issueVisionStreamToken
+      summary: Issue a short-lived one-time Vision Stream credential
+      description: >-
+        The token is bound to the active, consented session and its video. It
+        authorizes only the ephemeral binary WSS Vision Stream and must not be
+        logged, persisted or placed in the WebSocket URL.
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: One-time Vision Stream credential
+          content:
+            application/json:
+              schema:
+                $ref: "./vision-stream-v1/vision-stream-token.schema.json"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
   /api/v1/lookbooks/{lookbook_id}/manifest:
     get:
       tags: [Lookbooks]
@@ -66,7 +89,11 @@ paths:
     post:
       tags: [Reactions]
       operationId: appendReactionBatch
-      summary: Store a batch of derived reaction events
+      summary: Accept and immediately aggregate a batch of derived reaction events
+      description: >-
+        The backend validates and de-duplicates an active session's batch, then
+        folds valid signals into privacy-minimized product features. Individual
+        event payloads are not persisted in the MVP C profile.
       parameters:
         - $ref: "#/components/parameters/SessionId"
       requestBody:
@@ -86,6 +113,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
   /api/v1/sessions/{session_id}/complete:
     post:
@@ -123,6 +152,38 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/v1/sessions/{session_id}/manager-product-requests:
+    post:
+      tags: [Managers]
+      operationId: createManagerProductRequest
+      summary: Request manager assistance for a completed Top 2 recommendation
+      description: >-
+        The request body accepts only request_id and recommendation_id. Backend
+        verifies that the recommendation belongs to the session and is completed,
+        then derives the Top 2 items for the manager event from the stored result.
+        Repeating the same request_id is handled idempotently.
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./requests/manager-product-request.schema.json"
+      responses:
+        "202":
+          description: Customer product request accepted or recognized as a duplicate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManagerProductRequestAccepted"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
   /api/v1/products/{product_id}:
     get:
       tags: [Products]
@@ -145,6 +206,7 @@ paths:
       tags: [Conversions]
       operationId: recordConversionOutcome
       summary: Record a manager-entered fitting or purchase outcome
+      description: A retry with the same outcome_id must be an identical document; reuse with different values returns a conflict.
       requestBody:
         required: true
         content:
@@ -160,12 +222,17 @@ paths:
                 $ref: "./events/conversion-outcome.schema.json"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
   /api/v1/manager/events:
     get:
       tags: [Managers]
       operationId: listManagerEvents
-      summary: Recover manager events after a WebSocket disconnect
+      summary: Poll customer product request events after a sequence cursor
+      description: Manager clients poll this endpoint every 1-2 seconds and advance the cursor with the largest returned sequence.
       parameters:
         - name: after_sequence
           in: query
@@ -183,11 +250,208 @@ paths:
                 items:
                   $ref: "./events/manager-event.schema.json"
 
+  /api/v2/sessions/{session_id}/observations:
+    post:
+      tags: [Reactions]
+      operationId: appendObservationBatchV2
+      summary: Accept a batch of derived frame observations for the central recommender
+      description: >-
+        Accepts only privacy-minimized derived signals whose video_time_ms was
+        snapshotted when the camera frame was captured. Raw frames, image bytes,
+        base64/data URIs, embeddings, landmarks and original/source paths are forbidden.
+        Kiosk producers must send an empty attention.candidates array; Backend rejects
+        client product attribution and maps only approved server-side AOI metadata.
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./v2/observation-batch-v2.schema.json"
+      responses:
+        "202":
+          description: Observation batch accepted or already processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ObservationBatchAcceptedV2"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          description: Observation batch exceeds the configured payload limit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v2/sessions/{session_id}/complete:
+    post:
+      tags: [Recommendations]
+      operationId: completeSessionAnalysisV2
+      summary: Freeze derived observations and enqueue a central Top 1 decision
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "202":
+          description: Central recommendation processing started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecommendationAcceptedV2"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v2/sessions/{session_id}/recommendation:
+    get:
+      tags: [Recommendations]
+      operationId: getSessionRecommendationV2
+      summary: Poll the pending receipt or terminal central Top 1 decision
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: Terminal central recommendation decision
+          content:
+            application/json:
+              schema:
+                $ref: "./v2/recommendation-decision-v2.schema.json"
+        "202":
+          description: Central recommendation is still pending
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecommendationAcceptedV2"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v2/sessions/{session_id}:
+    delete:
+      tags: [Sessions]
+      operationId: deleteSessionV2
+      summary: Cancel the session and discard all session-local derived evidence
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "204":
+          description: Session-local observations, evidence and de-duplication keys discarded
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v2/products/{product_id}:
+    get:
+      tags: [Products]
+      operationId: getProductV2
+      summary: Get one reviewed central recommendation product profile
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      responses:
+        "200":
+          description: Product profile with explicit nullable URL, image and QR provenance
+          content:
+            application/json:
+              schema:
+                $ref: "./v2/product-detail-v2.schema.json"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v2/sessions/{session_id}/manager-product-requests:
+    post:
+      tags: [Managers]
+      operationId: createManagerProductRequestV2
+      summary: Send an explicit customer request for the completed Top 1 product
+      description: >-
+        Backend verifies that recommendation_id belongs to the session and that
+        selected_product_id exactly matches its completed decision. No event is
+        emitted automatically when a session starts or a recommendation completes.
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./v2/manager-product-request-v2.schema.json"
+      responses:
+        "202":
+          description: Customer product request accepted or recognized as a duplicate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManagerProductRequestAccepted"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v2/manager/events:
+    get:
+      tags: [Managers]
+      operationId: listManagerEventsV2
+      summary: Poll explicit customer Top 1 product request events
+      parameters:
+        - name: after_sequence
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: Ordered customer product request events only
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "./v2/manager-event-v2.schema.json"
+
+  /healthz:
+    get:
+      tags: [System]
+      operationId: getLiveness
+      summary: Check whether the API process is alive
+      responses:
+        "200":
+          description: Process is alive; this does not imply database readiness
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Liveness"
+
+  /readyz:
+    get:
+      tags: [System]
+      operationId: getReadiness
+      summary: Check migration, canonical catalog, database and job intake readiness
+      responses:
+        "200":
+          description: API can accept recommendation jobs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Readiness"
+        "503":
+          description: API is alive but is not ready; only a bounded reason code is returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Readiness"
+
   /api/v1/health:
     get:
       tags: [System]
       operationId: getHealth
-      summary: Check API and database readiness
+      deprecated: true
+      summary: Legacy combined health view; use /healthz and /readyz
       responses:
         "200":
           description: Service health
@@ -271,6 +535,38 @@ components:
         status:
           const: pending
 
+    ObservationBatchAcceptedV2:
+      type: object
+      additionalProperties: false
+      required: [batch_id, status]
+      properties:
+        batch_id:
+          $ref: "#/components/schemas/Identifier"
+        status:
+          enum: [accepted, duplicate]
+
+    RecommendationAcceptedV2:
+      type: object
+      additionalProperties: false
+      required: [recommendation_id, decision_request_id, status]
+      properties:
+        recommendation_id:
+          $ref: "#/components/schemas/Identifier"
+        decision_request_id:
+          $ref: "#/components/schemas/Identifier"
+        status:
+          const: pending
+
+    ManagerProductRequestAccepted:
+      type: object
+      additionalProperties: false
+      required: [request_id, status]
+      properties:
+        request_id:
+          $ref: "#/components/schemas/Identifier"
+        status:
+          enum: [accepted, duplicate]
+
     Product:
       type: object
       additionalProperties: false
@@ -307,6 +603,34 @@ components:
         database:
           enum: [up, down]
 
+    Liveness:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          const: ok
+
+    Readiness:
+      type: object
+      additionalProperties: false
+      required: [status, reason]
+      properties:
+        status:
+          enum: [ready, not_ready]
+        reason:
+          oneOf:
+            - type: "null"
+            - enum:
+                - database_not_configured
+                - db_unavailable
+                - migration_version_mismatch
+                - catalog_count_mismatch
+                - catalog_revision_mismatch
+                - catalog_product_mismatch
+                - catalog_content_mismatch
+                - job_intake_unavailable
+
     Error:
       type: object
       additionalProperties: false
@@ -340,9 +664,3 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
-
-x-websocket-channel:
-  path: /ws/v1/managers
-  direction: server-to-client
-  message:
-    $ref: "./events/manager-event.schema.json"

@@ -1,0 +1,37 @@
+{
+  "status_version": "openai-luna-max-status-v2",
+  "configuration": {
+    "model_id": "gpt-5.6-luna",
+    "reasoning_effort": "max",
+    "input_variant": "C",
+    "prompt_version": "central-recommender-ko-v4"
+  },
+  "offline_validation": "passed",
+  "offline_validation_date": "2026-08-17",
+  "maximum_estimated_input_tokens": 3645,
+  "target_input_tokens": 4000,
+  "maximum_input_tokens": 6000,
+  "maximum_live_calls": 27,
+  "diagnostic_request_output_token_limit": null,
+  "diagnostic_timeout_seconds": null,
+  "maximum_planned_cost_usd": 4.1796,
+  "prompt_sha256": "bc1186d1e3f1e908e8a865ae8f89c35f7e6c3172ccd010018101141d5a350149",
+  "config_sha256": "ee0233e341700fdefcdf697f102c41017ab3f726719cf6b1858805ea7603514b",
+  "previous_live_diagnostic": {
+    "artifact": "artifacts/recommendation/openai-luna-max/diagnostic-full-no-timeout.json",
+    "prompt_version": "central-recommender-ko-v3",
+    "smoke_callable_passed": 3,
+    "smoke_callable_total": 4,
+    "live_call_count": 4,
+    "selected_expected_product_in_failed_case": true,
+    "failed_gate": "psychology_auxiliary_signal_not_grounded",
+    "p95_latency_ms": 32771.07,
+    "spent_usd_conservative": 0.0151686
+  },
+  "root_cause": "The catalog and selected product were valid. The v3 prompt did not make both gaze and observable face-action code pairs mandatory for conflicting valid signals, while strict JSON Schema only constrained shape and enum membership.",
+  "corrective_action": "v4 makes conflict and positive return-candidate reason/evidence mappings explicit and records required versus observed controlled codes in artifacts.",
+  "live_benchmark": "v4_rerun_required",
+  "production_status": "not_approved",
+  "selected_product_model": null,
+  "reason": "v4_full_27_call_quality_and_replay_benchmark_not_completed"
+}

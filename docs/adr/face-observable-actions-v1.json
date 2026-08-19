@@ -1,0 +1,501 @@
+{
+  "taxonomy_version": "face-observable-actions-v1",
+  "status": "proposed",
+  "additional_properties": "forbidden",
+  "source_model": {
+    "model_id": "mediapipe-face-landmarker",
+    "source_revision": "493c90e5f3eb40b9080606964fc18528a99962f0",
+    "asset_revision": "face_landmarker/float16/1",
+    "asset_sha256": "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff"
+  },
+  "labels": [
+    {
+      "source_label": "_neutral",
+      "canonical_signal_name": "source_neutral_baseline",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "none",
+      "score_policy": "exclude",
+      "final": false
+    },
+    {
+      "source_label": "browDownLeft",
+      "canonical_signal_name": "brow_down_left",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "left",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "browDownRight",
+      "canonical_signal_name": "brow_down_right",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "right",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "browInnerUp",
+      "canonical_signal_name": "brow_inner_up",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "none",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "browOuterUpLeft",
+      "canonical_signal_name": "brow_outer_up_left",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "left",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "browOuterUpRight",
+      "canonical_signal_name": "brow_outer_up_right",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "right",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "cheekPuff",
+      "canonical_signal_name": "cheek_puff",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "none",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "cheekSquintLeft",
+      "canonical_signal_name": "cheek_squint_left",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "left",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "cheekSquintRight",
+      "canonical_signal_name": "cheek_squint_right",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "right",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "eyeBlinkLeft",
+      "canonical_signal_name": "eye_blink_left",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "left",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "eyeBlinkRight",
+      "canonical_signal_name": "eye_blink_right",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "right",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "eyeLookDownLeft",
+      "canonical_signal_name": "eye_look_down_left",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "left",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "eyeLookDownRight",
+      "canonical_signal_name": "eye_look_down_right",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "right",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "eyeLookInLeft",
+      "canonical_signal_name": "eye_look_in_left",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "left",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "eyeLookInRight",
+      "canonical_signal_name": "eye_look_in_right",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "right",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "eyeLookOutLeft",
+      "canonical_signal_name": "eye_look_out_left",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "left",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "eyeLookOutRight",
+      "canonical_signal_name": "eye_look_out_right",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "right",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "eyeLookUpLeft",
+      "canonical_signal_name": "eye_look_up_left",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "left",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "eyeLookUpRight",
+      "canonical_signal_name": "eye_look_up_right",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "right",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "eyeSquintLeft",
+      "canonical_signal_name": "eye_squint_left",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "left",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "eyeSquintRight",
+      "canonical_signal_name": "eye_squint_right",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "right",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "eyeWideLeft",
+      "canonical_signal_name": "eye_wide_left",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "left",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "eyeWideRight",
+      "canonical_signal_name": "eye_wide_right",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "right",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "jawForward",
+      "canonical_signal_name": "jaw_forward",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "none",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "jawLeft",
+      "canonical_signal_name": "jaw_left",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "left",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "jawOpen",
+      "canonical_signal_name": "jaw_open",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "none",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "jawRight",
+      "canonical_signal_name": "jaw_right",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "right",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "mouthClose",
+      "canonical_signal_name": "mouth_close",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "none",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "mouthDimpleLeft",
+      "canonical_signal_name": "mouth_dimple_left",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "left",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "mouthDimpleRight",
+      "canonical_signal_name": "mouth_dimple_right",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "right",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "mouthFrownLeft",
+      "canonical_signal_name": "mouth_frown_left",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "left",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "mouthFrownRight",
+      "canonical_signal_name": "mouth_frown_right",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "right",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "mouthFunnel",
+      "canonical_signal_name": "mouth_funnel",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "none",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "mouthLeft",
+      "canonical_signal_name": "mouth_left",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "left",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "mouthLowerDownLeft",
+      "canonical_signal_name": "mouth_lower_down_left",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "left",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "mouthLowerDownRight",
+      "canonical_signal_name": "mouth_lower_down_right",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "right",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "mouthPressLeft",
+      "canonical_signal_name": "mouth_press_left",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "left",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "mouthPressRight",
+      "canonical_signal_name": "mouth_press_right",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "right",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "mouthPucker",
+      "canonical_signal_name": "mouth_pucker",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "none",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "mouthRight",
+      "canonical_signal_name": "mouth_right",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "right",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "mouthRollLower",
+      "canonical_signal_name": "mouth_roll_lower",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "none",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "mouthRollUpper",
+      "canonical_signal_name": "mouth_roll_upper",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "none",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "mouthShrugLower",
+      "canonical_signal_name": "mouth_shrug_lower",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "none",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "mouthShrugUpper",
+      "canonical_signal_name": "mouth_shrug_upper",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "none",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "mouthSmileLeft",
+      "canonical_signal_name": "mouth_smile_left",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "left",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "mouthSmileRight",
+      "canonical_signal_name": "mouth_smile_right",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "right",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "mouthStretchLeft",
+      "canonical_signal_name": "mouth_stretch_left",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "left",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "mouthStretchRight",
+      "canonical_signal_name": "mouth_stretch_right",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "right",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "mouthUpperUpLeft",
+      "canonical_signal_name": "mouth_upper_up_left",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "left",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "mouthUpperUpRight",
+      "canonical_signal_name": "mouth_upper_up_right",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "right",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "noseSneerLeft",
+      "canonical_signal_name": "nose_sneer_left",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "left",
+      "score_policy": "emit",
+      "final": false
+    },
+    {
+      "source_label": "noseSneerRight",
+      "canonical_signal_name": "nose_sneer_right",
+      "signal_kind": "observable_face_action",
+      "emotion_label": false,
+      "laterality": "right",
+      "score_policy": "emit",
+      "final": false
+    }
+  ],
+  "neutral_policy": {
+    "source_label": "_neutral",
+    "canonical_signal_name": "source_neutral_baseline",
+    "interpretation": "source_baseline_not_neutral_emotion",
+    "score_policy": "exclude"
+  },
+  "unknown_label_policy": {
+    "canonical_signal_name": "unknown",
+    "single_unknown": "emit_without_semantic_inference",
+    "multiple_unknown": "invalidate_as_malformed_output"
+  },
+  "no_face_policy": {
+    "event_emitted": true,
+    "face_detected": false,
+    "face_count": 0,
+    "valid": false,
+    "scores": {},
+    "reason": "no_face",
+    "score_label": false
+  }
+}

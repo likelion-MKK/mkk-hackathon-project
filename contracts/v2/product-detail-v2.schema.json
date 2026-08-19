@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcm-lookbook.example/contracts/v2/product-detail-v2.schema.json",
+  "title": "ProductDetailV2",
+  "description": "Backend와 Kiosk가 같은 reviewed product record를 읽기 위한 단일 상품 응답입니다. catalog version은 RecommendationDecisionV2에 기록합니다.",
+  "$ref": "product-recommendation-profile-v2.schema.json#/$defs/product"
+}

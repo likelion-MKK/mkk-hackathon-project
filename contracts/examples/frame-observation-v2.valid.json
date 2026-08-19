@@ -1,0 +1,71 @@
+{
+  "schema_version": "2.0",
+  "frame_id": "frame-v2-00421",
+  "sequence": 421,
+  "captured_at_mono_ms": 143220.4,
+  "session_offset_ms": 4200.4,
+  "video_time_ms": 4200,
+  "playback_epoch": 0,
+  "gaze": {
+    "screen_x_norm": 0.3,
+    "screen_y_norm": 0.46,
+    "confidence": 1.0,
+    "producer_id": "eyetrax-eye-adapter",
+    "model_revision": "eyetrax-demo-raw-v1",
+    "calibration_id": "calibration-demo-001"
+  },
+  "gaze_reason": null,
+  "attention": {
+    "outside_video": false,
+    "video_x_norm": 0.3,
+    "video_y_norm": 0.43,
+    "confidence": 1.0,
+    "producer_id": "kiosk-video-coordinate-v1",
+    "model_revision": "video-coordinate-v1",
+    "manifest_version": "demo-lookbook-v1",
+    "candidates": []
+  },
+  "attention_reason": null,
+  "expression": {
+    "scores": {
+      "brow_inner_up": 0.18,
+      "mouth_smile_left": 0.31,
+      "mouth_smile_right": 0.29
+    },
+    "quality": 0.79,
+    "confidence": 0.79,
+    "producer_id": "mediapipe-face-landmarker-adapter",
+    "model_revision": "face-landmarker-float16-v1",
+    "taxonomy_version": "face-observable-actions-v1"
+  },
+  "expression_reason": null,
+  "derived": {
+    "gaze": {
+      "movement": {
+        "distance_norm": 0.04,
+        "speed_norm_per_s": 0.16
+      },
+      "movement_reason": null,
+      "continuous_observation_ms": 500,
+      "return_candidate": false,
+      "return_candidate_reason": null
+    },
+    "gaze_reason": null,
+    "expression": {
+      "score_changes": {
+        "brow_inner_up": 0.02,
+        "mouth_smile_left": 0.04
+      },
+      "score_change_rates_per_s": {
+        "brow_inner_up": 0.08,
+        "mouth_smile_left": 0.16
+      },
+      "change_reason": null,
+      "sustained_actions": [
+        { "signal": "mouth_smile_left", "duration_ms": 500 }
+      ]
+    },
+    "expression_reason": null
+  },
+  "derived_reason": null
+}

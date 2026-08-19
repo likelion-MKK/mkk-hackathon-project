@@ -1,7 +1,10 @@
 # D1 기술·운영 의사결정서
 
-- 문서 상태: 팀장 기본안 v0.1
+> **Superseded (2026-08-16):** 이 문서는 당시 결정의 역사적 스냅샷이다. 현재 구현 기준은 [`OVERALL_DESIGN.md`](../OVERALL_DESIGN.md), [`IMPLEMENTATION_PLAN.md`](../IMPLEMENTATION_PLAN.md), [`ADR-0006`](../adr/0006-central-recommendation-ai.md)이다. 새 작업의 권위 문서로 사용하지 않는다.
+
+- 문서 상태: 팀장 기본안 v0.2
 - 작성일: 2026-08-11
+- 최근 수정: 2026-08-14 MVP 파생 반응 C안 반영
 - 기준 문서: `README.md`, `docs/OVERALL_DESIGN.md`, `docs/DETAILED_DESIGN_PLAN.md`
 - 목적: 팀원이 구현을 시작하기 전에 공통 실행 환경과 통합 기준을 고정한다.
 
@@ -15,10 +18,11 @@
 | D1-02 | Frontend | React + TypeScript + Vite, Kiosk와 Manager를 별도 앱으로 구성 | 잠정 결정 | 조윤혜·박형진 |
 | D1-03 | Python·Node와 설치 방식 | Node 24 LTS + npm, Python 3.13 + uv, AI 환경은 서비스별 분리 | 잠정 결정 | 박형진·양유상·정은미 |
 | D1-04 | Kiosk 기기·브라우저·카메라 | Windows 11 + Edge Stable + 16:9 Full HD + 720p/30fps 이상 카메라를 기준 환경으로 사용 | 실제 장비 확인 필요 | 박형진·조윤혜 |
-| D1-05 | Eye·Face 실행 위치 | 원본 프레임은 키오스크 밖으로 보내지 않고 동일 기기에서 추론 | 위치 원칙 결정, runtime D5 확정 | 양유상·정은미·조윤혜 |
-| D1-06 | 매니저 최초 알림 | S02에서 AI 추천 선택과 동의가 끝난 직후 `session_started` 전송 | 잠정 결정 | 박형진·조윤혜 |
+| D1-05 | Eye·Face 실행 위치 | Kiosk는 캡처·시간 동기화, 별도 Vision 서버는 Eye·Face 추론을 담당하고 원본 frame은 WSS로 일시 전송 후 비저장 | 원격 전환 방향 확인, 개인정보·network·benchmark 승인 필요 | 박형진·양유상·정은미·조윤혜 |
+| D1-06 | 매니저 제품 요청 알림 | S04에서 고객이 제품 요청 버튼을 누를 때만 Top 2와 함께 `customer_product_request` 기록 | 이슈 #6, Consumer 검토 필요 | 박형진·조윤혜 |
 | D1-07 | PostgreSQL과 migration | PostgreSQL 17.10 Docker Compose, SQLAlchemy 2 + Alembic, migration 단일 순서 관리 | 잠정 결정 | 박형진 |
 | D1-08 | 룩북 영상과 상품 | 개발용 fixture로 병렬 개발, 실제 영상·상품은 version과 checksum을 고정한 뒤 manifest·catalog에 반영 | 실제 자산 확정 필요 | 전원 |
+| D1-09 | MVP 파생 반응 보관 | 개별 파생 event는 활성 세션에서 즉시 집계하고 영속화하지 않으며, 추천 완료 시 집계·중복 제거 상태를 폐기 | 잠정 결정, 실제 client 전 TTL·취소 정책 확정 필요 | 박형진·조윤혜 |
 
 ### 상태의 의미
 
@@ -61,7 +65,7 @@ flowchart LR
 5. 기준을 통과하면 룩북을 재생한다. 실패하면 한 번 재시도하고, 계속 실패하면 `gaze_unavailable` 상태로 Face·fallback 흐름을 사용한다.
 6. 원본 프레임은 저장하지 않는다. `calibration_id`, 모델 revision, 화면 크기, 성공 여부와 오차 요약만 파생 데이터로 남긴다.
 
-이동 표적을 따라보는 smooth-pursuit 방식은 연구된 보정 접근이지만, 실제 웹캠·거리·조명·모델에 따라 오차가 달라진다. 따라서 anchor 개수, 이동 속도, 정지 시간, 통과 오차는 지금 임의로 고정하지 않고 동일 Kiosk 장비에서 Eye 후보를 비교한 뒤 D5에 확정한다.
+이동 표적을 따라보는 smooth-pursuit 방식은 연구된 보정 접근이지만, 실제 웹캠·거리·조명·모델에 따라 오차가 달라진다. 따라서 anchor 개수, 이동 속도, 정지 시간, 통과 오차는 지금 임의로 고정하지 않고 동일 Kiosk 장비와 목표 Vision 서버·network 조건에서 Eye 후보를 비교한 뒤 D5에 확정한다.
 
 ### D5까지 확정할 값
 
@@ -100,7 +104,7 @@ flowchart LR
 - `apps/kiosk`: React + TypeScript + Vite 기반 S01-S04 Kiosk 앱
 - `apps/manager`: React + TypeScript + Vite 기반 매니저 알림 앱
 - 두 앱은 root npm workspace를 사용하고 root `package-lock.json` 하나를 공유한다.
-- REST·WebSocket 데이터 타입은 `contracts/`에서 생성하거나 contract test로 검증한다.
+- REST·polling 데이터 타입은 `contracts/`에서 생성하거나 contract test로 검증한다.
 - Kiosk 상태는 `screensaver → menu → consent → calibration → lookbook → finalizing → report`처럼 명시적인 상태 전이로 관리한다.
 - 무거운 AI 모델 코드는 React component에 직접 넣지 않고 `VisionClient` 경계 뒤에 둔다.
 
@@ -184,7 +188,7 @@ uv run uvicorn app.main:app --reload
 
 ## 5. D1-04 실제 Kiosk 기기·브라우저·카메라 환경
 
-모델의 정확도와 지연 시간은 개발자의 노트북이 아니라 **실제 시연 Kiosk**를 기준으로 판단해야 한다. 장비가 정해지기 전에는 다음 값을 reference profile로 사용한다.
+입력 품질과 전체 지연 시간은 개발자의 노트북이 아니라 **실제 시연 Kiosk·카메라·network와 목표 Vision 서버**를 함께 기준으로 판단해야 한다. 장비가 정해지기 전에는 다음 값을 Kiosk reference profile로 사용한다.
 
 ### Reference profile
 
@@ -196,6 +200,7 @@ uv run uvicorn app.main:app --reload
 | CPU/RAM | 4 core 이상, RAM 16GB 이상을 1차 기준 | 모델명, core, RAM |
 | GPU | 필수로 가정하지 않음 | GPU, VRAM, driver, 가속 API |
 | Camera | 고정 설치, 1280×720 30fps 이상 요청 | 모델명, 실제 width/height/fps |
+| Network | 유선 연결 우선 | server RTT·jitter·packet loss·지속 upload bandwidth |
 | 배치 | 카메라를 화면 상단 중앙에 고정 | 화면과의 높이·각도 |
 | 사용자 환경 | 정면 1인, 일정한 전면 조명 | 권장 거리와 조도 범위 |
 
@@ -220,6 +225,7 @@ GPU / VRAM / driver:
 Edge version:
 카메라 제조사·모델:
 실제 camera width·height·fps:
+Vision server RTT·jitter·packet loss·upload bandwidth:
 카메라 위치와 권장 사용자 거리:
 시연 장소의 조명 조건:
 확정일 / 확인자:
@@ -227,39 +233,45 @@ Edge version:
 
 ### Gate
 
-D2 전에 장비 모델과 카메라를 기록하고, D5 모델 선정 benchmark와 D8 live test는 같은 장비 또는 동일 사양에서 실행한다.
+D2 전에 Kiosk·카메라와 network 측정 조건을 기록하고, D5 모델 선정 benchmark와 D8 live test는 같은 Kiosk·목표 Vision 서버·network 조건 또는 동일 사양에서 실행한다.
 
 ---
 
 ## 6. D1-05 Eye·Face 모델 실행 위치
 
-### 지금 고정하는 원칙
+### 변경 배경과 상태
 
-- 원본 웹캠 프레임은 **동일한 물리 Kiosk 안**에서만 처리한다.
-- 원본 프레임을 외부 Backend, cloud API, PostgreSQL, 파일 또는 로그로 보내지 않는다.
-- 카메라를 여는 `FrameSource`는 하나이며 Eye와 Face가 같은 캡처를 메모리에서 공유한다.
-- Backend로 보내는 것은 `GazeSample`, `ExpressionSample`, `ProductAttentionEvent` 같은 파생 신호뿐이다.
+Eye Tracking과 표정 분석을 같은 Kiosk에서 안정적으로 실행하기 어렵다는 판단에 따라 **별도 Vision Inference 서버**로 옮기는 방향을 1차안으로 둔다. 이 변경은 원본 frame의 네트워크 전송을 새로 허용해야 하므로 바로 `확정`으로 처리하지 않는다. 상세 경계와 승인 조건은 [`ADR-0001 원격 Eye·Face 추론 서버 전환`](../adr/0001-remote-vision-inference.md)을 기준으로 하며, ADR이 Accepted되기 전에는 실제 고객 frame을 원격 전송하지 않는다.
 
-### 최종 runtime 선택지는 D5에 확정
+### 지금 고정하는 설계 경계
 
-| 선택지 | 구조 | 장점 | 주의점 |
-| --- | --- | --- | --- |
-| Browser Web Worker | Kiosk가 카메라를 열고 Web Worker의 모델에 메모리 전달 | FE와 시간축 연결이 단순하고 별도 Python 프로세스가 없음 | 브라우저용 모델·WebGPU/WASM 지원과 성능이 필요 |
-| Kiosk-local Python runtime | 동일 기기의 Python runtime이 카메라를 한 번 열어 두 Adapter에 fan-out하고 파생 신호만 반환 | GitHub·Hugging Face Python 모델 선택 폭이 넓음 | process lifecycle, 영상 시각 동기화, 로컬 IPC 설계가 필요 |
-| 원격 Backend 추론 | 카메라 프레임을 네트워크로 전송 | 중앙 운영이 쉬울 수 있음 | **현재 개인정보 원칙과 offline 시연 요구에 맞지 않아 제외** |
+- Kiosk의 단일 `FrameSource`가 카메라를 열고 `frame_id`, 캡처 시각, `video_time_ms`, `playback_epoch`과 화면 layout을 만든다.
+- 카메라는 video만 요청하고 audio capture·전송은 사용하지 않는다.
+- `RemoteVisionClient`가 고객 동의가 확인된 세션에서만 binary frame과 capture context를 WSS로 전송한다.
+- 일반 FastAPI Backend와 PostgreSQL은 원본 image·frame·embedding을 받거나 저장하지 않는다.
+- 별도 Vision Gateway가 frame을 메모리에서 decode하고 같은 frame을 Eye·Face Worker에 fan-out한다.
+- Gateway는 `GazeSample`과 `ExpressionSample`만 Kiosk에 반환하며 출력 schema와 invalid 의미는 Contract v1을 유지한다.
+- 원본 frame은 proxy·Gateway·Worker·APM·로그·파일·DB·cache·backup에 남기지 않는다.
+- 네트워크가 끊기거나 서버가 과부하일 때 Fake 결과를 만들지 않고 명시적인 분석 불가 상태로 종료한다.
 
-### 팀장 기본안
+### MVP transport
 
-외부 모델 후보가 Python 중심일 가능성이 높으므로 **Kiosk-local Python runtime**을 1차 구현안으로 둔다. 다만 D2~D5 후보 비교에서 브라우저 모델이 품질·지연·자원·설치 안정성 기준을 더 잘 충족하면 `VisionClient` 구현만 교체할 수 있게 한다.
+| 선택지 | 판단 | 이유와 재평가 조건 |
+| --- | --- | --- |
+| Binary WSS | **MVP 제안** | frame과 capture context를 한 logical message로 결합하기 쉽고 현재 브라우저·Python 경계에서 구현 범위가 작다. 자동 backpressure가 없으므로 in-flight `1`, 최신 frame 우선, message/FPS limit가 필수다. |
+| WebRTC | 재평가 | media 전송과 network 적응에 유리하지만 signaling과 frame별 Kiosk metadata 결합이 복잡하다. 다중 Kiosk 또는 WSS 성능 Gate 실패 시 비교한다. |
+| Kiosk-local runtime | 개발 fallback만 유지 | Fake·Replay와 제한된 로컬 후보 실험에 사용한다. 실제 고객 흐름에서 원격 실패를 가짜 로컬 결과로 대체하지 않는다. |
 
-최종 선택은 모델 이름만 보고 하지 않는다. 실제 Kiosk에서 다음을 비교한다.
+### D5까지 검증할 값
 
-- 화면 AOI hit 품질과 calibration 성공률
-- p50/p95 capture-to-result 지연, 지속 FPS
-- CPU/GPU/RAM과 장시간 안정성
-- no-face, multi-face, 안경, 조도, 머리 움직임 후 회복
-- 설치 재현성과 code·weight license
-- 원본 프레임 비저장·외부 전송 없음
+- 실제 server 후보에서 Eye AOI hit 품질과 calibration 성공률
+- frame encode·upload·queue·Eye/Face 추론·return을 포함한 capture-to-result p50/p95
+- 지속 result FPS, drop rate, 첫 결과와 warmup 시간
+- server CPU/GPU/RAM/VRAM, 한 세션 모델 메모리와 10분 이상 안정성
+- no-face, multi-face, 안경, 조도, 머리 움직임과 network 단절 후 회복
+- 설치 재현성, 고정 revision, code·weight license와 배포 비용
+- 원본 frame 비저장, 로그·APM·proxy buffer와 접근 통제 점검
+- 동시 Kiosk 수와 현장 network에서 필요한 bandwidth
 
 ### runtime별 공통 계약
 
@@ -277,40 +289,33 @@ health()
 
 어느 runtime을 선택해도 출력 schema, `video_time_ms`, 좌표 기준과 invalid reason은 바꾸지 않는다.
 
+원격 stream의 handshake, binary envelope, 인증·만료, drop/error와 close 의미는 이 문서에서 임의로 만들지 않고 ADR 승인 후 별도 `Vision Stream v1` Contract PR에서 정의한다.
+
 ---
 
-## 7. D1-06 매니저 최초 알림 시점
+## 7. D1-06 매니저 제품 요청 알림 시점
 
-### 선택지
+### 결정
 
-| 시점 | 장점 | 문제 |
-| --- | --- | --- |
-| S01 첫 터치 | 가장 빠르게 알림 | 메뉴만 둘러보는 고객까지 알림이 발생함 |
-| S02 AI 추천 선택 직후 | 실제 분석 플로우 진입자만 알림 | 동의 전 취소를 별도로 처리해야 함 |
-| 동의 완료 직후 | 분석이 실제 시작될 세션만 알림 | S02 선택보다 아주 조금 늦음 |
-| S04 결과 완료 | 결과가 있는 알림만 전송 | 매니저가 고객 이용 중임을 미리 알 수 없음 |
+추천 결과가 완료돼도 자동 알림을 보내지 않는다. **S04에서 고객이 `매니저에게 제품 요청` 버튼을 누를 때만** Kiosk가 `POST /api/v1/sessions/{session_id}/manager-product-requests`를 호출한다.
 
-### 팀장 기본안
-
-**S02에서 AI 추천을 선택하고 데이터 처리 동의가 완료된 직후** 세션을 만들고 `session_started`를 자동 전송한다. S01 첫 터치는 알림 기준으로 사용하지 않는다.
-
-이후 새 알림 카드를 계속 추가하지 않고 같은 `session_id` 카드를 추천 완료 시 갱신한다.
+Backend는 URL의 세션과 `recommendation_id`를 검증한 뒤, 클라이언트가 보낸 상품 목록을 신뢰하지 않고 서버의 완료된 Top 2로 `customer_product_request` 이벤트를 저장한다.
 
 ```text
-session_started
-  → recommendation_ready
+S04 고객 제품 요청
+  → customer_product_request
+  → Manager REST polling
 ```
 
-Contract v1의 ManagerEvent는 위 두 종류만 지원한다. `calibrating`, `analyzing`, `cancelled`, `timed_out`, `failed`까지 매니저에게 실시간으로 보여 줄 필요가 생기면 enum과 example을 먼저 추가하는 별도 Contract PR로 진행한다. Kiosk 내부 화면 상태를 ManagerEvent로 임의 전송하지 않는다.
+Manager Screen은 `GET /api/v1/manager/events?after_sequence={last_sequence}`을 1~2초 간격으로 조회한다. `event_id`로 중복을 제거하고 가장 큰 `sequence`를 다음 cursor로 사용한다. 양방향 채팅과 WebSocket endpoint는 MVP 범위에서 제외한다.
 
 ### ManagerEvent 최소 정보
 
 - 공통: `schema_version`, `event_id`, `sequence`, `session_id`, `kiosk_id`, `event_type`, `emitted_at`, `payload`
-- `session_started`: 개인 정보나 원본 얼굴 없이 빈 `payload`로 시작 상태만 표시
-- `recommendation_ready`: `recommendation_id`, `engine_mode`, rank와 `product_id`로 구성된 Top 2
+- `customer_product_request`: `intent=view_recommended_products`, `recommendation_id`, `engine_mode`, rank와 `product_id`로 구성된 서버 검증 Top 2
 - 상품 표시명과 이미지는 Manager가 같은 `product_id`로 catalog를 조회해 표시
 
-WebSocket 재연결과 중복 전송이 있어도 `event_id`로 한 번만 반영한다. 알림 실패가 Kiosk 룩북 재생을 막아서는 안 된다.
+알림 조회 실패가 Kiosk 룩북 재생을 막아서는 안 된다. 기존 `session_started`, `recommendation_ready`는 v1 소비자 호환을 위해 계약 enum에 남기되, 새 Producer는 생성하지 않는다.
 
 ---
 
@@ -320,7 +325,7 @@ WebSocket 재연결과 중복 전송이 있어도 `event_id`로 한 번만 반�
 
 - 개발·통합·시연의 PostgreSQL major는 `17`, 최초 고정 이미지는 `postgres:17.10`으로 한다.
 - 개발자는 Docker Compose로 같은 DB 환경을 실행한다.
-- 시연은 네트워크 장애를 줄이기 위해 Kiosk와 같은 PC 또는 같은 매장 LAN의 Backend host에서 실행한다.
+- 시연은 Vision Gateway, FastAPI와 PostgreSQL을 같은 server 또는 같은 private network에 두고 Kiosk가 하나의 HTTPS/WSS origin으로 접속한다. PostgreSQL과 Worker port는 외부에 공개하지 않는다.
 - 데이터는 named volume을 사용하고, demo reset은 별도 명령으로 명시한다.
 - ORM은 SQLAlchemy 2, schema migration은 Alembic을 사용한다.
 - 앱 시작 시 `create_all()`로 운영 schema를 몰래 바꾸지 않는다. 항상 migration을 적용한다.
@@ -357,7 +362,8 @@ uv run uvicorn app.main:app --reload
 - `DATABASE_URL`은 `.env.example`에 형식만 제공하고 실제 password는 commit하지 않는다.
 - PostgreSQL port를 외부 인터넷에 공개하지 않는다.
 - 원본 frame, base64, image blob/path 또는 얼굴 embedding 컬럼을 만들지 않는다.
-- 동의한 파생 반응, 추천, 구매 전환 데이터의 보유 기간·삭제 기준은 개인정보 상세 설계에서 별도 확정한다.
+- D1-09 C안에서는 개별 파생 event를 PostgreSQL에 저장하지 않는다. 활성 세션은 상품별 집계와 재전송 중복 제거 키만 메모리에 유지하고, 추천 완료 시 폐기한다.
+- 최종 추천·구매 전환과 필요한 익명 세션 상태의 보유 기간·삭제 기준, 활성 세션 TTL·취소·재시작 정책은 실제 client 연결 전 별도 계약으로 확정한다.
 
 ---
 
@@ -428,17 +434,36 @@ manifest_version:
 
 ---
 
-## 10. 팀 회의에서 승인할 체크리스트
+## 10. D1-09 MVP 파생 반응 보관 C안
+
+### 적용 범위
+
+- `ReactionBatch`는 Kiosk·Vision 영역에서 Backend로 파생 신호를 전달하는 transport이며, event history 저장 형식이 아니다.
+- Backend는 활성 세션에서 `event_id`·`sequence`·`batch_id`로 재전송을 중복 제거하고, catalog 상품별 유효 관심 집계만 만든다.
+- 개별 event payload, `frame_id`, 좌표, 캡처 시각, 표정 score와 원본 신호는 DB·파일·로그·cache·queue·backup에 남기지 않는다.
+- 추천 실행이 성공하면 활성 집계와 중복 제거 키를 폐기하고, 최종 `RecommendationResult`, Manager 요청 및 `ConversionOutcome`만 정해진 보유 정책에 따라 다룬다.
+- 표정 score는 상품 귀속·taxonomy·평가 기준이 승인되기 전까지 MVP 집계·영속화·추천 점수에 사용하지 않는다.
+
+### 후속 Gate
+
+- 실제 Kiosk client 연결 전 세션 TTL, 취소 API·멱등성, timeout·재시작 시 화면 동선과 활성 상태의 폐기 시점을 Contract PR로 확정한다.
+- PostgreSQL 도입 시 `reaction_batches` 또는 개별 sample table을 만들지 않고, 필요한 경우 만료 시각이 있는 집계 상태와 최종 결과만 migration으로 관리한다.
+- 실제 고객의 개별 반응 이력을 분석·학습에 쓰려면 새로운 동의 version, 보유 기간, 삭제·접근 통제와 별도 Contract·migration 승인을 거친다.
+
+---
+
+## 11. 팀 회의에서 승인할 체크리스트
 
 아래 항목을 한 번의 D1 회의에서 확인하고 이 표의 상태를 갱신한다.
 
 - [ ] React + TypeScript + Vite와 npm workspace를 승인했다.
 - [ ] Node `24.19.0`, Python `3.13.15`, uv 사용을 팀원 PC에서 확인했다.
 - [ ] 실제 Kiosk 장비·Edge·카메라 정보를 기록했다.
-- [ ] 원본 프레임을 Kiosk 밖으로 보내지 않는 실행 원칙을 승인했다.
-- [ ] Browser Worker와 Kiosk-local Python 비교 Gate·담당자를 정했다.
+- [ ] 원격 Vision 서버로의 일시적 frame 전송과 고객 동의 범위를 승인했다.
+- [ ] WSS, server benchmark와 원본 frame 비저장 검증 Gate·담당자를 정했다.
 - [ ] 최초 Manager 알림을 S02 AI 선택 + 동의 완료로 확정했다.
 - [ ] PostgreSQL 17.10 Compose와 Alembic migration 규칙을 승인했다.
+- [ ] D1-09 C안의 활성 세션 TTL·취소·폐기 정책을 실제 client 연결 전 확정하기로 했다.
 - [ ] 임시 video ID와 placeholder product ID 최소 4개를 정했다.
 - [ ] Eye 보정 UI는 점선 이동 표적 + 별도 검증으로 구현하기로 했다.
 - [ ] 보정 통과 수치는 Eye benchmark 이후 D5에 확정하기로 했다.
@@ -453,7 +478,7 @@ manifest_version:
 미결 항목의 담당자·기한:
 ```
 
-## 11. 근거 자료
+## 12. 근거 자료
 
 - [Node.js Releases](https://nodejs.org/en/about/previous-releases): LTS 사용 원칙과 현재 지원 계열
 - [Vite Getting Started](https://vite.dev/guide/): React TypeScript template과 Node 요구사항
@@ -464,5 +489,7 @@ manifest_version:
 - [Docker Compose Quickstart](https://docs.docker.com/compose/gettingstarted/): 동일 개발 환경, healthcheck와 named volume 구성
 - [Microsoft Edge Kiosk Mode](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-configure-kiosk-mode): fullscreen Kiosk 운영 방식
 - [MediaDevices.getUserMedia](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia): 카메라 권한과 secure context 요구사항
+- [MDN WebSocket API](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API): binary 양방향 연결과 표준 WebSocket의 backpressure 제약
+- [ADR-0001 원격 Eye·Face 추론 서버 전환](../adr/0001-remote-vision-inference.md): 실행 위치 변경의 transport·개인정보·장애·배포 Gate
 - [Pursuit Calibration](https://www.perceptualui.org/publications/pfeuffer13_uist.pdf): 이동 표적 기반 시선 보정 연구
 - [Smooth-i](https://eprints.lancs.ac.uk/id/eprint/126771/): smooth pursuit를 이용한 시선 보정 연구

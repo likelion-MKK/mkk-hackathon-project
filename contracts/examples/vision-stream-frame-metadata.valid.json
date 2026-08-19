@@ -1,0 +1,36 @@
+{
+  "type": "frame",
+  "protocol_version": "1.0",
+  "session_id": "session-example-001",
+  "video_id": "mcm-lookbook-example-v1",
+  "frame_id": "frame-000007",
+  "sequence": 7,
+  "captured_at_mono_ms": 143220.4,
+  "video_time_ms": 4200,
+  "playback_epoch": 0,
+  "layout": {
+    "viewport_width_px": 1920,
+    "viewport_height_px": 1080,
+    "source_width_px": 1080,
+    "source_height_px": 1920,
+    "object_fit": "contain",
+    "element_rect": {
+      "x_px": 660,
+      "y_px": 0,
+      "width_px": 600,
+      "height_px": 1080
+    },
+    "content_rect": {
+      "x_px": 660,
+      "y_px": 6.666667,
+      "width_px": 600,
+      "height_px": 1066.666667
+    }
+  },
+  "camera_frame": {
+    "encoding": "image/jpeg",
+    "width_px": 640,
+    "height_px": 480,
+    "byte_length": 4
+  }
+}

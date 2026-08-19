@@ -1,0 +1,324 @@
+"""Development persistence boundary for the first API vertical slice.
+
+The store is intentionally in-memory while the session and event contracts are
+being wired. Its public methods are the seam for the planned PostgreSQL 17.10
+and Alembic implementation; no raw media is accepted or retained here.
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from threading import RLock
+
+from apps.api.app.schemas import (
+    ConversionOutcome,
+    LookbookManifest,
+    ManagerEvent,
+    ManagerProductRequest,
+    ManagerProductRequestAccepted,
+    Product,
+    ProductCatalog,
+    ReactionBatch,
+    ReactionBatchAccepted,
+    RecommendationAccepted,
+    RecommendationResult,
+    SessionCreate,
+    SessionCreated,
+)
+from services.recommendation.engine.features import ProductFeatureAccumulator
+from services.recommendation.engine.interface import RecommendationEngine
+
+
+class DomainError(Exception):
+    """An application error that maps to the public Error contract."""
+
+    def __init__(self, status_code: int, code: str, message: str) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.code = code
+        self.message = message
+
+
+@dataclass
+class SessionRecord:
+    session_id: str
+    kiosk_id: str
+    lookbook_id: str
+    consent_version: str
+    created_at: datetime
+    display_code: str
+    reaction_features: ProductFeatureAccumulator | None
+    event_ids: set[str] = field(default_factory=set)
+    event_sequences: set[int] = field(default_factory=set)
+    batch_ids: set[str] = field(default_factory=set)
+    recommendation: RecommendationResult | None = None
+    completed: bool = False
+
+
+class MemoryStore:
+    """Thread-safe fixture-backed store used by the API scaffold."""
+
+    def __init__(self, repository_root: Path | None = None) -> None:
+        self._lock = RLock()
+        self.repository_root = repository_root or Path(__file__).resolve().parents[3]
+        self.catalog = self._load_catalog()
+        self.manifest = self._load_manifest()
+        self.central_v2_manifest = self._load_central_v2_manifest()
+        self.actual_v2_manifest = self._load_actual_v2_manifest()
+        self.products = {product.product_id: product for product in self.catalog.products}
+        self.sessions: dict[str, SessionRecord] = {}
+        self.manager_events: list[ManagerEvent] = []
+        self.manager_requests: dict[str, tuple[str, str]] = {}
+        self._manager_sequence = 0
+        self.conversions: dict[str, ConversionOutcome] = {}
+
+    def _load_catalog(self) -> ProductCatalog:
+        path = self.repository_root / "data" / "products" / "catalog.example.json"
+        return ProductCatalog.model_validate(json.loads(path.read_text(encoding="utf-8")))
+
+    def _load_manifest(self) -> LookbookManifest:
+        path = self.repository_root / "data" / "lookbooks" / "example" / "manifest.json"
+        return LookbookManifest.model_validate(json.loads(path.read_text(encoding="utf-8")))
+
+    def _load_central_v2_manifest(self) -> LookbookManifest:
+        path = (
+            self.repository_root
+            / "data"
+            / "lookbooks"
+            / "mcm-central-ai-replay-v2"
+            / "manifest.json"
+        )
+        return LookbookManifest.model_validate(json.loads(path.read_text(encoding="utf-8")))
+
+    def _load_actual_v2_manifest(self) -> LookbookManifest:
+        path = (
+            self.repository_root
+            / "data"
+            / "lookbooks"
+            / "mcm-lookbook-v2"
+            / "manifest.json"
+        )
+        return LookbookManifest.model_validate(json.loads(path.read_text(encoding="utf-8")))
+
+    def _new_recommendation(self, session_id: str) -> RecommendationResult:
+        return RecommendationResult(
+            schema_version="1.0",
+            recommendation_id=f"recommendation-{session_id}-001",
+            session_id=session_id,
+            video_id=self.manifest.video_id,
+            manifest_version=self.manifest.manifest_version,
+            algorithm_version="mock-v1",
+            engine_mode="mock",
+            status="pending",
+            items=[],
+            reason=None,
+        )
+
+    def _append_manager_event(self, session: SessionRecord, request: ManagerProductRequest) -> None:
+        recommendation = session.recommendation
+        if recommendation is None:
+            raise DomainError(500, "recommendation_missing", "session recommendation state is missing")
+        self.manager_events.append(
+            ManagerEvent(
+                schema_version="1.0",
+                event_id=request.request_id,
+                sequence=self._manager_sequence,
+                session_id=session.session_id,
+                kiosk_id=session.kiosk_id,
+                event_type="customer_product_request",
+                emitted_at=datetime.now(timezone.utc),
+                payload={
+                    "intent": "view_recommended_products",
+                    "recommendation_id": recommendation.recommendation_id,
+                    "engine_mode": recommendation.engine_mode,
+                    "items": [item.model_dump(mode="json") for item in recommendation.items],
+                },
+            )
+        )
+        self._manager_sequence += 1
+
+    def _require_session(self, session_id: str) -> SessionRecord:
+        session = self.sessions.get(session_id)
+        if session is None:
+            raise DomainError(404, "session_not_found", f"session '{session_id}' was not found")
+        return session
+
+    def _require_lookbook(self, lookbook_id: str) -> LookbookManifest:
+        if lookbook_id in {self.actual_v2_manifest.video_id, "mcm-lookbook-v2"}:
+            return self.actual_v2_manifest
+        if lookbook_id in {
+            self.central_v2_manifest.video_id,
+            "mcm-central-ai-replay-v2",
+        }:
+            return self.central_v2_manifest
+        supported_ids = {self.manifest.video_id, "example", "mcm-lookbook-example"}
+        if lookbook_id not in supported_ids:
+            raise DomainError(404, "lookbook_not_found", f"lookbook '{lookbook_id}' was not found")
+        return self.manifest
+
+    def create_session(self, request: SessionCreate) -> SessionCreated:
+        with self._lock:
+            manifest = self._require_lookbook(request.lookbook_id)
+            session_number = len(self.sessions) + 1
+            session_id = f"session-{session_number:04d}"
+            created_at = datetime.now(timezone.utc)
+            record = SessionRecord(
+                session_id=session_id,
+                kiosk_id=request.kiosk_id,
+                lookbook_id=request.lookbook_id,
+                consent_version=request.consent_version,
+                created_at=created_at,
+                display_code=f"MKK-{session_number:04d}",
+                reaction_features=ProductFeatureAccumulator(self.products.keys()),
+                recommendation=self._new_recommendation(session_id),
+            )
+            self.sessions[session_id] = record
+            return SessionCreated(
+                session_id=session_id,
+                display_code=record.display_code,
+                status="collecting",
+                created_at=created_at,
+            )
+
+    def get_manifest(self, lookbook_id: str) -> LookbookManifest:
+        with self._lock:
+            return self._require_lookbook(lookbook_id)
+
+    def get_active_session_video_id(self, session_id: str) -> str:
+        """Return the bound video for a consented, not-yet-completed session."""
+
+        with self._lock:
+            session = self._require_session(session_id)
+            if session.completed:
+                raise DomainError(409, "session_completed", "completed sessions cannot open Vision Stream")
+            return self._require_lookbook(session.lookbook_id).video_id
+
+    def get_product(self, product_id: str) -> Product:
+        with self._lock:
+            product = self.products.get(product_id)
+            if product is None:
+                raise DomainError(404, "product_not_found", f"product '{product_id}' was not found")
+            return product
+
+    def append_batch(self, session_id: str, batch: ReactionBatch) -> ReactionBatchAccepted:
+        with self._lock:
+            session = self._require_session(session_id)
+            if batch.session_id != session_id:
+                raise DomainError(400, "session_mismatch", "batch session_id does not match the URL")
+            if batch.video_id != self.manifest.video_id:
+                raise DomainError(400, "video_mismatch", "batch video_id does not match the session manifest")
+            if session.completed:
+                raise DomainError(409, "session_completed", "completed sessions cannot accept more batches")
+            if batch.batch_id in session.batch_ids:
+                return ReactionBatchAccepted(batch_id=batch.batch_id, status="duplicate")
+            if session.reaction_features is None:
+                raise DomainError(500, "reaction_state_missing", "session reaction state is missing")
+
+            new_events = [event for event in batch.events if event.event_id not in session.event_ids]
+            conflicting_sequences = [
+                event.sequence
+                for event in new_events
+                if event.sequence in session.event_sequences
+            ]
+            if conflicting_sequences:
+                raise DomainError(
+                    400,
+                    "duplicate_event_sequence",
+                    "event sequence values must be unique within a session",
+                )
+            session.batch_ids.add(batch.batch_id)
+            for event in new_events:
+                session.event_ids.add(event.event_id)
+                session.event_sequences.add(event.sequence)
+                session.reaction_features.accept(event.model_dump(mode="json"))
+
+            if not new_events:
+                return ReactionBatchAccepted(batch_id=batch.batch_id, status="duplicate")
+            return ReactionBatchAccepted(batch_id=batch.batch_id, status="accepted")
+
+    def complete_session(
+        self,
+        session_id: str,
+        engine: RecommendationEngine,
+    ) -> RecommendationAccepted:
+        with self._lock:
+            session = self._require_session(session_id)
+            if session.completed:
+                raise DomainError(409, "session_already_completed", "session has already been completed")
+            if session.recommendation is None:
+                raise DomainError(500, "recommendation_missing", "session recommendation state is missing")
+            if session.reaction_features is None:
+                raise DomainError(500, "reaction_state_missing", "session reaction state is missing")
+
+            engine_result = engine.run(
+                recommendation_id=session.recommendation.recommendation_id,
+                session_id=session.session_id,
+                video_id=self.manifest.video_id,
+                manifest_version=self.manifest.manifest_version,
+                features=session.reaction_features.snapshot(),
+                products=[product.model_dump(mode="json") for product in self.products.values()],
+            )
+            session.recommendation = RecommendationResult.model_validate(engine_result.to_payload())
+            session.completed = True
+            session.reaction_features.clear()
+            session.reaction_features = None
+            session.event_ids.clear()
+            session.event_sequences.clear()
+            session.batch_ids.clear()
+            return RecommendationAccepted(session_id=session_id, status="pending")
+
+    def get_recommendation(self, session_id: str) -> RecommendationResult:
+        with self._lock:
+            session = self._require_session(session_id)
+            if session.recommendation is None:
+                raise DomainError(500, "recommendation_missing", "session recommendation state is missing")
+            return session.recommendation
+
+    def record_conversion(self, outcome: ConversionOutcome) -> ConversionOutcome:
+        with self._lock:
+            existing = self.conversions.get(outcome.outcome_id)
+            if existing is not None:
+                if existing != outcome:
+                    raise DomainError(
+                        409,
+                        "outcome_id_conflict",
+                        "outcome_id was already used for a different conversion outcome",
+                    )
+                return existing
+
+            session = self._require_session(outcome.session_id)
+            recommendation = session.recommendation
+            if recommendation is None or recommendation.status != "completed":
+                raise DomainError(409, "recommendation_not_ready", "conversion requires a completed recommendation")
+            if recommendation.recommendation_id != outcome.recommendation_id:
+                raise DomainError(400, "recommendation_mismatch", "conversion recommendation_id does not match the session")
+            if outcome.product_id not in {item.product_id for item in recommendation.items}:
+                raise DomainError(400, "product_not_recommended", "conversion product_id is not in the session Top 2")
+
+            self.conversions[outcome.outcome_id] = outcome
+            return outcome
+
+    def request_manager_product(self, session_id: str, request: ManagerProductRequest) -> ManagerProductRequestAccepted:
+        with self._lock:
+            session = self._require_session(session_id)
+            request_key = (session_id, request.recommendation_id)
+            existing = self.manager_requests.get(request.request_id)
+            if existing is not None:
+                if existing != request_key:
+                    raise DomainError(409, "request_id_conflict", "request_id was already used for a different manager product request")
+                return ManagerProductRequestAccepted(request_id=request.request_id, status="duplicate")
+            recommendation = session.recommendation
+            if recommendation is None or recommendation.status != "completed":
+                raise DomainError(409, "recommendation_not_ready", "manager product requests require a completed recommendation")
+            if recommendation.recommendation_id != request.recommendation_id:
+                raise DomainError(400, "recommendation_mismatch", "recommendation_id does not match the session recommendation")
+            self._append_manager_event(session, request)
+            self.manager_requests[request.request_id] = request_key
+            return ManagerProductRequestAccepted(request_id=request.request_id, status="accepted")
+
+    def list_manager_events(self, after_sequence: int | None = None) -> list[ManagerEvent]:
+        with self._lock:
+            return [event for event in self.manager_events if after_sequence is None or event.sequence > after_sequence]

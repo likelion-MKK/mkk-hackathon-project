@@ -1,0 +1,66 @@
+name: Backend checks
+
+on:
+  pull_request:
+    paths:
+      - "apps/api/**"
+      - "services/recommendation/**"
+      - "tests/contract/**"
+      - "tests/integration/**"
+      - "contracts/**"
+      - "data/lookbooks/**"
+      - "data/products/**"
+      - ".github/workflows/backend.yml"
+  push:
+    branches:
+      - dev
+      - main
+    paths:
+      - "apps/api/**"
+      - "services/recommendation/**"
+      - "tests/contract/**"
+      - "tests/integration/**"
+      - "contracts/**"
+      - "data/lookbooks/**"
+      - "data/products/**"
+      - ".github/workflows/backend.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: apps/api
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13.15"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+
+      - name: Sync dependencies
+        run: uv sync --locked --all-groups
+
+      - name: Run contract and integration tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: uv run --locked pytest ../../tests/contract ../../tests/integration

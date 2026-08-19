@@ -1,0 +1,15 @@
+FROM python:3.13.15-slim
+
+WORKDIR /app
+COPY apps /app/apps
+COPY services /app/services
+COPY data /app/data
+COPY contracts /app/contracts
+COPY experiments/recommendation/prompts /app/experiments/recommendation/prompts
+
+RUN pip install --no-cache-dir \
+    "fastapi>=0.115,<1" "uvicorn[standard]>=0.30,<1" \
+    "pydantic>=2.7,<3" "psycopg[binary]>=3.2,<4" "httpx>=0.27,<1"
+
+ENV PYTHONPATH=/app
+CMD ["uvicorn", "apps.api.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

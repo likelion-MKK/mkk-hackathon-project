@@ -1,0 +1,33 @@
+{
+"name": "@mkk/kiosk",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+
+    "test": "tsc -p tsconfig.test.json --noEmit && node --test test/*.test.mjs src/app/actual-lookbook-config.test.ts src/app/async-flow-controller.test.ts src/app/calibration-plan.test.ts src/app/central-recommendation-flow.test.ts src/app/consent-flow.test.ts src/app/kiosk-machine.test.ts src/app/manager-product-request-v2.test.ts src/app/observation-batch-v2.test.ts src/app/product-display-policy.test.ts src/app/reaction-batch.test.ts src/app/recommendation-polling.test.ts src/app/recommendation-presentation.test.ts src/app/video-context.test.ts src/camera/FrameSource.test.ts src/clients/api/HttpApiClient.test.ts src/clients/api/MockApiClient.test.ts src/clients/vision/FakeRemoteVisionClient.test.ts src/clients/vision/LocalVisionStreamClient.test.ts src/clients/vision/MockVisionClient.test.ts src/contracts/contract-fixtures.test.ts",
+
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.4",
+    "eslint": "^10.8.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "globals": "^17.7.0",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.65.0",
+    "vite": "^8.2.0"
+  }
+}

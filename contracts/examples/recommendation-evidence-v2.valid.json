@@ -1,0 +1,84 @@
+{
+  "schema_version": "2.0",
+  "decision_request_id": "decision-request-demo-001",
+  "input_variant": "C",
+  "session_id": "session-demo-v2-001",
+  "video_id": "lookbook-demo-v2",
+  "manifest_version": "demo-lookbook-v1",
+  "catalog_version": "mcm-us-pdp-verified-v3-2026-08-18",
+  "feature_version": "central-evidence-v2-demo-1",
+  "signal_versions": {
+    "eye": { "producer_id": "eyetrax-eye-adapter", "model_revision": "eyetrax-demo-raw-v1" },
+    "eye_reason": null,
+    "face": {
+      "producer_id": "mediapipe-face-landmarker-adapter",
+      "model_revision": "face-landmarker-float16-v1",
+      "taxonomy_version": "face-observable-actions-v1"
+    },
+    "face_reason": null,
+    "aoi_mapper_revision": "aoi-mapper-v1"
+  },
+  "data_quality": {
+    "expected_observation_count": 240,
+    "gaze_valid_ratio": 0.86,
+    "expression_valid_ratio": 0.63,
+    "matched_frame_ratio": 0.61,
+    "ambiguous_product_ratio": 0.04
+  },
+  "summary": [
+    {
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "exposure_duration_ms": 10000,
+      "observed_component_codes": ["whole_product"],
+      "observed_visual_tag_ids": ["monogram", "shopper"],
+      "gaze": {
+        "valid_observation_count": 34,
+        "observed_attention_ms": 3200,
+        "attention_ratio": 0.32,
+        "average_confidence": 1.0,
+        "return_candidate_count": 2,
+        "return_candidate_reason": null,
+        "movement_distance_norm": 1.42,
+        "mean_speed_norm_per_s": 0.48,
+        "movement_reason": null
+      },
+      "gaze_reason": null,
+      "expression": {
+        "matched_observation_count": 18,
+        "valid_coverage": 0.53,
+        "action_changes": { "brow_inner_up": 0.08, "mouth_smile_left": 0.12 },
+        "action_change_rates_per_s": { "brow_inner_up": 0.03, "mouth_smile_left": 0.05 },
+        "change_reason": null,
+        "sustained_actions": [
+          { "signal": "mouth_smile_left", "duration_ms": 800 }
+        ]
+      },
+      "expression_reason": null
+    },
+    {
+      "product_id": "mcm-pina-vanity-case-studded-calfskin",
+      "exposure_duration_ms": 10000,
+      "observed_component_codes": [],
+      "observed_visual_tag_ids": [],
+      "gaze": null,
+      "gaze_reason": "no_product_attention",
+      "expression": null,
+      "expression_reason": "no_unique_product_match"
+    }
+  ],
+  "evidence_windows": [
+    {
+      "window_id": "evidence-window-001",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_offset_ms": 4000,
+      "end_offset_ms": 7200,
+      "video_start_ms": 4000,
+      "video_end_ms": 7200,
+      "playback_epoch": 0,
+      "observed_component_codes": ["whole_product"],
+      "observed_visual_tag_ids": ["monogram", "shopper"],
+      "evidence_codes": ["observed_attention", "return_candidate", "face_action_change"]
+    }
+  ],
+  "timeline": null
+}

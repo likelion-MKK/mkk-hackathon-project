@@ -1,0 +1,44 @@
+{
+  "registry_version": "central-recommender-model-candidates-v1",
+  "selection_status": "benchmark_gated_not_selected",
+  "benchmark_status": "not_run",
+  "benchmark_reason": "no_local_gpu",
+  "runtime_preference": ["vllm", "transformers"],
+  "candidates": [
+    {
+      "role": "primary_evaluation_candidate",
+      "model_id": "Qwen/Qwen3.5-9B",
+      "revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+      "license": "Apache-2.0",
+      "weight_checksum": null,
+      "weight_checksum_status": "not_collected_model_not_downloaded",
+      "source_url": "https://huggingface.co/Qwen/Qwen3.5-9B",
+      "reported_native_context_tokens": 262144,
+      "reported_languages": 201,
+      "reported_serving_runtimes": ["vllm", "sglang"],
+      "candidate_scope": "korean_json_instruction_following"
+    },
+    {
+      "role": "backup_high_resource_candidate",
+      "model_id": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+      "revision": "68faf511d618ef198fef186659617cfd2eb8e33a",
+      "license": "Apache-2.0",
+      "weight_checksum": null,
+      "weight_checksum_status": "not_collected_model_not_downloaded",
+      "source_url": "https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+      "reported_native_context_tokens": 128000,
+      "reported_korean_support": true,
+      "reported_native_json_output": true,
+      "reported_bf16_fp16_weight_size_gb_approx": 55,
+      "candidate_scope": "korean_json_instruction_following"
+    }
+  ],
+  "excluded_from_default": [
+    {
+      "model_id": "google/gemma-3-12b-it",
+      "reason": "gated_gemma_license_not_default"
+    }
+  ],
+  "selection_gate": "A/B/C contract and grounding evaluation plus target-server latency, memory and stability benchmark, followed by ADR approval",
+  "claim_boundary": "These are Korean/JSON instruction model candidates, not psychology or emotion-analysis models. No model has been selected or benchmarked in this workspace."
+}

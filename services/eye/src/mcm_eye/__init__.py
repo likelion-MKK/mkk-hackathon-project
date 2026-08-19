@@ -1,0 +1,53 @@
+"""Public types and adapters for the Eye service boundary."""
+
+from .adapters import (
+    CalibrationCancelled,
+    CalibrationCapture,
+    CalibrationFrameSource,
+    CalibrationPhase,
+    EyeTraxAdapter,
+    EyeTraxConfig,
+    EyeTraxModelError,
+    EyeTraxRuntimeError,
+    FakeDeliveryScenario,
+    FakeEyeAdapter,
+    FakeGazeDelivery,
+    FakeScenario,
+    ReplayExhaustedError,
+    ReplayEyeAdapter,
+    ReplayGazeRecord,
+)
+from .contracts import (
+    AdapterMetadata,
+    AdapterStateError,
+    CalibrationRequest,
+    CalibrationResult,
+    EyeAdapter,
+    GazeFrameContext,
+    GazeSample,
+)
+
+__all__ = [
+    "AdapterMetadata",
+    "AdapterStateError",
+    "CalibrationRequest",
+    "CalibrationResult",
+    "CalibrationCancelled",
+    "CalibrationCapture",
+    "CalibrationFrameSource",
+    "CalibrationPhase",
+    "EyeAdapter",
+    "EyeTraxAdapter",
+    "EyeTraxConfig",
+    "EyeTraxModelError",
+    "EyeTraxRuntimeError",
+    "FakeDeliveryScenario",
+    "FakeEyeAdapter",
+    "FakeGazeDelivery",
+    "FakeScenario",
+    "GazeFrameContext",
+    "GazeSample",
+    "ReplayExhaustedError",
+    "ReplayEyeAdapter",
+    "ReplayGazeRecord",
+]

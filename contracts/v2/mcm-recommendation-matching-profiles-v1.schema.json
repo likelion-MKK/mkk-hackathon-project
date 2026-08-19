@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcm-lookbook.example/contracts/v2/mcm-recommendation-matching-profiles-v1.schema.json",
+  "title": "ProductMatchingCatalogV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "catalog_version", "feature_taxonomy_version", "products"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "catalog_version": { "$ref": "#/$defs/version" },
+    "feature_taxonomy_version": { "$ref": "#/$defs/version" },
+    "products": { "type": "array", "minItems": 10, "maxItems": 10, "items": { "$ref": "#/$defs/product" } }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$" },
+    "version": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "visualFeatures": {
+      "type": "object", "additionalProperties": false,
+      "required": ["color_primary", "color_family", "silhouette", "category_type", "patterns", "bag_accessories"],
+      "properties": {
+        "color_primary": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-z][a-z0-9_]*$" },
+        "color_family": { "enum": ["beige", "black", "brown", "metallic", "pink", "unknown"] },
+        "silhouette": { "enum": ["backpack", "boston", "east_west_shoulder", "pouch", "shopper", "tambourine", "tote", "vanity_case", "weekender"] },
+        "category_type": { "enum": ["backpack", "crossbody_bag", "pouch", "shoulder_bag", "top_handle_bag", "tote_bag", "travel_bag", "vanity_case"] },
+        "patterns": { "type": "array", "minItems": 1, "maxItems": 6, "uniqueItems": true, "items": { "enum": ["crystal", "grained_leather", "monogram", "solid", "studded", "unknown"] } },
+        "bag_accessories": { "type": "array", "maxItems": 8, "uniqueItems": true, "items": { "enum": ["front_pocket", "lock", "logo_plaque", "shoulder_strap", "side_studs", "tag", "top_handle", "zipper"] } }
+      }
+    },
+    "product": {
+      "type": "object", "additionalProperties": false,
+      "required": ["product_id", "display_name", "brand", "official_product_url", "recommendation_profile", "controlled_tags"],
+      "properties": {
+        "product_id": { "$ref": "#/$defs/id" },
+        "display_name": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "brand": { "const": "MCM" },
+        "official_product_url": { "type": "string", "minLength": 1, "maxLength": 500, "pattern": "^https?://" },
+        "recommendation_profile": { "$ref": "#/$defs/visualFeatures" },
+        "controlled_tags": { "type": "array", "minItems": 1, "maxItems": 16, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 64 } }
+      }
+    }
+  }
+}

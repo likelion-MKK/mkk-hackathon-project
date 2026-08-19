@@ -1,0 +1,22 @@
+{
+  "status_version": "openai-luna-max-status-v1",
+  "configuration": {
+    "model_id": "gpt-5.6-luna",
+    "reasoning_effort": "max",
+    "input_variant": "C",
+    "prompt_version": "central-recommender-ko-v3"
+  },
+  "offline_validation": "passed",
+  "offline_validation_date": "2026-08-17",
+  "maximum_estimated_input_tokens": 3341,
+  "target_input_tokens": 4000,
+  "maximum_input_tokens": 6000,
+  "maximum_live_calls": 27,
+  "maximum_planned_cost_usd": 0.1651104,
+  "prompt_sha256": "b4ecdbb4e62dfbc1a36ab7075eb797d3d45bb498dc9be6f4bf5eba65f92082de",
+  "config_sha256": "ee0233e341700fdefcdf697f102c41017ab3f726719cf6b1858805ea7603514b",
+  "live_benchmark": "not_run_missing_api_key",
+  "production_status": "not_approved",
+  "selected_product_model": null,
+  "reason": "synthetic_live_benchmark_and_owner_reviews_not_completed"
+}

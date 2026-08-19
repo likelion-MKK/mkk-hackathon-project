@@ -1,0 +1,88 @@
+{
+  "schema_version": "1.0",
+  "video_id": "mcm-central-ai-replay-v2",
+  "manifest_version": "mcm-central-ai-replay-v2-2026-08-18",
+  "coordinate_space": "video_normalized",
+  "exposures": [
+    {
+      "exposure_id": "replay-scene-01-toni",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "start_ms": 0,
+      "end_ms": 6000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] }
+    },
+    {
+      "exposure_id": "replay-scene-02-pina-vanity",
+      "product_id": "mcm-pina-vanity-case-studded-calfskin",
+      "start_ms": 6000,
+      "end_ms": 12000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] }
+    },
+    {
+      "exposure_id": "replay-scene-03-milla",
+      "product_id": "mcm-milla-small-grained-leather",
+      "start_ms": 12000,
+      "end_ms": 18000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] }
+    },
+    {
+      "exposure_id": "replay-scene-04-ella",
+      "product_id": "mcm-ella-small-disco-visetos",
+      "start_ms": 18000,
+      "end_ms": 24000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] }
+    },
+    {
+      "exposure_id": "replay-scene-05-aren-east-west",
+      "product_id": "mcm-aren-east-west-shoulder-visetos",
+      "start_ms": 24000,
+      "end_ms": 30000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] }
+    },
+    {
+      "exposure_id": "replay-scene-06-ottomar",
+      "product_id": "mcm-ottomar-nova-55cm-monogram-econyl",
+      "start_ms": 30000,
+      "end_ms": 36000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] }
+    },
+    {
+      "exposure_id": "replay-scene-07-aren-backpack",
+      "product_id": "mcm-aren-nova-medium-backpack-econyl",
+      "start_ms": 36000,
+      "end_ms": 42000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] }
+    },
+    {
+      "exposure_id": "replay-scene-08-pina-studded-tote",
+      "product_id": "mcm-pina-studded-tote-visetos",
+      "start_ms": 42000,
+      "end_ms": 48000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] }
+    },
+    {
+      "exposure_id": "replay-scene-09-pina",
+      "product_id": "mcm-pina-small-tambourine-visetos",
+      "start_ms": 48000,
+      "end_ms": 54000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] }
+    },
+    {
+      "exposure_id": "replay-scene-10-stark-backpack",
+      "product_id": "mcm-stark-side-studs-backpack-gold-crystal-visetos",
+      "start_ms": 54000,
+      "end_ms": 60000,
+      "priority": 0,
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] }
+    }
+  ]
+}

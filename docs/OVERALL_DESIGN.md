@@ -1,228 +1,214 @@
 # MCM AI Lookbook Kiosk 전체 설계
 
-- 문서 단계: 전체 설계
-- 기준 문서: 루트 `README.md`
-- 목적: 기능별 상세 설계 전에 서비스 구성과 전체 데이터 흐름을 정의한다.
+- 상태: **Current canonical design**
+- 승인 기준일: 2026-08-18
+- 기준선: `dev` commit `77ae806192db56ef2472439a0359380e7025fae2`
+- 핵심 결정: [`ADR-0006 중앙 판단 추천 AI`](adr/0006-central-recommendation-ai.md), hosted migration은 [`ADR-0008`](adr/0008-openai-luna-central-recommendation.md)
+- 구현 순서: [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)
 
-> 이 문서는 README에 작성된 내용만 반영한다. README에서 정하지 않은 구현 방식은 임의로 확정하지 않고 `추후 상세 설계`로 구분한다.
+## 1. 목표
 
-## 1. 서비스 목표
+33.5초 actual 룩북 `mcm-lookbook-v2`에서 관찰된 시선·표정의 저수준 파생 신호를 캡처 시각과 검수된 상품 장면에 맞춰 결합하고, hosted `gpt-5.6-luna` 중앙 판단 AI가 MCM 가방 10개 중 한 개를 추천한다. 60초 `mcm-central-ai-replay-v2`는 synthetic 검증 fixture로만 유지한다. 고객에게는 상품과 함께 “이번 세션에서 무엇이 관찰되어 추천했는지”를 비진단적으로 설명한다.
 
-MCM AI Lookbook Kiosk는 매장 고객이 약 60초의 룩북을 감상하는 동안 나타나는 시선, 얼굴 방향, 표정 등의 비언어적 반응을 분석해 관심도가 높은 MCM 상품 2개를 추천하는 오프라인 AI 키오스크다.
+MVP의 성공 조건은 다음과 같다.
 
-서비스는 다음 경험을 제공한다.
+1. Eye·Face 생산자 결과가 동일한 capture snapshot과 video time 기준으로 결합되고, Backend만 승인 AOI로 상품 구간을 연결한다.
+2. 원본 frame 없이 bounded JSON evidence만 중앙 AI에 전달된다.
+3. 룩북 종료 후 세션당 중앙 AI를 한 번 호출한다.
+4. DB의 검수된 MCM 가방 정확히 10개만 후보이며 결과는 Top 1이다.
+5. frame 단위 파생 evidence는 세션 메모리에서 사용한 뒤 폐기한다.
+6. 추천 설명은 관찰 사실과 카탈로그 사실에 근거하며 감정·성격·구매 의도를 단정하지 않는다.
 
-- 회원가입이나 설문 없이 첫 방문 고객에게 상품을 추천한다.
-- 고객의 비언어적 반응을 상품 추천의 근거로 활용한다.
-- 추천 상품의 이미지와 상품별 QR을 함께 제공한다.
-- 매니저에게 고객 이용 상황과 추천 결과를 자동으로 전달한다.
-- 분석 결과를 실제 상품 확인과 매장 응대로 연결한다.
-- 비언어적 반응, 추천 결과와 구매 전환 결과를 축적해 추천 품질을 개선한다.
+## 2. MVP 범위와 Deferred
 
-## 2. 사용자와 시스템 구성
+### MVP
 
-| 구성 | 역할 |
-| --- | --- |
-| 고객 | 키오스크에서 룩북을 감상하고 추천 상품과 QR을 확인한다. |
-| Kiosk Frontend | S01-S04 화면, 룩북 재생, 웹캠 입력, 사용자 조작과 추천 결과 표시를 담당한다. |
-| AI / Data | 시선, 얼굴 방향, 표정 변화 등 비언어적 반응을 분석한다. |
-| Backend | 세션, 분석 결과, 상품 정보, 추천 결과, QR 정보와 매니저 알림을 관리한다. |
-| PostgreSQL | 비언어적 반응 데이터, 추천 결과와 구매 전환 결과 등을 저장한다. |
-| Manager Screen | 고객 이용 알림과 추천 결과를 받아 매장 응대로 연결한다. |
-| Product Page | 고객이 상품별 QR을 스캔한 뒤 제품 정보를 확인하는 화면이다. |
+- S01–S04 Kiosk 흐름과 명시적 카메라·분석 동의
+- Eye·Face 생산자의 정규화된 파생 신호
+- 시간·상품 기준 Evidence Builder
+- 검수된 MCM 가방 10개 카탈로그
+- hosted Luna 중앙 판단 AI와 strict Top 1 출력
+- 상품 QR과 세션 한정 추천 설명
+- 고객이 누를 때만 생성되는 매니저 요청, REST polling 소비
 
-## 3. 전체 서비스 흐름
+### Deferred
 
-| 단계 | 고객 경험 | 시스템 처리 |
-| --- | --- | --- |
-| S01. Screensaver | 대기 화면을 보고 터치해 시작한다. | 대기 상태에서 메뉴 화면으로 전환한다. |
-| S02. Main Menu | 카테고리를 둘러보거나 AI 추천을 선택한다. | 선택한 서비스 흐름으로 이동한다. |
-| S03. AI Lookbook | 약 60초의 룩북을 감상한다. | 웹캠 입력을 받아 비언어적 반응을 분석한다. |
-| S04. Analysis Report | 관심도가 높은 Top 2 상품과 각 QR을 확인한다. | 분석 데이터를 기반으로 추천 결과와 QR 정보를 제공한다. |
-| 매장 연결 | QR로 상품 정보를 보거나 매니저의 안내를 받는다. | 이용 상황과 추천 결과를 매니저 화면에 전달한다. |
+- 구매·호감 피드백 수집과 모델 학습
+- 개인별 장기 프로필과 재방문 개인화
+- 실시간 frame마다 중앙 AI를 호출하는 방식
+- 원본 영상·얼굴·시선 timeline 보관
+- 고객 원본 frame·image를 외부 AI API로 전송하는 방식
+- 후보 상품 수 자동 확대와 다중 상품 추천
 
-```text
-S01 대기
-  → S02 메뉴
-  → S03 룩북 재생 + 웹캠 입력 + 비언어적 반응 분석
-  → S04 추천 상품 Top 2 + 상품별 QR
-  → 상품 정보 확인 또는 매니저 응대
-```
+향후 피드백을 도입하려면 고객 동의, 목적, 보유 기간, 삭제, 편향·품질 평가와 가중치 versioning을 별도 ADR·Contract로 승인한다. 데이터가 쌓일 것이라는 기대만으로 MVP에 수집을 넣지 않는다.
 
-## 4. 전체 시스템 구조
+## 3. Canonical 데이터 흐름
 
 ```mermaid
 flowchart LR
-    CUSTOMER["고객"] --> KIOSK["Kiosk Frontend<br/>S01-S04"]
-    KIOSK -->|"룩북·웹캠 입력"| AI["AI / Data<br/>비언어적 반응 분석"]
-    AI -->|"분석된 반응 데이터"| BACKEND["FastAPI Backend"]
+    K["Kiosk<br/>capture snapshot · video coordinates"]
+    V["Vision boundary<br/>memory-only frame processing"]
+    E["Eye producer<br/>gaze · validity · quality"]
+    F["Face producer<br/>observable expression signals"]
+    D[("Approved AOI metadata<br/>video fingerprint · hierarchy")]
+    B["Backend AOI + Evidence Builder<br/>mapping · time alignment · aggregation"]
+    M["Session memory<br/>bounded RecommendationEvidence"]
+    C[("DB<br/>10 MCM bag profiles")]
+    A["Hosted Luna Central Recommendation AI<br/>one call after lookbook"]
+    O["Strict validator<br/>Top 1 + grounded reason"]
+    R[("DB<br/>minimal final result")]
+    S["S04<br/>product · reason · QR"]
 
-    BACKEND --> SESSION["세션 관리"]
-    BACKEND --> RECOMMEND["추천 결과 생성"]
-    BACKEND --> CATALOG["상품·QR 정보"]
-    BACKEND --> NOTICE["매니저 알림"]
-
-    SESSION --> DB[("PostgreSQL")]
-    RECOMMEND --> DB
-    CATALOG --> DB
-    NOTICE --> DB
-
-    RECOMMEND -->|"Top 2"| KIOSK
-    CATALOG -->|"상품 이미지·QR"| KIOSK
-    NOTICE --> MANAGER["Manager Screen"]
-    KIOSK -->|"QR 스캔"| PRODUCT["Product Page"]
-    MANAGER --> STORE["매장 응대"]
+    K -->|"consented temporary frame"| V
+    V --> E
+    V --> F
+    E -->|"same-context GazeSample"| K
+    F -->|"same-context ExpressionSample"| K
+    K -->|"FrameObservationV2 · video point"| B
+    D --> B
+    B --> M
+    M --> A
+    C --> A
+    A --> O
+    O --> R
+    O --> S
+    O -.->|"success · failure · cancel: dispose"| M
 ```
 
-원본 웹캠 프레임은 Kiosk 밖으로 보내지 않고 동일 기기에서 분석한다. Browser Web Worker와 Kiosk-local Python runtime 중 최종 구현은 외부 모델 benchmark 후 D5에 확정하며, 기준은 [`D1_TECHNICAL_DECISIONS.md`](D1_TECHNICAL_DECISIONS.md)를 따른다.
+원격 Vision 처리는 [`ADR-0001`](adr/0001-remote-vision-inference.md)이 계속 관할한다. 그 ADR이 Proposed인 동안 실제 고객 frame의 원격 전송은 승인된 운영 경로가 아니다. 중앙 판단 AI 결정은 Vision 배포 위치를 확정하지 않으며, 어느 경우에도 중앙 AI 입력에는 frame이 포함되지 않는다.
 
-## 5. 구성요소별 책임
+## 4. 구성요소 책임
 
-### Kiosk Frontend
-
-- S01-S04 화면을 제공한다.
-- 룩북 영상을 재생한다.
-- 웹캠 입력을 시작하고 분석 과정과 연결한다.
-- 추천 상품 Top 2의 이미지와 각 상품의 QR을 표시한다.
-- 매장용 터치 환경에 맞는 UI를 제공한다.
-
-### AI / Data
-
-- 시선, 얼굴 방향, 표정 변화 등 비언어적 신호를 분석한다.
-- 분석 결과를 상품 추천에 활용할 수 있는 데이터로 전달한다.
-- 구체적인 신호 정의, 가중치와 판단 방식은 논문·연구 조사 후 설계한다.
-
-### FastAPI Backend
-
-- 키오스크 이용 세션을 관리한다.
-- AI 분석 결과를 전달받아 추천 처리와 연결한다.
-- 추천 상품 Top 2와 QR 정보를 Kiosk Frontend에 제공한다.
-- 고객 이용 상황과 추천 결과를 매니저 화면에 자동으로 전달한다.
-- PostgreSQL의 저장·조회 흐름을 관리한다.
-
-### PostgreSQL
-
-- 키오스크 세션 정보를 저장한다.
-- 분석된 비언어적 반응 데이터를 저장한다.
-- 추천 결과를 저장한다.
-- 구매 전환 결과를 저장한다.
-- 상품과 QR 관리에 필요한 정보를 저장한다.
-
-정확한 테이블, 컬럼과 관계는 Database 상세 설계에서 정한다.
-
-### QR
-
-- 상품마다 QR을 미리 생성한다.
-- 추천 결과에서 상품 이미지와 해당 상품 QR을 함께 표시한다.
-- QR 생성에는 `python-qrcode`를 사용한다.
-- QR에 담을 최종 주소와 갱신 방식은 QR 기능 상세 설계에서 정한다.
-
-### Manager Notification
-
-- 고객이 키오스크를 이용하면 매니저 화면에 자동으로 알림을 보낸다.
-- 추천이 완료되면 매니저가 추천 상품을 확인할 수 있도록 한다.
-- 실시간 전달에는 FastAPI WebSocket을 사용한다.
-- 최초 알림은 S02에서 AI 추천 선택과 데이터 처리 동의가 완료된 직후 `session_started`로 전송한다.
-
-## 6. 데이터 흐름
-
-1. 고객이 키오스크를 시작하고 AI 추천을 선택한다.
-2. Kiosk Frontend가 룩북을 재생하고 웹캠 입력을 받는다.
-3. AI / Data 영역이 고객의 비언어적 반응을 분석한다.
-4. 원본 영상은 저장하지 않고 분석 후 즉시 폐기한다.
-5. 분석된 비언어적 반응 데이터는 Backend로 전달한다.
-6. Backend는 세션과 분석 데이터를 PostgreSQL에 저장한다.
-7. 추천 알고리즘이 분석 데이터를 바탕으로 상품 Top 2를 결정한다.
-8. Backend는 추천 결과와 상품별 QR 정보를 Kiosk Frontend로 전달한다.
-9. Kiosk Frontend는 S04에서 상품 이미지와 QR을 표시한다.
-10. Backend는 고객 이용 상황과 추천 결과를 매니저 화면에 전달한다.
-11. 고객이 구매까지 이어진 경우 구매 전환 결과를 PostgreSQL에 저장한다.
-12. 축적된 반응·추천·구매 전환 데이터는 향후 추천 품질을 검증하고 개선하는 데 활용한다.
-
-구매 전환 결과를 키오스크 세션과 연결하는 구체적인 방식은 README에서 정하지 않았으므로 추후 상세 설계한다.
-
-## 7. 저장 데이터와 비저장 데이터
-
-| 구분 | 데이터 | 처리 방향 |
+| 구성요소 | 책임 | 하지 않는 일 |
 | --- | --- | --- |
-| 저장하지 않음 | 웹캠 원본 영상 | 분석 후 즉시 폐기 |
-| 저장 | 분석된 비언어적 반응 | PostgreSQL에 저장 |
-| 저장 | 상품 추천 결과 | PostgreSQL에 저장 |
-| 저장 | 구매 전환 결과 | PostgreSQL에 저장 |
-| 저장 | 세션·상품·QR 관리 정보 | 서비스 운영을 위해 저장 |
-| 추후 확정 | 구체적인 저장 항목 | 개인정보·Database 상세 설계에서 결정 |
-| 추후 확정 | 데이터 보유 기간 | 개인정보 상세 설계에서 결정 |
+| Kiosk | 동의, 룩북 재생, 캡처 시점 문맥 고정, viewport→video 좌표 변환, S04 표시, 고객의 명시적 매니저 요청 | AOI·상품 판단, 감정·성격 판정, 중앙 AI 직접 호출, evidence 영속 저장 |
+| Vision Gateway | 동의된 frame의 일시 decode, Eye·Face fan-out, 모든 frame context 필드 검증, timeout·drop, 원본 해제 | AOI·상품 ID 생성, 일반 REST·DB·로그에 frame 전달 |
+| Eye producer | 정규화 viewport 시선 좌표, 유효성·품질과 원본 capture context 보존 | AOI·상품·최종 순위·설명 결정 |
+| Face producer | 얼굴에서 관찰 가능한 정규화 신호, 품질·무효 사유 생산 | 실제 감정·심리·구매 의도 진단 |
+| Backend AOI Mapper | canonical media identity와 승인 AOI 검증, video time/point를 상품·부위·tag로 연결, 중첩 ambiguity 처리 | client 후보 신뢰, specificity 임의 winner 선택 |
+| Evidence Builder | 승인 AOI 결과의 frame/time 정렬, 이동·변화·지속·재방문 등 파생 feature 계산, 크기 제한 | 모델 자유 추론으로 결측값 채우기, DB timeline 저장 |
+| Product Catalog | 정확히 10개 MCM 가방의 검수된 ID·태그·설명 제공 | 중앙 AI가 만든 사실을 원본 데이터로 수용 |
+| Central Recommendation AI | 전체 세션 evidence와 10개 프로필을 한 번 비교해 Top 1 판단 | frame 처리, 후보 밖 추천, 고객 유형 진단 |
+| Output Validator | schema·후보 ID·근거 인용·금지 문구 검사 | invalid 출력을 임의로 정상화 |
+| Backend | 세션 수명, 카탈로그, 중앙 AI orchestration, 최소 최종 결과, QR와 REST polling | frame 단위 evidence 영속화, 자동 매니저 호출 |
 
-## 8. 추천 정확도 개선 흐름
+## 5. RecommendationEvidence 의미
 
-```text
-비언어적 반응 데이터
-  + 당시 추천 결과
-  + 실제 구매 전환 결과
-        ↓
-추천 결과와 실제 행동의 관계 확인
-        ↓
-논문·연구 자료를 기반으로 알고리즘 설계·검증
-        ↓
-추천 품질 개선
-```
+`RecommendationEvidenceV2`는 구현된 내부 계약이다. 운영 variant C는 상품별 summary와 evidence window만 포함하고 개별 frame timeline·화면/영상 좌표·frame ID를 hosted Luna에 보내지 않는다.
 
-현재 단계에서는 이 개선 방향만 정의한다. 어떤 신호를 사용할지, 신호별 가중치를 어떻게 정할지, 어떤 모델을 사용할지와 정확도를 어떻게 평가할지는 추후 알고리즘 상세 설계에서 결정한다.
+### 허용 입력 범주
 
-## 9. 개인정보 처리 원칙
-
-- 웹캠 원본 영상은 저장하지 않고 분석 후 즉시 폐기한다.
-- 비언어적 반응 데이터, 추천 결과와 구매 전환 결과는 고객 동의를 전제로 저장한다.
-- 개인 식별 정보는 최소화한다.
-- 데이터는 추천 품질을 검증하고 개선하는 목적에 활용한다.
-- 구체적인 저장 항목, 보유 기간과 동의 절차는 추후 설계한다.
-
-## 10. 기술 구성
-
-| 영역 | 기술 / 방향 | 상태 |
-| --- | --- | --- |
-| Kiosk Frontend | React, TypeScript, Vite | D1 팀장 기본안 |
-| AI / Data | 시선·얼굴 방향·표정 변화 분석 | 알고리즘 추후 설계 |
-| Backend | Python, FastAPI | README에 명시 |
-| Database | PostgreSQL 17, Docker Compose, Alembic | D1 팀장 기본안 |
-| QR | `python-qrcode` | README에 명시 |
-| Manager Notification | FastAPI WebSocket | README에 명시 |
-
-## 11. 팀 책임 범위
-
-| 팀원 | 전체 설계상 책임 |
+| 범주 | 예시 |
 | --- | --- |
-| 박형진 | 전체 파이프라인, Backend, 추천 로직, QR, 매니저 알림, GitHub 운영 |
-| 양유상 | AI 영상과 Eye Tracking 기반 비언어적 데이터 추출 |
-| 정은미 | Face Emotion 기반 비언어적 데이터 추출 |
-| 조윤혜 | Kiosk S01-S04, 시선 시각화 UI, 브랜드 스타일링과 터치 최적화 |
+| capture context | `sequence`, `frame_id`, monotonic capture time, `video_id`, `video_time_ms`, `playback_epoch` |
+| Kiosk→Backend 화면 context | 캡처 시점 viewport/video layout, 정규화 video 좌표; product candidate 없음 |
+| Backend 내부 상품 context | 승인 AOI revision, 해당 시점 상품 ID·부위·controlled visual tag, 장면 구간 |
+| 시선 관찰 | valid/confidence/reason, 좌표 이동·속도, 상품별 체류, 이탈 후 재확인, 시각 왕복·지속 요약 |
+| 표정 관찰 | allowlist된 observable score, valid/quality/reason, 변화율, 지속 구간, 급격한 변화 시점 |
+| 결합 품질 | Eye·Face 시간 정렬 오차, 유효 coverage, drop·결측 요약, 근거 event 참조 |
 
-## 12. 전체 설계에서 미정인 항목
+### 금지 입력
 
-- 룩북의 최종 영상 구성
-- 영상에 등장할 상품 수와 노출 방식
-- 비언어적 신호의 정확한 정의
-- 신호별 가중치와 추천 알고리즘
-- 성향과 선호 제품을 판단하는 기준
-- Browser Web Worker와 Kiosk-local Python 중 최종 AI runtime
-- 실제 Kiosk 기기·카메라 사양과 보정 통과 기준
-- PostgreSQL의 상세 schema
-- 구매 전환 결과 수집 방식
-- Contract v1 이후 추가할 매니저 상태 정보
-- 개인정보 저장 항목, 보유 기간과 동의 절차
-- 배포와 운영 환경
+- frame, image bytes, base64, 얼굴·시선 embedding과 원본 경로
+- 이름, 전화번호, 계정·기기 광고 ID 등 직접 식별자
+- “행복”, “우울”, “충동형”처럼 관찰값을 진단으로 바꾼 label
+- 구매·호감 여부와 과거 고객 프로필
+- allowlist 밖 자유형 로그·예외·모델 raw output
 
-## 13. 후속 기능별 상세 설계 순서
+Evidence Builder는 데이터량·event 수·문자열 길이·시간 범위를 제한하고, 시간 순서를 정규화하며, invalid와 reason을 보존한다. Actual AOI가 `pending_review`인 동안 유효한 영상 좌표는 `aoi_metadata_unapproved`로 종료하고 임의 상품을 만들지 않는다.
 
-전체 설계를 기준으로 다음 기능을 순서대로 상세 설계한다.
+## 6. 상품 카탈로그
 
-1. S01-S04 화면과 상태 전환
-2. 룩북 영상 재생과 상품 구성
-3. 웹캠 입력과 비언어적 신호 분석
-4. 분석 데이터 구조와 PostgreSQL 저장
-5. 논문·연구 기반 추천 알고리즘
-6. Top 2 결과 화면과 상품별 QR
-7. 매니저 WebSocket 알림과 응대 화면
-8. 구매 전환 결과 수집과 추천 개선
-9. 개인정보 동의·보유·폐기
-10. 배포·운영·오류 처리
+MVP 후보군은 **MCM 가방 정확히 10개**다. 각 profile은 최소 다음 의미를 갖는다.
+
+- 안정적인 `product_id`, 공식명, 공식 상세·QR URL
+- 검수된 이미지·짧은 설명
+- 형태, 크기, 소재, 색상, 사용 장면 등 사실 기반 태그
+- 추천 설명에 사용할 수 있는 검수 문장과 금지 주장
+- catalog schema/content version, 활성 여부와 검수자
+
+중앙 AI가 상품 속성이나 URL을 새로 만들지 않는다. 출력의 `product_id`는 활성 10개 allowlist에 있어야 하고 고객 표시 정보는 DB에서 다시 조회한다. 10개가 아니거나 profile 검수가 끝나지 않으면 추천 준비 상태를 실패로 처리한다.
+
+## 7. 중앙 판단 AI 호출과 출력
+
+### 호출 시점
+
+- S03 룩북이 정상 종료되고 evidence가 finalize된 뒤 한 번 호출한다.
+- frame마다, 장면마다 또는 polling마다 재호출하지 않는다.
+- Luna provider 오류·429·refusal·incomplete에는 자동 재시도하지 않으며 mock 성공이나 임의 상품으로 대체하지 않는다.
+
+### 입력
+
+- bounded `RecommendationEvidence`
+- DB에서 읽은 활성 MCM 가방 profile 10개
+- model revision, prompt version, evidence schema version과 catalog version
+
+### strict 출력 목표
+
+```json
+{
+  "status": "ok",
+  "product_id": "catalog_allowlisted_id",
+  "reason_codes": ["long_dwell", "revisit"],
+  "evidence_refs": ["derived_event_reference"],
+  "explanation": "이번 룩북에서 해당 가방 구간을 비교적 오래 보고 다시 확인한 반응이 관찰되어 추천합니다."
+}
+```
+
+정상 결과에는 하나의 상품만 허용한다. schema 위반, 후보 밖 ID, 근거 없는 설명, 금지된 감정·성격 단정은 실패다. 유효 evidence가 부족하면 `insufficient_data`로 종료하고 임의 상품을 채우지 않는다.
+
+양유상은 후보와 hosted Luna의 revision·prompt·심리학적 안전성·한국어 설명 품질을 평가하고 시스템 프롬프트를 version으로 관리한다. “심리학에 능한 모델”이라는 설명만으로 생산 모델을 채택하지 않으며 project-specific replay와 red-team 평가를 통과해야 한다.
+
+## 8. 고객 문구
+
+권장 구조는 `관찰 범위 → 관찰 사실 → 상품 연결 → 한계`다.
+
+> 이번 룩북 세션에서 A 가방 장면을 비교적 오래 보고 다시 확인한 반응이 관찰되었습니다. 그래서 A 가방을 추천합니다. 이 설명은 이 세션의 시선·표정 관찰을 바탕으로 한 추천이며 감정이나 성격 진단이 아닙니다.
+
+“고객님의 유형은 @@였습니다” 형식은 진단·성격 분류로 오해될 위험이 있으므로 MVP 기본 UI에서 사용하지 않는다. 이후 유형 요약을 실험하려면 세션 한정 관찰 label, 근거 문장, 사용자 테스트와 별도 승인이 필요하다.
+
+## 9. 데이터 수명
+
+| 단계 | 데이터 | 위치 | 종료 조건 |
+| --- | --- | --- | --- |
+| Vision 추론 | 원본 frame | Gateway·Worker 메모리 | 해당 frame 성공·실패·timeout 즉시 해제 |
+| 세션 수집 | 정규화 sample·event | bounded session memory | finalize·취소·만료 시 Evidence Builder로 넘기거나 폐기 |
+| 추천 판단 | 결합 evidence | Backend/추천 runtime의 세션 메모리 | 결과 성공·실패·취소 뒤 폐기 |
+| 카탈로그 | 가방 10개 profile | PostgreSQL | catalog 정책·migration에 따름 |
+| 결과 | Top 1 ID, controlled reason/version·상태·timestamp의 최소 metadata | PostgreSQL | 기본 24시간 뒤 bounded cleanup |
+
+원본 frame과 frame 단위 파생 timeline은 파일, DB, object storage, cache, queue, 로그, APM, browser storage, backup이나 CI artifact에 남기지 않는다. 운영 metric은 payload 없이 집계값만 사용한다.
+
+## 10. 장애·fallback
+
+| 상황 | 처리 |
+| --- | --- |
+| 카메라·Vision unavailable | 가짜 sample을 만들지 않고 분석 불가 또는 비-AI 탐색으로 이동 |
+| Eye 또는 Face 일부 invalid | reason과 coverage를 보존해 중앙 AI 입력 품질에 반영; neutral로 채우지 않음 |
+| 유효 evidence 부족 | `insufficient_data`; 추천·유형을 만들지 않음 |
+| 카탈로그가 10개가 아님 | readiness 실패; 중앙 AI 호출 안 함 |
+| 중앙 모델 provider 오류·refusal·incomplete·schema 위반 | 재시도 없이 실패 UI; 규칙 기반 결과로 조용히 대체하지 않음 |
+| 후보 밖 ID·근거 없는 문구 | validator 거부; DB 조회·표시 안 함 |
+| 세션 취소·만료 | camera·frame buffer·derived evidence와 model request state 해제 |
+
+Fake·Replay는 개발·CI·명시된 데모에서만 사용한다. 고객 세션 장애 때 Fake 결과를 실제 분석처럼 표시하지 않는다.
+
+## 11. Manager 흐름
+
+S04에서 고객이 “직원에게 제품 요청”을 직접 누를 때만 Manager event를 생성한다. Manager는 REST polling으로 새 event를 확인한다. 룩북 시작, 표정 변화, 추천 완료 또는 AI 판단만으로 자동 event를 만들지 않으며 별도 WebSocket 경로를 MVP 요구사항으로 두지 않는다.
+
+## 12. 현재 구현과 목표의 경계
+
+`9d5881b`를 기준으로 시작한 현재 작업 브랜치에는 중앙 추천 v2 vertical slice가 있다.
+아래의 “남은 production Gate”를 통과하기 전에는 운영 완료로 간주하지 않는다.
+
+| 영역 | 이 브랜치에서 구현된 경계 | 남은 production Gate |
+| --- | --- | --- |
+| Vision 3-A | capture-time video context, Eye·Face exact-context join, Kiosk 영상 좌표, Backend 승인 AOI/fail-closed 경계 | 실제 전체 AOI 검수(5번), 3-B 상품 evidence 재검증, domain/TLS 실기기 E2E |
+| Recommendation | A/B/C evidence builder, hosted Luna Responses adapter, test-only deterministic stub와 fail-closed validator | 실제 key·Supabase·domain/TLS와 운영 canary |
+| Result contract | v1 호환을 유지한 strict Top 1 `RecommendationDecisionV2` | 실모델 반복 안정성·지연·근거 품질 검증 |
+| Product data | 동일 ID의 10개 JSON profile, PostgreSQL migration·seed/readiness code | live PostgreSQL 검증, 개별 URL·이미지·QR·태그 팀 승인 |
+| Persistence | frame timeline용 DB table 없이 transient buffer를 terminal/cancel/TTL에 폐기 | 운영 DB 보유·삭제 정책과 재시작·다중 process 설계 |
+| UI | real HTTP v2 Kiosk, Top 1 template, insufficient/failed 처리, 명시적 Manager 요청과 REST polling | 승인 영상·상품 자산을 사용한 실제 Browser E2E와 접근성 확인 |
+
+세부 PR 순서와 완료 Gate는 [`IMPLEMENTATION_PLAN`](IMPLEMENTATION_PLAN.md)을 따른다.

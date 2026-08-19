@@ -1,0 +1,41 @@
+{
+  "config_version": "openai-luna-max-production-candidate-v2",
+  "model_id": "gpt-5.6-luna",
+  "reasoning": {
+    "effort": "max",
+    "context": "current_turn"
+  },
+  "input_variant": "C",
+  "store": false,
+  "maximum_output_tokens": null,
+  "model_max_output_tokens": 128000,
+  "maximum_output_text_tokens": null,
+  "maximum_output_text_bytes": 16384,
+  "maximum_response_envelope_bytes": 1048576,
+  "target_input_tokens": 4000,
+  "maximum_input_tokens": 6000,
+  "timeout_seconds": null,
+  "retries": 0,
+  "callable_case_repeats": 3,
+  "maximum_live_calls": 27,
+  "budget_usd": 5.0,
+  "latency_gate": {
+    "enforced": false,
+    "record_only": true
+  },
+  "price_snapshot": {
+    "as_of": "2026-08-17",
+    "maximum_age_days": 30,
+    "input_usd_per_million_tokens": 0.2,
+    "cached_input_usd_per_million_tokens": 0.02,
+    "output_usd_per_million_tokens": 1.2,
+    "source_url": "https://developers.openai.com/api/docs/models/gpt-5.6-luna"
+  },
+  "api": {
+    "url": "https://api.openai.com/v1/responses",
+    "tokenizer_encoding": "o200k_base"
+  },
+  "data_scope": "synthetic_only",
+  "selection_status": "selected_pending_integration",
+  "production_approved": false
+}

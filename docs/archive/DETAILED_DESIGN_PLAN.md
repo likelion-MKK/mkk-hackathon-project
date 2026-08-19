@@ -1,11 +1,15 @@
 # MCM AI Lookbook Kiosk 상세 설계 및 병렬 개발 계획
 
-- 문서 단계: 기능별 상세 설계 계획 v0.1
+> **Superseded (2026-08-16):** 이 문서는 당시 설계·일정의 역사적 스냅샷이다. 현재 구현 기준은 [`OVERALL_DESIGN.md`](../OVERALL_DESIGN.md), [`IMPLEMENTATION_PLAN.md`](../IMPLEMENTATION_PLAN.md), [`ADR-0006`](../adr/0006-central-recommendation-ai.md)이다. 새 작업의 권위 문서로 사용하지 않는다.
+
+- 문서 단계: 기능별 상세 설계 계획 v0.2
 - 기준 문서: `README.md`, `docs/OVERALL_DESIGN.md`
-- 추가 요구사항: 외부 GitHub·Hugging Face Eye Tracking/표정 탐지 모델을 비교한 뒤 선택하고, 시선 위치를 영상 속 상품과 실시간으로 연결한다.
+- 추가 요구사항: 외부 GitHub·Hugging Face Eye Tracking/표정 탐지 모델을 비교한 뒤 별도 Vision 서버에서 실행하고, 시선 위치를 영상 속 상품과 실시간으로 연결한다.
 - 일정 기준: 4인 팀, 10일 개발 스프린트
 
 > 이 문서는 추천 알고리즘의 신호별 가중치를 확정하지 않는다. AI 모델 선택과 추천 알고리즘 연구가 진행되는 동안에도 FE·BE·AI가 멈추지 않고 병렬 개발할 수 있는 계약과 통합 순서를 정의한다.
+
+> 원격 추론은 [`ADR-0001`](../adr/0001-remote-vision-inference.md)의 Proposed 방향이다. ADR 승인 전에는 실제 고객 frame을 원격 전송하지 않고 Fake·Replay와 실행 중 생성한 synthetic frame으로 transport를 검증한다.
 
 ## 1. 상세 설계 목표
 
@@ -13,7 +17,7 @@
 2. Eye Tracking과 표정 탐지 모델이 아직 정해지지 않아도 mock 데이터로 전체 흐름을 개발할 수 있어야 한다.
 3. 외부 모델을 바꾸더라도 Kiosk, Backend와 추천 알고리즘 코드는 바뀌지 않아야 한다.
 4. 시선 좌표와 영상 재생 시각을 결합해 고객이 보고 있는 상품을 실시간으로 식별해야 한다.
-5. 원본 웹캠 영상은 저장하지 않고 파생된 신호만 계약에 따라 전달·저장해야 한다.
+5. 원본 웹캠 frame은 동의된 세션에서 Vision 서버로 일시 전송하되 어디에도 저장·로그하지 않고, 파생 신호만 기존 계약에 따라 전달·저장해야 한다.
 6. 작은 PR을 매일 `main`에 합쳐 항상 실행 가능한 상태를 유지해야 한다.
 
 ## 2. 병렬 개발 핵심 원칙
@@ -64,10 +68,10 @@ Contract PR
 
 | 팀원 | 주 소유 영역 | 제공하는 계약 | 주 소비자 |
 | --- | --- | --- | --- |
-| 박형진 | FastAPI, PostgreSQL, 추천 인터페이스, QR, 매니저 알림, CI·GitHub 운영 | Session, ReactionBatch, RecommendationResult, ManagerEvent, ConversionOutcome | FE, Eye, Face |
+| 박형진 | FastAPI, Vision Gateway·배포, PostgreSQL, 추천 인터페이스, QR, 매니저 알림, CI·GitHub 운영 | Session, Vision Stream, ReactionBatch, RecommendationResult, ManagerEvent, ConversionOutcome | FE, Eye, Face |
 | 양유상 | Eye 모델 조사·벤치마크·Adapter, 보정, 시선 좌표, AOI 매핑 | GazeSample, ProductAttentionEvent, Eye model report | FE, BE·추천 |
 | 정은미 | 표정 모델 조사·벤치마크·Adapter, 출력 정규화·품질 | ExpressionSample, Face model report | BE·추천 |
-| 조윤혜 | Kiosk S01-S04, 영상·웹캠 orchestration, 시선 debug UI, Manager UI | FrameContext, VideoLayout, 화면 상태와 사용자 이벤트 | Eye, Face, BE |
+| 조윤혜 | Kiosk S01-S04, 영상·웹캠 orchestration, `RemoteVisionClient`, 시선 debug UI, Manager UI | FrameContext, VideoLayout, binary frame producer, 화면 상태와 사용자 이벤트 | Vision Gateway, Eye, Face, BE |
 
 ### 공용 계약 변경 승인
 
@@ -86,6 +90,7 @@ apps/
   kiosk/                       # 조윤혜: S01-S04, video, webcam, VisionClient
   manager/                     # 조윤혜 FE + 박형진 API 계약
   api/                         # 박형진: FastAPI
+  vision-gateway/              # 박형진 관리 + Eye·Face 공동 리뷰: WSS, auth, limits, worker orchestration
 
 services/
   eye/                         # 양유상: Eye adapters, calibration, AOI mapper
@@ -94,7 +99,8 @@ services/
 
 contracts/
   openapi.yaml                 # REST 계약
-  events/                      # WebSocket·실시간 이벤트 JSON Schema
+  events/                      # Manager polling 이벤트 JSON Schema
+  vision-stream/               # ADR 승인 후 추가: binary transport와 control/error 계약
   lookbook-manifest.schema.json
   examples/                    # 정상·오류·경계 fixture
 
@@ -182,7 +188,7 @@ AI 후보마다 의존성 환경을 분리해 서로 다른 모델 라이브러�
 | `ProductAttentionEvent` | AOI Mapper | 추천 입력·저장 | 시선과 현재 노출 상품의 교차 결과 |
 | `ReactionBatch` | Kiosk·Signal Transport | FastAPI | 소량의 파생 이벤트 묶음 |
 | `RecommendationResult` | Recommendation Engine | Kiosk·Manager | Top 2, 상태, 알고리즘 버전 |
-| `ManagerEvent` | FastAPI | Manager Screen | 사용 시작과 추천 완료 알림 |
+| `ManagerEvent` | FastAPI | Manager Screen | 고객의 S04 제품 요청 알림 |
 | `ConversionOutcome` | Manager 또는 후속 연동 | FastAPI·PostgreSQL | 추천 후 착용·구매 결과 |
 
 ## 6. Lookbook Manifest와 AOI
@@ -247,8 +253,11 @@ dispose()        → 모델·카메라 관련 자원 해제
 {
   "schema_version": "1.0",
   "session_id": "session-example",
+  "event_id": "gaze-example-00421",
+  "sequence": 421,
   "frame_id": "frame-00421",
   "captured_at_mono_ms": 143220.4,
+  "video_id": "mcm-lookbook-example-v1",
   "video_time_ms": 12840,
   "playback_epoch": 0,
   "screen_x_norm": 0.63,
@@ -257,7 +266,7 @@ dispose()        → 모델·카메라 관련 자원 해제
   "valid": true,
   "reason": null,
   "calibration_id": "calibration-example",
-  "adapter_id": "eye-adapter-candidate",
+  "producer_id": "eye-adapter-candidate",
   "model_revision": "pinned-revision"
 }
 ```
@@ -370,9 +379,9 @@ Eye와 Face는 각각 같은 절차로 GitHub·Hugging Face 후보를 비교한�
 
 - 라이선스가 불명확하거나 프로젝트 사용 조건과 맞지 않음
 - commit·revision을 고정할 수 없어 실행 결과 재현이 어려움
-- 원본 프레임을 외부 서비스로 전송해야 함
+- 팀이 관리·승인하지 않은 외부 API나 제3자 서비스로 원본 frame을 전송해야 함
 - 원본 영상을 저장하도록 강제함
-- 대상 Kiosk 기기에서 설치·실행되지 않음
+- 대상 Vision 서버 환경에서 설치·실행되지 않음
 - Eye 결과를 calibration 후에도 화면 좌표로 변환할 수 없음
 - 위험한 설치 스크립트나 검증되지 않은 원격 코드를 반드시 실행해야 함
 
@@ -388,8 +397,8 @@ Eye와 Face는 각각 같은 절차로 GitHub·Hugging Face 후보를 비교한�
 | 실시간성 | p50/p95 지연, FPS, 첫 결과 시간 | p50/p95 지연, FPS, 첫 결과 시간 |
 | 강건성 | 조도, 안경, 거리, 머리 이동, 화면 가장자리, 재검출 | 조도, 각도, 안경, 가림, no-face, 재검출 |
 | 자원 | CPU/GPU/RAM, 모델 크기, warmup 시간 | CPU/GPU/RAM, 모델 크기, warmup 시간 |
-| 운영 | offline 실행, 설치 재현성, 오류 복구 | offline 실행, 설치 재현성, 오류 복구 |
-| 법적·보안 | code·weight license, revision 고정, 네트워크 요구 | code·weight license, revision 고정, 네트워크 요구 |
+| 운영 | 서버 설치 재현성, warmup, 연결 단절·재시작 복구 | 서버 설치 재현성, warmup, 연결 단절·재시작 복구 |
+| 법적·보안 | code·weight license, revision 고정, 원본 frame 비저장 | code·weight license, revision 고정, 원본 frame 비저장 |
 
 실제 정답 label이 없는 시연 영상의 결과는 `정확도`가 아니라 `안정성 관찰`로 기록한다.
 
@@ -411,14 +420,23 @@ D5에 영역별 ADR을 작성한다.
 
 ### FrameSource
 
-- Kiosk가 웹캠을 한 번만 열고 같은 프레임을 Eye와 Face에 fan-out한다.
+- Kiosk가 웹캠을 한 번만 열고 frame과 캡처 시점 `FrameContext`를 `RemoteVisionClient`에 전달한다.
 - 처리 속도가 느리면 오래된 프레임을 쌓지 않고 최신 프레임을 우선한다.
-- 프레임은 메모리 참조로만 전달하고 JSON, 로그나 DB에 직렬화하지 않는다.
+- frame은 base64 JSON으로 만들지 않고 고객 동의가 유효한 동안 binary WSS로만 일시 전송한다.
 - 세션 종료·오류·화면 초기화 시 버퍼와 카메라 자원을 해제한다.
+
+### Vision Stream
+
+- 일반 FastAPI REST와 분리된 Vision Gateway가 WSS handshake, 세션 권한, 허용 origin과 resource limit를 검사한다.
+- Kiosk는 기본적으로 in-flight frame을 `1`개만 허용하고 결과 또는 drop 응답 후 다음 frame을 보낸다.
+- Gateway는 frame을 메모리에서 한 번 decode하고 Eye·Face Worker에 fan-out한다.
+- `frame_id`, 캡처 시각, `video_time_ms`, `playback_epoch`과 layout은 서버 추론 완료 시점으로 덮어쓰지 않는다.
+- proxy·Gateway·Worker는 frame body, image bytes와 embedding을 로그·APM·파일·DB·cache·queue·artifact에 남기지 않는다.
+- stream의 handshake, envelope, 인증·만료, result, drop/error와 close code는 ADR 승인 뒤 별도 Contract PR로 고정한다.
 
 ### Reaction Event Bus
 
-`ProductAttentionEvent`와 `ExpressionSample`은 실시간 event bus에 전달한다. 알고리즘의 실행 위치에 따라 in-process, Worker/IPC 또는 network transport를 사용할 수 있지만 상위 계약은 유지한다.
+Vision Gateway가 반환한 `GazeSample`과 `ExpressionSample`은 Kiosk의 실시간 event bus에 전달한다. AOI Mapper 위치가 Kiosk 또는 서버 중 어디가 되더라도 Contract v1 좌표·시간 의미는 유지하며 D5 benchmark 전에 확정한다.
 
 Backend 전송은 매 프레임마다 HTTP 요청하지 않고 설정 가능한 소량 batch로 보낸다. 장면 전환과 세션 종료 때 남은 batch를 즉시 flush한다.
 
@@ -426,6 +444,10 @@ Backend 전송은 매 프레임마다 HTTP 요청하지 않고 설정 가능한 
 - 순서가 늦거나 누락된 event를 허용한다.
 - Backend가 느릴 때 영상 재생을 중단하지 않는다.
 - raw frame은 event에 포함하지 않는다.
+
+Vision Stream은 원본 frame의 일시적 transport이고 `ReactionBatch`는 파생 event의 즉시 집계 transport다. 두 경계를 하나의 API나 schema로 합치지 않는다.
+
+MVP C안에서 Backend는 batch를 검증·중복 제거한 뒤 활성 세션의 상품별 feature로 즉시 접고 개별 event payload를 보관하지 않는다. 활성 상태에는 집계와 중복 제거 키만 남기며, 추천이 성공하면 함께 폐기한다. 세션 TTL·취소·재시작 시점의 폐기 규칙은 실제 Kiosk client 연결 전 Contract PR로 확정한다.
 
 ### 추천 입력 경계
 
@@ -448,14 +470,14 @@ Eye·Face 담당자는 최종 점수를 계산하지 않는다. 추천 영역이
 | --- | --- | --- |
 | `POST` | `/api/v1/sessions` | 키오스크 세션 생성 |
 | `GET` | `/api/v1/lookbooks/{lookbook_id}/manifest` | 영상·AOI manifest 조회 |
-| `POST` | `/api/v1/sessions/{session_id}/reaction-batches` | 파생 이벤트 batch 저장 |
+| `POST` | `/api/v1/sessions/{session_id}/reaction-batches` | 파생 이벤트 batch 수신·즉시 집계 |
 | `POST` | `/api/v1/sessions/{session_id}/complete` | 분석 종료와 추천 실행 요청 |
 | `GET` | `/api/v1/sessions/{session_id}/recommendations` | Top 2 결과 조회 |
+| `POST` | `/api/v1/sessions/{session_id}/manager-product-requests` | 고객의 매니저 제품 요청 기록 |
 | `GET` | `/api/v1/products/{product_id}` | 상품 이미지·QR 정보 조회 |
 | `POST` | `/api/v1/conversions` | 착용·구매 전환 결과 저장 |
-| `GET` | `/api/v1/manager/events` | 연결 복구용 이벤트 조회 |
+| `GET` | `/api/v1/manager/events` | polling cursor 뒤 고객 제품 요청 이벤트 조회 |
 | `GET` | `/api/v1/health` | API·DB 상태 확인 |
-| `WS` | `/ws/v1/managers` | 매니저 자동 알림 |
 
 정확한 request·response는 Contract PR의 OpenAPI와 JSON Schema로 정의한다.
 
@@ -466,14 +488,14 @@ Eye·Face 담당자는 최종 점수를 계산하지 않는다. 추천 영역이
 | `sessions` | 세션 상태, Kiosk, 동의 version과 시작·종료 시각 |
 | `products` | 상품 정보, 이미지, 공식 URL과 QR asset |
 | `lookbooks` | 영상과 manifest version |
-| `reaction_batches` | 원본이 아닌 파생 이벤트 batch와 schema version |
+| `session_product_features` | TTL이 있는 활성 세션의 상품별 집계 상태. 개별 event payload는 포함하지 않음 |
 | `recommendation_runs` | 사용한 algorithm version과 결과 상태 |
 | `recommendation_items` | 추천 순위와 product ID |
-| `manager_events` | 자동 알림과 전달 상태 |
+| `manager_events` | 고객의 제품 요청 알림과 polling cursor |
 | `conversion_outcomes` | 세션·상품별 착용·구매 결과 |
 | `model_registry` | Eye·Face 모델 revision, checksum, license와 상태 |
 
-원본 이미지, 영상, base64, 얼굴 embedding과 파일 경로를 저장하는 컬럼은 만들지 않는다. 정확한 컬럼과 보존 기간은 DB·개인정보 상세 설계에서 확정한다.
+원본 이미지, 영상, base64, 얼굴 embedding과 파일 경로를 저장하는 컬럼은 만들지 않는다. MVP C안에서는 `ReactionBatch`·개별 Eye/Face sample의 event payload, 좌표·시간·표정 score를 영속화하지 않는다. 정확한 최종 결과 보존 기간과 활성 집계 TTL은 DB·개인정보 상세 설계에서 확정한다.
 
 ## 12. Kiosk·Manager Frontend 상세 경계
 
@@ -486,8 +508,8 @@ Eye·Face 담당자는 최종 점수를 계산하지 않는다. 추천 영역이
 ### S02. Main Menu
 
 - 카테고리 탐색과 AI 추천 선택
-- 카메라·파생 데이터 저장·추천 개선 목적 안내
-- AI 추천을 선택하고 동의가 완료되면 분석 세션을 만들고 매니저에게 `session_started` 전송
+- 카메라 사용, 개별 파생 event의 즉시 폐기와 최종 추천 결과 보관 범위 안내
+- AI 추천을 선택하고 동의가 완료되면 분석 세션을 생성
 - 동의하지 않으면 카메라 분석 없이 다른 흐름 제공
 
 ### S03. AI Lookbook
@@ -504,13 +526,14 @@ Eye·Face 담당자는 최종 점수를 계산하지 않는다. 추천 영역이
 - 추천 상태와 Top 2 표시
 - 상품 이미지와 각 상품의 사전 생성 QR 표시
 - mock과 실제 추천 결과를 개발·검증 환경에서 구분
+- 고객이 원할 때만 `매니저에게 제품 요청` 버튼으로 Top 2 응대를 요청
 - 일정 시간 뒤 다음 고객을 위해 전체 상태 초기화
 
 ### Manager Screen
 
-- 사용 시작 이벤트를 자동으로 표시
-- 같은 세션 카드에 추천 Top 2를 갱신
-- WebSocket 재연결과 누락 이벤트 복구
+- polling으로 고객의 제품 요청 이벤트를 조회
+- 요청된 세션의 Top 2와 `view_recommended_products` 의도를 표시
+- `event_id` 중복 제거와 `after_sequence` cursor를 유지
 - MVP에서는 추천 후 착용·구매 결과를 해당 세션에 기록하는 입력 제공
 
 고정 상품 QR만으로는 어느 분석 세션이 구매로 이어졌는지 알 수 없다. 따라서 MVP의 구매 전환 기록은 매니저 세션 카드 입력을 기본안으로 하고, POS·CRM 자동 연동은 후속 기능으로 둔다.
@@ -603,79 +626,79 @@ QR에는 원본 반응 데이터나 얼굴 관련 정보는 넣지 않는다.
 
 | 담당 | 하루 결과물 |
 | --- | --- |
-| 박형진 | Session·동의 API, 상품 catalog seed, PostgreSQL 초기 migration |
+| 박형진 | Session·동의 API, stream 권한·만료 설계, 상품 catalog seed, PostgreSQL 초기 migration |
 | 양유상 | Eye 후보 3개 이상 inventory, revision·license·실행 smoke 기록 |
 | 정은미 | Face 후보 3개 이상 inventory, revision·license·실행 smoke 기록 |
-| 조윤혜 | S01·S02, 세션 시작, 동의·취소·timeout UI를 mock API로 구현 |
+| 조윤혜 | S01·S02, 원격 frame 전송을 구분한 동의·취소·timeout UI를 mock API로 구현 |
 
 ### D3. 입력과 관측 경계
 
 | 담당 | 하루 결과물 |
 | --- | --- |
-| 박형진 | Reaction ingest stub, JSON Schema 검증, `event_id` 중복 방지 |
+| 박형진 | ADR 승인 후 Vision Stream v1 Contract와 synthetic WSS harness; Reaction ingest stub은 파생 event 전용으로 유지 |
 | 양유상 | `FrameContext → GazeSample` replay runner와 보정 fixture |
 | 정은미 | `FrameContext → ExpressionSample` replay runner와 no-face 의미 정의 |
-| 조윤혜 | S03 video·webcam 권한, 단일 FrameSource, 캡처 시 `video_time_ms`·layout 생성 |
+| 조윤혜 | S03 video·webcam 권한, 단일 FrameSource, 캡처 시 `video_time_ms`·layout과 `RemoteVisionClient` fake 경계 생성 |
 
 ### D4. AOI와 Mock 결과
 
 | 담당 | 하루 결과물 |
 | --- | --- |
-| 박형진 | 파생 event 저장, `MockRecommendationEngine`, 상품·QR service |
+| 박형진 | FakeEye·FakeFace 기반 Vision Gateway WSS scaffold, 파생 event 즉시 집계, `MockRecommendationEngine` |
 | 양유상 | manifest·AOI Mapper, 시간·polygon·겹침 unit test, Eye 후보 1차 benchmark |
 | 정은미 | Face 후보 1차 benchmark와 label 정규화 비교 |
-| 조윤혜 | S03 상태·오류 UI, mock 시선·AOI overlay, S04 mock Top 2·QR |
+| 조윤혜 | binary frame producer의 in-flight `1`·drop 처리, mock 시선·AOI overlay, S04 mock Top 2·QR |
 
 ### D5. 외부 모델 선택 Gate
 
 | 담당 | 하루 결과물 |
 | --- | --- |
-| 박형진 | Recommendation·Manager event 계약, replay 통합 harness, ADR 리뷰 주관 |
-| 양유상 | Eye 비교표, 선택·fallback ADR, 선택 Adapter smoke test |
-| 정은미 | Face 비교표, 선택·fallback ADR, 선택 Adapter smoke test |
-| 조윤혜 | Contract v1 기반 실제 생성 타입·client 연결, 터치·오류 상태 정리 |
+| 박형진 | [`Vision 서버 선정 계획`](../benchmarks/VISION_SERVER_SELECTION_PLAN.md)의 공통 harness·network·동시 세션·비용표, Recommendation·Manager event 계약, ADR 리뷰 주관 |
+| 양유상 | 목표 서버의 Eye 비교표, 선택·fallback ADR, capture-to-result·자원 smoke test |
+| 정은미 | 목표 서버의 Face 비교표, 선택·fallback ADR, capture-to-result·자원 smoke test |
+| 조윤혜 | 실제 생성 타입·RemoteVisionClient 연결, 전송 해상도·FPS 비교와 터치·오류 상태 정리 |
 
-**통합 Gate B:** 모델 revision·license·benchmark 근거와 실행 위치·transport를 확정한다. 통과하지 못하면 Fake/Replay Adapter로 다른 작업을 계속한다.
+**통합 Gate B:** ADR-0001 승인 후 workload·모델을 고정하고 CPU → fractional GPU → full GPU, 현장 network, 동시 세션, 같은 날짜의 총비용과 보안·운영 Gate를 순서대로 통과한다. 모델 revision·license, WSS protocol, capture-to-result 지연·FPS·drop·자원·원본 비저장 기준과 목표 cloud·region·instance를 후속 ADR-0002로 확정한다. 통과하지 못하면 실제 customer frame 연결이나 Deployment PR 없이 Fake/Replay로 다른 작업을 계속한다.
 
 ### D6. 선택 모델과 실시간 파이프라인
 
 | 담당 | 하루 결과물 |
 | --- | --- |
-| 박형진 | Product reaction aggregator와 추천 엔진 인터페이스; 실제 알고리즘 전에는 mock 유지 |
-| 양유상 | 선택 Eye Adapter, calibration, 실시간 gaze·AOI output |
-| 정은미 | 선택 Face Adapter, 공통 score·품질 output과 안정화 처리 |
-| 조윤혜 | 선택 transport로 S03 signal stream 연결, feature flag 추가 |
+| 박형진 | Vision Gateway 인증·origin·limit·worker orchestration과 Product reaction aggregator |
+| 양유상 | 서버 Eye Worker, calibration state, 실시간 gaze·AOI output |
+| 정은미 | 서버 Face Worker, 공통 score·품질 output과 안정화 처리 |
+| 조윤혜 | RemoteVisionClient로 S03 WSS stream 연결, feature flag 추가 |
 
 ### D7. Replay E2E
 
 | 담당 | 하루 결과물 |
 | --- | --- |
-| 박형진 | batch ingest → DB → recommendation interface 전체 경로 |
-| 양유상 | Eye timeout·drop·backpressure·fallback 처리 |
-| 정은미 | Face no-face·timeout·fallback 처리 |
-| 조윤혜 | Replay Adapter 기반 S01→S04 E2E, loading·retry·cancel |
+| 박형진 | batch ingest → 활성 집계 → recommendation interface 전체 경로 |
+| 양유상 | Eye timeout·worker restart·calibration 만료 처리 |
+| 정은미 | Face no-face·timeout·worker restart 처리 |
+| 조윤혜 | synthetic frame·Replay 기반 S01→S04 E2E, drop·disconnect·retry·cancel |
 
-**통합 Gate C:** 승인된 fixture 한 세션이 원본 영상 저장 없이 결정적인 mock Top 2까지 통과한다.
+**통합 Gate C:** 승인된 fixture 한 세션이 WSS Gateway를 거치고 원본 frame 저장 없이 결정적인 mock Top 2까지 통과한다.
 
 ### D8. Live Vertical Slice
 
 | 담당 | 하루 결과물 |
 | --- | --- |
-| 박형진 | 실제 상품·QR, Manager WebSocket, conversion 저장 기본안 |
-| 양유상 | 실제 웹캠 calibration과 장면별 AOI hit 검증 |
-| 정은미 | 실제 웹캠 조도·각도·no-face 안정성 검증 |
-| 조윤혜 | 실제 S03·S04와 Manager 화면, Kiosk touch UI 정리 |
+| 박형진 | TLS 배포, 실제 상품·QR, Manager polling, conversion 저장 기본안 |
+| 양유상 | Kiosk→서버 실제 웹캠 calibration과 장면별 AOI hit 검증 |
+| 정은미 | Kiosk→서버 실제 웹캠 조도·각도·no-face 안정성 검증 |
+| 조윤혜 | 실제 원격 S03·S04와 Manager 화면, Kiosk touch UI 정리 |
 
-**통합 Gate D:** 전체 룩북 한 번을 재생해 시선→상품 event, Top 2, QR과 매니저 알림을 함께 확인한다. 추천 알고리즘이 아직 연구 중이면 결과를 mock으로 명확히 구분한다.
+**통합 Gate D:** 전체 룩북 한 번을 재생해 WSS frame→서버 Eye·Face→파생 event→Top 2→QR·매니저 알림을 확인하고, proxy·Gateway·Worker·DB·로그에 원본 frame이 남지 않는지 점검한다. 추천 알고리즘이 아직 연구 중이면 결과를 mock으로 명확히 구분한다.
 
 ### D9. Release Candidate 품질
 
 | 담당 | 하루 결과물 |
 | --- | --- |
-| 박형진 | API·PostgreSQL·WebSocket 통합, 재전송·재연결, 로그·DB 개인정보 점검 |
-| 양유상 | 최종 Eye 성능 budget·failure matrix와 병목 수정 |
-| 정은미 | 최종 Face 성능 budget·failure matrix와 병목 수정 |
-| 조윤혜 | 카메라 거부, AI 불가, 데이터 부족, 네트워크 단절, 접근성·터치 E2E |
+| 박형진 | Vision Gateway·API·DB 통합, origin/auth/limit, proxy·APM·로그·cache 개인정보 점검 |
+| 양유상 | 최종 서버 Eye 성능 budget·failure matrix와 병목 수정 |
+| 정은미 | 최종 서버 Face 성능 budget·failure matrix와 병목 수정 |
+| 조윤혜 | 카메라 거부, server 불가, 데이터 부족, network 단절, 접근성·터치 E2E |
 
 **통합 Gate E:** critical·high bug 0건, clean session reset 성공, release candidate 생성 가능 상태다.
 
@@ -683,7 +706,7 @@ QR에는 원본 반응 데이터나 얼굴 관련 정보는 넣지 않는다.
 
 | 담당 | 하루 결과물 |
 | --- | --- |
-| 박형진 | clean-machine 실행, DB seed, demo reset, rollback과 release checklist |
+| 박형진 | clean-server 배포, TLS·private network·DB seed, demo reset, rollback과 release checklist |
 | 양유상 | Eye revision·checksum 고정, calibration·fallback 시연 점검 |
 | 정은미 | Face revision·checksum 고정, fallback 시연 점검 |
 | 조윤혜 | Kiosk 해상도, QR scan, 전체 시연 동선과 UI 최종 점검 |
@@ -699,18 +722,19 @@ QR에는 원본 반응 데이터나 얼굴 관련 정보는 넣지 않는다.
 - Adapter stub unit test
 - AOI Mapper 경계 test
 - FastAPI unit test
+- Vision Stream protocol·Gateway auth/origin/size/drop test
 - PostgreSQL migration clean upgrade test
 - Kiosk mock smoke test
 - 원본 이미지·base64·대형 model weight가 Git에 포함되지 않았는지 검사
-- 로그·API schema에 raw frame field가 없는지 검사
+- 일반 REST·event schema와 로그·APM에 raw frame field 또는 payload가 없는지 검사
 
 ### 실제 모델 전용 Lane
 
 모든 PR에서 무거운 모델을 다시 실행하지 않는다.
 
 - PR CI: Fake·Replay Adapter와 작은 smoke test
-- 수동 또는 scheduled test: 전체 weight, 실제 Kiosk 하드웨어, 성능 benchmark
-- D5·D9 Gate: 고정 revision으로 전체 비교·회귀 benchmark
+- 수동 또는 scheduled test: 전체 weight, 목표 Vision 서버, 실제 Kiosk·network, 성능 benchmark
+- D5·D9 Gate: 고정 revision과 server 사양으로 전체 비교·회귀·load benchmark
 - 결과: 환경, 명령, metric JSON과 요약 표를 artifact로 남김
 
 ### 필수 Replay Fixture
@@ -720,7 +744,7 @@ QR에는 원본 반응 데이터나 얼굴 관련 정보는 넣지 않는다.
 - 화면 밖·낮은 confidence·no-face·multi-face
 - Eye·Face 처리 지연과 순서 뒤바뀜
 - 영상 pause·seek·replay
-- Backend 지연·중복 batch·WebSocket 재연결
+- Backend 지연·중복 batch·polling cursor 재조회
 - 신호가 부족한 세션
 
 고객의 실제 원본 얼굴 영상을 Git fixture로 사용하지 않는다.
@@ -733,7 +757,8 @@ QR에는 원본 반응 데이터나 얼굴 관련 정보는 넣지 않는다.
 EYE_ADAPTER=fake|replay|selected
 FACE_ADAPTER=fake|replay|selected
 RECOMMENDATION_ENGINE=mock|research_version
-SIGNAL_TRANSPORT=local|batch|stream
+VISION_CLIENT=fake|replay|remote
+VISION_TRANSPORT=wss
 SHOW_GAZE_DEBUG=false|true
 ```
 
@@ -743,26 +768,30 @@ SHOW_GAZE_DEBUG=false|true
 
 - S01부터 S04까지 mock E2E와 live vertical slice가 모두 동작한다.
 - Eye와 Face 각각 후보 비교표, 재현 benchmark, 선택 ADR, 고정 revision·license·checksum과 fallback이 있다.
+- Vision 서버는 workload·모델·CPU/GPU·network·동시 세션·총비용·운영 Gate를 순서대로 통과하고 ADR-0002에 cloud·region·instance와 rollback 근거가 기록되어 있다.
 - 시선 좌표가 캡처 시점의 영상 시각·layout·AOI와 결합되어 product ID 후보로 전달된다.
 - Eye·Face의 무효 신호가 무관심이나 중립으로 잘못 계산되지 않는다.
 - 실제 추천 알고리즘이 없어도 mock 경계로 모든 팀이 병렬 개발할 수 있다.
 - Top 2 상품 이미지와 각 상품 QR이 표시된다.
-- Kiosk 이용 시작과 추천 결과가 Manager WebSocket으로 전달된다.
+- S04 고객 제품 요청이 Manager polling으로 전달된다.
 - 동의된 파생 반응, 추천과 구매 전환 데이터가 PostgreSQL 저장 경계를 통과한다.
-- 파일·DB·로그·API에 웹캠 원본 프레임이 남지 않는다.
+- 동의된 세션만 WSS Vision Stream을 열고 미동의·철회·만료 시 camera와 연결을 닫는다.
+- 원본 frame이 일반 REST API, 파일·DB·cache·queue·로그·APM·artifact·backup에 남지 않는다.
+- server/network 실패를 무관심·중립 또는 Fake 결과로 바꾸지 않고 분석 불가 상태로 처리한다.
 - 매일 작은 PR을 `main`에 병합하고 최신 `main`의 mock smoke test가 통과한다.
 
 ## 20. D1에 팀이 확인할 항목
 
 구체적인 선택지, 팀장 기본안, 실행 명령과 승인 양식은 [`D1_TECHNICAL_DECISIONS.md`](D1_TECHNICAL_DECISIONS.md)에 기록한다. 다음 값은 실제 기능 구현을 병합하기 전에 팀이 확인한다.
 
-1. 실제 Kiosk 기기, OS, 브라우저와 GPU 사용 가능 여부
+1. 실제 Kiosk 기기, OS, 브라우저, 카메라와 현장 network 조건
 2. Kiosk Frontend 기술 스택
 3. 약 60초 룩북 영상의 최초 version과 상품 ID 목록
 4. 점선 이동 표적을 이용한 Eye 보정 방식과 D5 성능 통과 기준
-5. Eye·Face를 브라우저 또는 Kiosk 로컬 Python runtime 중 어디서 실행할지 평가할 기준
+5. ADR-0001 원격 추론, 고객 동의, Vision Stream v1과 비저장 운영 원칙
 6. Manager 시작 알림을 S02 AI 선택과 동의 완료 직후 전송하는 기준
 7. PostgreSQL 실행 환경과 Alembic migration 운영 방식
 8. 구매 전환 기록을 Manager 입력으로 시작할지 여부
-9. 동의 화면에 표시할 저장 항목과 보유 기간 결정 일정
-10. D5까지 사용할 Eye·Face 후보 최소 3개씩의 조사 범위
+9. [`Vision 서버 선정 계획`](../benchmarks/VISION_SERVER_SELECTION_PLAN.md)에 따른 목표 cloud·region·CPU/GPU·동시 Kiosk 수와 성능·비용·운영 Gate 및 ADR-0002 승인
+10. 동의 화면에 표시할 저장 항목과 보유 기간 결정 일정
+11. D5까지 사용할 Eye·Face 후보 최소 3개씩의 조사 범위

@@ -1,0 +1,10 @@
+{
+  "status": "not_run",
+  "reason": "no_local_gpu",
+  "hf_token_present": false,
+  "local_nvidia_gpu_detected": false,
+  "external_provider_used": false,
+  "selected_model": null,
+  "recorded_at": "2026-08-16",
+  "note": "계약·payload·평가 harness만 검증했습니다. Qwen 또는 Mistral 추론 성능 수치가 아닙니다."
+}

@@ -1,0 +1,424 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcm-lookbook.example/contracts/v2/recommendation-evidence-v2.schema.json",
+  "title": "RecommendationEvidenceV2",
+  "description": "결정적 feature extractor가 derived-only 중앙 추천 AI에 전달하는 A/B/C 비교용 입력입니다. 운영 variant C에는 개별 frame과 좌표가 없습니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "decision_request_id",
+    "input_variant",
+    "session_id",
+    "video_id",
+    "manifest_version",
+    "catalog_version",
+    "feature_version",
+    "signal_versions",
+    "data_quality",
+    "summary",
+    "evidence_windows",
+    "timeline"
+  ],
+  "properties": {
+    "schema_version": { "const": "2.0" },
+    "decision_request_id": { "$ref": "#/$defs/id" },
+    "input_variant": { "enum": ["A", "B", "C"] },
+    "session_id": { "$ref": "#/$defs/id" },
+    "video_id": { "$ref": "#/$defs/id" },
+    "manifest_version": { "$ref": "#/$defs/version" },
+    "catalog_version": { "$ref": "#/$defs/version" },
+    "feature_version": { "$ref": "#/$defs/version" },
+    "signal_versions": { "$ref": "#/$defs/signalVersions" },
+    "data_quality": { "$ref": "#/$defs/dataQuality" },
+    "summary": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "items": { "$ref": "#/$defs/productSummary" }
+    },
+    "evidence_windows": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "items": { "$ref": "#/$defs/evidenceWindow" }
+        }
+      ]
+    },
+    "timeline": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 512,
+          "items": { "$ref": "frame-observation-v2.schema.json" }
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "input_variant": { "const": "A" } }, "required": ["input_variant"] },
+      "then": {
+        "properties": {
+          "evidence_windows": { "type": "array", "minItems": 1 },
+          "timeline": { "type": "array", "minItems": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "input_variant": { "const": "B" } }, "required": ["input_variant"] },
+      "then": {
+        "properties": {
+          "evidence_windows": { "type": "null" },
+          "timeline": { "type": "array", "minItems": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "input_variant": { "const": "C" } }, "required": ["input_variant"] },
+      "then": {
+        "properties": {
+          "evidence_windows": { "type": "array", "minItems": 1 },
+          "timeline": { "type": "null" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "version": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+    },
+    "nullableReason": {
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/reason" }]
+    },
+    "normalized": { "type": "number", "minimum": 0, "maximum": 1 },
+    "eyeVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["producer_id", "model_revision"],
+      "properties": {
+        "producer_id": { "$ref": "#/$defs/id" },
+        "model_revision": { "$ref": "#/$defs/version" }
+      }
+    },
+    "faceVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["producer_id", "model_revision", "taxonomy_version"],
+      "properties": {
+        "producer_id": { "$ref": "#/$defs/id" },
+        "model_revision": { "$ref": "#/$defs/version" },
+        "taxonomy_version": { "$ref": "#/$defs/version" }
+      }
+    },
+    "signalVersions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["eye", "eye_reason", "face", "face_reason", "aoi_mapper_revision"],
+      "properties": {
+        "eye": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/eyeVersion" }] },
+        "eye_reason": { "$ref": "#/$defs/nullableReason" },
+        "face": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/faceVersion" }] },
+        "face_reason": { "$ref": "#/$defs/nullableReason" },
+        "aoi_mapper_revision": { "$ref": "#/$defs/version" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "eye": { "type": "null" } }, "required": ["eye"] },
+          "then": { "properties": { "eye_reason": { "$ref": "#/$defs/reason" } } },
+          "else": { "properties": { "eye_reason": { "type": "null" } } }
+        },
+        {
+          "if": { "properties": { "face": { "type": "null" } }, "required": ["face"] },
+          "then": { "properties": { "face_reason": { "$ref": "#/$defs/reason" } } },
+          "else": { "properties": { "face_reason": { "type": "null" } } }
+        }
+      ]
+    },
+    "dataQuality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expected_observation_count",
+        "gaze_valid_ratio",
+        "expression_valid_ratio",
+        "matched_frame_ratio",
+        "ambiguous_product_ratio"
+      ],
+      "properties": {
+        "expected_observation_count": { "type": "integer", "minimum": 0 },
+        "gaze_valid_ratio": { "$ref": "#/$defs/normalized" },
+        "expression_valid_ratio": { "$ref": "#/$defs/normalized" },
+        "matched_frame_ratio": { "$ref": "#/$defs/normalized" },
+        "ambiguous_product_ratio": { "$ref": "#/$defs/normalized" }
+      }
+    },
+    "gazeSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "valid_observation_count",
+        "observed_attention_ms",
+        "attention_ratio",
+        "average_confidence",
+        "return_candidate_count",
+        "return_candidate_reason",
+        "movement_distance_norm",
+        "mean_speed_norm_per_s",
+        "movement_reason"
+      ],
+      "properties": {
+        "valid_observation_count": { "type": "integer", "minimum": 0 },
+        "observed_attention_ms": { "type": "number", "minimum": 0 },
+        "attention_ratio": { "$ref": "#/$defs/normalized" },
+        "average_confidence": { "$ref": "#/$defs/normalized" },
+        "return_candidate_count": {
+          "oneOf": [{ "type": "null" }, { "type": "integer", "minimum": 0 }]
+        },
+        "return_candidate_reason": { "$ref": "#/$defs/nullableReason" },
+        "movement_distance_norm": {
+          "oneOf": [{ "type": "null" }, { "type": "number", "minimum": 0 }]
+        },
+        "mean_speed_norm_per_s": {
+          "oneOf": [{ "type": "null" }, { "type": "number", "minimum": 0 }]
+        },
+        "movement_reason": { "$ref": "#/$defs/nullableReason" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "return_candidate_count": { "type": "null" } },
+            "required": ["return_candidate_count"]
+          },
+          "then": {
+            "properties": { "return_candidate_reason": { "$ref": "#/$defs/reason" } }
+          },
+          "else": {
+            "properties": { "return_candidate_reason": { "type": "null" } }
+          }
+        },
+        {
+          "if": {
+            "properties": { "movement_distance_norm": { "type": "null" } },
+            "required": ["movement_distance_norm"]
+          },
+          "then": {
+            "properties": {
+              "mean_speed_norm_per_s": { "type": "null" },
+              "movement_reason": { "$ref": "#/$defs/reason" }
+            }
+          },
+          "else": {
+            "properties": {
+              "mean_speed_norm_per_s": { "type": "number", "minimum": 0 },
+              "movement_reason": { "type": "null" }
+            }
+          }
+        }
+      ]
+    },
+    "sustainedAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["signal", "duration_ms"],
+      "properties": {
+        "signal": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+        "duration_ms": { "type": "number", "minimum": 0 }
+      }
+    },
+    "expressionSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "matched_observation_count",
+        "valid_coverage",
+        "action_changes",
+        "action_change_rates_per_s",
+        "change_reason",
+        "sustained_actions"
+      ],
+      "properties": {
+        "matched_observation_count": { "type": "integer", "minimum": 0 },
+        "valid_coverage": { "$ref": "#/$defs/normalized" },
+        "action_changes": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "minProperties": 1,
+              "propertyNames": { "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+              "additionalProperties": { "type": "number", "minimum": -1, "maximum": 1 }
+            }
+          ]
+        },
+        "action_change_rates_per_s": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "minProperties": 1,
+              "propertyNames": { "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+              "additionalProperties": { "type": "number", "minimum": -1000, "maximum": 1000 }
+            }
+          ]
+        },
+        "change_reason": { "$ref": "#/$defs/nullableReason" },
+        "sustained_actions": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/sustainedAction" }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "action_changes": { "type": "null" } },
+            "required": ["action_changes"]
+          },
+          "then": {
+            "properties": {
+              "action_change_rates_per_s": { "type": "null" },
+              "change_reason": { "$ref": "#/$defs/reason" }
+            }
+          },
+          "else": {
+            "properties": {
+              "action_change_rates_per_s": { "type": "object", "minProperties": 1 },
+              "change_reason": { "type": "null" }
+            }
+          }
+        }
+      ]
+    },
+    "productSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "product_id",
+        "exposure_duration_ms",
+        "gaze",
+        "gaze_reason",
+        "expression",
+        "expression_reason"
+      ],
+      "properties": {
+        "product_id": { "$ref": "#/$defs/id" },
+        "exposure_duration_ms": { "type": "number", "minimum": 0 },
+        "observed_component_codes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "whole_product",
+              "body",
+              "handle",
+              "strap",
+              "closure",
+              "hardware",
+              "pocket",
+              "trim",
+              "logo"
+            ]
+          }
+        },
+        "observed_visual_tag_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" }
+        },
+        "gaze": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/gazeSummary" }] },
+        "gaze_reason": { "$ref": "#/$defs/nullableReason" },
+        "expression": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/expressionSummary" }]
+        },
+        "expression_reason": { "$ref": "#/$defs/nullableReason" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "gaze": { "type": "null" } }, "required": ["gaze"] },
+          "then": { "properties": { "gaze_reason": { "$ref": "#/$defs/reason" } } },
+          "else": { "properties": { "gaze_reason": { "type": "null" } } }
+        },
+        {
+          "if": { "properties": { "expression": { "type": "null" } }, "required": ["expression"] },
+          "then": { "properties": { "expression_reason": { "$ref": "#/$defs/reason" } } },
+          "else": { "properties": { "expression_reason": { "type": "null" } } }
+        }
+      ]
+    },
+    "evidenceWindow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "window_id",
+        "product_id",
+        "start_offset_ms",
+        "end_offset_ms",
+        "video_start_ms",
+        "video_end_ms",
+        "playback_epoch",
+        "evidence_codes"
+      ],
+      "properties": {
+        "window_id": { "$ref": "#/$defs/id" },
+        "product_id": { "$ref": "#/$defs/id" },
+        "start_offset_ms": { "type": "number", "minimum": 0 },
+        "end_offset_ms": { "type": "number", "minimum": 0 },
+        "video_start_ms": { "type": "integer", "minimum": 0 },
+        "video_end_ms": { "type": "integer", "minimum": 0 },
+        "playback_epoch": { "type": "integer", "minimum": 0 },
+        "observed_component_codes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "whole_product",
+              "body",
+              "handle",
+              "strap",
+              "closure",
+              "hardware",
+              "pocket",
+              "trim",
+              "logo"
+            ]
+          }
+        },
+        "observed_visual_tag_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" }
+        },
+        "evidence_codes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "observed_attention",
+              "return_candidate",
+              "gaze_movement",
+              "face_action_change",
+              "data_quality"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

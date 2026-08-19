@@ -1,0 +1,74 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from starlette.websockets import WebSocketDisconnect
+from starlette.testclient import TestClient
+
+from apps.vision_gateway.local_server import LocalVisionGatewayApp
+
+
+def make_app() -> LocalVisionGatewayApp:
+    return LocalVisionGatewayApp(
+        model_path=Path("experiments/face/mediapipe-face-landmarker/models/face_landmarker.task")
+    )
+
+
+def test_gaze_only_mode_needs_no_face_model_path() -> None:
+    app = LocalVisionGatewayApp(expression_mode="disabled")
+
+    assert app.expression_mode == "disabled"
+
+
+def test_local_token_bootstrap_is_cors_scoped_and_one_time() -> None:
+    app = make_app()
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/vision/v1/local-token",
+            json={"session_id": "session-live-001", "video_id": "mcm-lookbook-live-v1"},
+            headers={"Origin": "http://127.0.0.1:5173"},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:5173"
+    token = response.json()
+    assert token["protocol_version"] == "1.0"
+    assert token["session_id"] == "session-live-001"
+    assert token["video_id"] == "mcm-lookbook-live-v1"
+    assert token["websocket_path"] == "/vision/v1/stream"
+    assert len(token["stream_token"]) == 43
+    assert app.token_issuer.consume(token["stream_token"]) is not None
+    assert app.token_issuer.consume(token["stream_token"]) is None
+
+
+def test_local_token_bootstrap_rejects_unknown_origin_and_invalid_body() -> None:
+    app = make_app()
+
+    with TestClient(app) as client:
+        origin_response = client.post(
+            "/vision/v1/local-token",
+            json={"session_id": "session-live-001", "video_id": "mcm-lookbook-live-v1"},
+            headers={"Origin": "http://evil.test"},
+        )
+        invalid_response = client.post(
+            "/vision/v1/local-token",
+            json={"session_id": "../raw", "video_id": "mcm-lookbook-live-v1"},
+            headers={"Origin": "http://127.0.0.1:5173"},
+        )
+
+    assert origin_response.status_code == 403
+    assert invalid_response.status_code == 400
+
+
+def test_websocket_requires_an_explicit_allowed_origin() -> None:
+    app = LocalVisionGatewayApp(expression_mode="disabled")
+
+    with TestClient(app) as client:
+        for headers in ({}, {"Origin": "https://evil.test"}):
+            with pytest.raises(WebSocketDisconnect) as caught:
+                with client.websocket_connect("/vision/v1/stream", headers=headers):
+                    pass
+            assert caught.value.code == 4403
+            assert caught.value.reason == "origin_not_allowed"

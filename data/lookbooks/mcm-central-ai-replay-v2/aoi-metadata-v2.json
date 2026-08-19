@@ -1,0 +1,130 @@
+{
+  "schema_version": "2.0",
+  "video_id": "mcm-central-ai-replay-v2",
+  "manifest_version": "mcm-central-ai-replay-v2-2026-08-18",
+  "metadata_revision": "mcm-central-ai-replay-aoi-v3-2026-08-18",
+  "approval_status": "approved",
+  "coordinate_space": "video_normalized",
+  "component_taxonomy_version": "mcm-component-v1",
+  "media_identity": {
+    "source_kind": "synthetic_fixture",
+    "sha256": "df4a3b3be2a26ce728fe09fb8fde9d02bf8e08452a226736f4e68fa046f7c1d2",
+    "byte_length": 3200,
+    "duration_ms": 60000,
+    "width_px": 1280,
+    "height_px": 720,
+    "fps": 24
+  },
+  "exposures": [
+    {
+      "aoi_id": "replay-scene-01-toni",
+      "parent_aoi_id": null,
+      "specificity_rank": 0,
+      "start_ms": 0,
+      "end_ms": 6000,
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] },
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "component_code": "whole_product",
+      "observed_visual_tag_ids": ["monogram", "shopper"]
+    },
+    {
+      "aoi_id": "replay-scene-02-pina-vanity",
+      "parent_aoi_id": null,
+      "specificity_rank": 0,
+      "start_ms": 6000,
+      "end_ms": 12000,
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] },
+      "product_id": "mcm-pina-vanity-case-studded-calfskin",
+      "component_code": "whole_product",
+      "observed_visual_tag_ids": ["leather", "shoulder"]
+    },
+    {
+      "aoi_id": "replay-scene-03-milla",
+      "parent_aoi_id": null,
+      "specificity_rank": 0,
+      "start_ms": 12000,
+      "end_ms": 18000,
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] },
+      "product_id": "mcm-milla-small-grained-leather",
+      "component_code": "whole_product",
+      "observed_visual_tag_ids": ["leather", "tote"]
+    },
+    {
+      "aoi_id": "replay-scene-04-ella",
+      "parent_aoi_id": null,
+      "specificity_rank": 0,
+      "start_ms": 18000,
+      "end_ms": 24000,
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] },
+      "product_id": "mcm-ella-small-disco-visetos",
+      "component_code": "whole_product",
+      "observed_visual_tag_ids": ["boston", "monogram"]
+    },
+    {
+      "aoi_id": "replay-scene-05-aren-east-west",
+      "parent_aoi_id": null,
+      "specificity_rank": 0,
+      "start_ms": 24000,
+      "end_ms": 30000,
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] },
+      "product_id": "mcm-aren-east-west-shoulder-visetos",
+      "component_code": "whole_product",
+      "observed_visual_tag_ids": ["monogram", "shoulder"]
+    },
+    {
+      "aoi_id": "replay-scene-06-ottomar",
+      "parent_aoi_id": null,
+      "specificity_rank": 0,
+      "start_ms": 30000,
+      "end_ms": 36000,
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] },
+      "product_id": "mcm-ottomar-nova-55cm-monogram-econyl",
+      "component_code": "whole_product",
+      "observed_visual_tag_ids": ["travel", "weekender"]
+    },
+    {
+      "aoi_id": "replay-scene-07-aren-backpack",
+      "parent_aoi_id": null,
+      "specificity_rank": 0,
+      "start_ms": 36000,
+      "end_ms": 42000,
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] },
+      "product_id": "mcm-aren-nova-medium-backpack-econyl",
+      "component_code": "whole_product",
+      "observed_visual_tag_ids": ["backpack", "monogram"]
+    },
+    {
+      "aoi_id": "replay-scene-08-pina-studded-tote",
+      "parent_aoi_id": null,
+      "specificity_rank": 0,
+      "start_ms": 42000,
+      "end_ms": 48000,
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] },
+      "product_id": "mcm-pina-studded-tote-visetos",
+      "component_code": "whole_product",
+      "observed_visual_tag_ids": ["monogram", "tote"]
+    },
+    {
+      "aoi_id": "replay-scene-09-pina",
+      "parent_aoi_id": null,
+      "specificity_rank": 0,
+      "start_ms": 48000,
+      "end_ms": 54000,
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] },
+      "product_id": "mcm-pina-small-tambourine-visetos",
+      "component_code": "whole_product",
+      "observed_visual_tag_ids": ["crossbody", "tambourine"]
+    },
+    {
+      "aoi_id": "replay-scene-10-stark-backpack",
+      "parent_aoi_id": null,
+      "specificity_rank": 0,
+      "start_ms": 54000,
+      "end_ms": 60000,
+      "shape": { "type": "polygon", "points": [[0, 0], [1, 0], [1, 1], [0, 1]] },
+      "product_id": "mcm-stark-side-studs-backpack-gold-crystal-visetos",
+      "component_code": "whole_product",
+      "observed_visual_tag_ids": ["backpack", "monogram"]
+    }
+  ]
+}

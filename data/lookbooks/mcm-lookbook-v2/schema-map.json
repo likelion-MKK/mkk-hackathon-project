@@ -1,0 +1,9 @@
+{
+  "examples": {
+    "manifest.json": "../../../contracts/lookbook-manifest.schema.json",
+    "aoi-metadata-v2.json": "../../../contracts/v2/lookbook-aoi-metadata-v2.schema.json",
+    "aoi-metadata-v2-r3-approved.json": "../../../contracts/v2/lookbook-aoi-metadata-v2.schema.json",
+    "aoi-metadata-v2-r4-pending.json": "../../../contracts/v2/lookbook-aoi-metadata-v2.schema.json",
+    "source-aoi-metadata-v1.json": "../../../contracts/v2/source-aoi-metadata-v1.schema.json"
+  }
+}

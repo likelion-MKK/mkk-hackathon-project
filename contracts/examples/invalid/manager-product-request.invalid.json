@@ -1,0 +1,14 @@
+{
+  "request_id": "manager-request-session-example-001-001",
+  "recommendation_id": "recommendation-example-001",
+  "items": [
+    {
+      "rank": 1,
+      "product_id": "P001"
+    },
+    {
+      "rank": 2,
+      "product_id": "P002"
+    }
+  ]
+}

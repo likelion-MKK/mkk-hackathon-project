@@ -1,0 +1,47 @@
+{
+  "schema_version": "2.0",
+  "recommendation_id": "recommendation-demo-v2-001",
+  "decision_request_id": "decision-request-demo-001",
+  "status": "completed",
+  "selected_product_id": "mcm-toni-medium-disco-visetos",
+  "reason": {
+    "code": "grounded_product_match",
+    "explanation": "이 세션에서 관찰된 상품 관심 근거와 shopper, spacious 태그가 함께 확인되어 선택했습니다."
+  },
+  "reason_codes": ["observed_attention_lead", "catalog_tag_alignment"],
+  "evidence": [
+    {
+      "code": "observed_attention",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "evidence_refs": [{ "kind": "window", "ref_id": "evidence-window-001" }],
+      "statement": "다른 후보보다 유효한 관찰 시간이 길었습니다."
+    },
+    {
+      "code": "product_tag_match",
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "evidence_refs": [{ "kind": "window", "ref_id": "evidence-window-001" }],
+      "statement": "관찰 근거와 shopper, spacious 스타일 태그가 일치했습니다."
+    }
+  ],
+  "style": {
+    "matched_tags": ["shopper", "spacious"],
+    "summary": "넉넉한 쇼퍼 스타일과 세션 내 관찰 근거가 함께 일치했습니다."
+  },
+  "exploration_tendency_code": "comparative_exploration",
+  "data_quality": {
+    "expected_observation_count": 240,
+    "gaze_valid_ratio": 0.86,
+    "expression_valid_ratio": 0.63,
+    "matched_frame_ratio": 0.61,
+    "ambiguous_product_ratio": 0.04
+  },
+  "version": {
+    "model_id": "self-hosted-model-placeholder",
+    "model_revision": "unselected-demo-revision",
+    "prompt_version": "central-recommender-ko-v1",
+    "feature_version": "central-evidence-v2-demo-1",
+    "catalog_version": "mcm-us-pdp-verified-v3-2026-08-18",
+    "input_variant": "C",
+    "deployment_mode": "self_hosted"
+  }
+}

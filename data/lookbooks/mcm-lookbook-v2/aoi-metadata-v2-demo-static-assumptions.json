@@ -1,0 +1,132 @@
+{
+  "schema_version": "2.0",
+  "video_id": "mcm-lookbook-v2",
+  "manifest_version": "mcm-lookbook-v2-grid-details-v2-2026-08-19",
+  "metadata_revision": "mcm-lookbook-v2-aoi-demo-static-2026-08-18",
+  "approval_status": "approved",
+  "coordinate_space": "video_normalized",
+  "component_taxonomy_version": "mcm-component-v1",
+  "media_identity": {
+    "source_kind": "video_file",
+    "sha256": "dd40011e9a7767cf82f9cc7d04c15d7d987c86756170f3c98012644ed04c9c89",
+    "byte_length": 5754164,
+    "duration_ms": 33500,
+    "width_px": 1280,
+    "height_px": 720,
+    "fps": 24
+  },
+  "exposures": [
+    {
+      "aoi_id": "mcm-lookbook-v2-toni-grid-top-left",
+      "parent_aoi_id": null,
+      "specificity_rank": 0,
+      "start_ms": 5000,
+      "end_ms": 12000,
+      "shape": {
+        "type": "polygon",
+        "points": [[0.08, 0.02], [0.42, 0.02], [0.42, 0.49], [0.08, 0.49]]
+      },
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "component_code": "whole_product",
+      "observed_visual_tag_ids": ["monogram", "shopper", "tote"]
+    },
+    {
+      "aoi_id": "mcm-lookbook-v2-toni-grid-top-right",
+      "parent_aoi_id": null,
+      "specificity_rank": 0,
+      "start_ms": 5000,
+      "end_ms": 12000,
+      "shape": {
+        "type": "polygon",
+        "points": [[0.58, 0.02], [0.92, 0.02], [0.92, 0.49], [0.58, 0.49]]
+      },
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "component_code": "whole_product",
+      "observed_visual_tag_ids": ["monogram", "shopper", "tote"]
+    },
+    {
+      "aoi_id": "mcm-lookbook-v2-toni-grid-bottom-left",
+      "parent_aoi_id": null,
+      "specificity_rank": 0,
+      "start_ms": 5000,
+      "end_ms": 12000,
+      "shape": {
+        "type": "polygon",
+        "points": [[0.08, 0.51], [0.42, 0.51], [0.42, 0.98], [0.08, 0.98]]
+      },
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "component_code": "whole_product",
+      "observed_visual_tag_ids": ["monogram", "shopper", "tote"]
+    },
+    {
+      "aoi_id": "mcm-lookbook-v2-toni-grid-bottom-right",
+      "parent_aoi_id": null,
+      "specificity_rank": 0,
+      "start_ms": 5000,
+      "end_ms": 12000,
+      "shape": {
+        "type": "polygon",
+        "points": [[0.58, 0.51], [0.92, 0.51], [0.92, 0.98], [0.58, 0.98]]
+      },
+      "product_id": "mcm-toni-medium-disco-visetos",
+      "component_code": "whole_product",
+      "observed_visual_tag_ids": ["monogram", "shopper", "tote"]
+    },
+    {
+      "aoi_id": "mcm-lookbook-v2-demo-ella-grid-top-left",
+      "parent_aoi_id": null,
+      "specificity_rank": 0,
+      "start_ms": 13000,
+      "end_ms": 21000,
+      "shape": {
+        "type": "polygon",
+        "points": [[0.06, 0.01], [0.44, 0.01], [0.44, 0.49], [0.06, 0.49]]
+      },
+      "product_id": "mcm-ella-small-disco-visetos",
+      "component_code": "whole_product",
+      "observed_visual_tag_ids": ["boston", "monogram", "top_handle"]
+    },
+    {
+      "aoi_id": "mcm-lookbook-v2-demo-aren-east-west-grid-top-right",
+      "parent_aoi_id": null,
+      "specificity_rank": 0,
+      "start_ms": 13000,
+      "end_ms": 21000,
+      "shape": {
+        "type": "polygon",
+        "points": [[0.58, 0.02], [0.93, 0.02], [0.93, 0.48], [0.58, 0.48]]
+      },
+      "product_id": "mcm-aren-east-west-shoulder-visetos",
+      "component_code": "whole_product",
+      "observed_visual_tag_ids": ["monogram", "shoulder", "structured"]
+    },
+    {
+      "aoi_id": "mcm-lookbook-v2-demo-pina-vanity-grid-bottom-left",
+      "parent_aoi_id": null,
+      "specificity_rank": 0,
+      "start_ms": 13000,
+      "end_ms": 21000,
+      "shape": {
+        "type": "polygon",
+        "points": [[0.12, 0.68], [0.40, 0.68], [0.40, 0.98], [0.12, 0.98]]
+      },
+      "product_id": "mcm-pina-vanity-case-studded-calfskin",
+      "component_code": "whole_product",
+      "observed_visual_tag_ids": ["compact", "structured"]
+    },
+    {
+      "aoi_id": "mcm-lookbook-v2-demo-stark-grid-bottom-right",
+      "parent_aoi_id": null,
+      "specificity_rank": 0,
+      "start_ms": 13000,
+      "end_ms": 21000,
+      "shape": {
+        "type": "polygon",
+        "points": [[0.60, 0.49], [0.90, 0.49], [0.90, 0.99], [0.60, 0.99]]
+      },
+      "product_id": "mcm-stark-side-studs-backpack-gold-crystal-visetos",
+      "component_code": "whole_product",
+      "observed_visual_tag_ids": ["backpack", "monogram"]
+    }
+  ]
+}

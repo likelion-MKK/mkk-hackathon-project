@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcm-lookbook.example/contracts/vision-stream/v1/vision-stream-frame-metadata.schema.json",
+  "title": "VisionStreamFrameMetadataV1",
+  "description": "Metadata header for one ephemeral binary webcam frame. Image bytes follow this JSON header in the same WebSocket binary message.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "type",
+    "protocol_version",
+    "session_id",
+    "video_id",
+    "frame_id",
+    "sequence",
+    "captured_at_mono_ms",
+    "video_time_ms",
+    "playback_epoch",
+    "layout",
+    "camera_frame"
+  ],
+  "properties": {
+    "type": { "const": "frame" },
+    "protocol_version": { "const": "1.0" },
+    "session_id": { "$ref": "#/$defs/id" },
+    "video_id": { "$ref": "#/$defs/id" },
+    "frame_id": { "$ref": "#/$defs/id" },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "captured_at_mono_ms": { "type": "number", "minimum": 0 },
+    "video_time_ms": { "type": "integer", "minimum": 0 },
+    "playback_epoch": { "type": "integer", "minimum": 0 },
+    "layout": { "$ref": "#/$defs/layout" },
+    "camera_frame": { "$ref": "#/$defs/cameraFrame" }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "positiveNumber": { "type": "number", "exclusiveMinimum": 0 },
+    "rect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x_px", "y_px", "width_px", "height_px"],
+      "properties": {
+        "x_px": { "type": "number" },
+        "y_px": { "type": "number" },
+        "width_px": { "$ref": "#/$defs/positiveNumber" },
+        "height_px": { "$ref": "#/$defs/positiveNumber" }
+      }
+    },
+    "layout": {
+      "type": "object",
+      "description": "Lookbook viewport and rendered-video geometry; this is not webcam frame geometry.",
+      "additionalProperties": false,
+      "required": [
+        "viewport_width_px",
+        "viewport_height_px",
+        "source_width_px",
+        "source_height_px",
+        "object_fit",
+        "element_rect",
+        "content_rect"
+      ],
+      "properties": {
+        "viewport_width_px": { "$ref": "#/$defs/positiveNumber" },
+        "viewport_height_px": { "$ref": "#/$defs/positiveNumber" },
+        "source_width_px": { "$ref": "#/$defs/positiveNumber" },
+        "source_height_px": { "$ref": "#/$defs/positiveNumber" },
+        "object_fit": { "const": "contain" },
+        "element_rect": { "$ref": "#/$defs/rect" },
+        "content_rect": { "$ref": "#/$defs/rect" }
+      }
+    },
+    "cameraFrame": {
+      "type": "object",
+      "description": "Webcam image metadata only. Raw bytes are the binary suffix and never a JSON property.",
+      "additionalProperties": false,
+      "required": ["encoding", "width_px", "height_px", "byte_length"],
+      "properties": {
+        "encoding": {
+          "type": "string",
+          "pattern": "^image/[a-z0-9][a-z0-9.+-]{0,63}$"
+        },
+        "width_px": { "type": "integer", "minimum": 1 },
+        "height_px": { "type": "integer", "minimum": 1 },
+        "byte_length": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

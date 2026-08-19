@@ -1,0 +1,19 @@
+{
+  "schema_version": "2.0",
+  "video_id": "mcm-lookbook-v2",
+  "manifest_version": "mcm-lookbook-v2-grid-details-v2-2026-08-19",
+  "metadata_revision": "mcm-lookbook-v2-aoi-r4-pending-2026-08-18",
+  "approval_status": "pending_review",
+  "coordinate_space": "video_normalized",
+  "component_taxonomy_version": "mcm-component-v1",
+  "media_identity": {
+    "source_kind": "video_file",
+    "sha256": "dd40011e9a7767cf82f9cc7d04c15d7d987c86756170f3c98012644ed04c9c89",
+    "byte_length": 5754164,
+    "duration_ms": 33500,
+    "width_px": 1280,
+    "height_px": 720,
+    "fps": 24
+  },
+  "exposures": []
+}

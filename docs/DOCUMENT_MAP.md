@@ -1,129 +1,156 @@
 # 문서 지도와 에이전트 읽기 순서
 
-- 문서 상태: 팀 공통 진입점 v1
-- 목적: 사람과 AI 에이전트가 현재 작업에 필요한 문서만 읽고 같은 기준으로 개발하도록 안내한다.
-- 적용 범위: 기획, 설계, 구현, 실험, 테스트, PR과 인계
+- 상태: **Current canonical map**
+- 갱신일: 2026-08-18
+- 기준선: `dev` commit `77ae806192db56ef2472439a0359380e7025fae2`
 
-이 문서는 새로운 요구사항을 정의하지 않는다. 요구사항·결정·계약·작업 규칙이 어느 파일에 있는지 연결하는 지도다.
+이 문서는 새 요구사항을 만들지 않는다. 현재 제품 방향, 승인 결정, 구현 계약, 작업 규칙과 역사 자료의 위치를 구분해 연결한다.
 
-## 1. 처음 들어온 팀원이 읽는 순서
+## 1. 기본 읽기 순서
 
 ```text
 README.md
   → AGENTS.md
-  → docs/D1_TECHNICAL_DECISIONS.md
-  → 자신의 작업에 맞는 아래 최소 읽기 묶음
-  → 담당 디렉터리 README와 계약 fixture
+  → docs/OVERALL_DESIGN.md
+  → docs/IMPLEMENTATION_PLAN.md의 자기 workstream
+  → 해당 ADR·Contract·영역 README·fixture
 ```
 
-프로젝트 전체 구조를 이해해야 할 때만 `docs/OVERALL_DESIGN.md`를 읽고, 스프린트·통합 순서를 확인할 때만 `docs/DETAILED_DESIGN_PLAN.md`를 읽는다. 매일 작업할 때 두 긴 문서를 반복해서 전부 읽을 필요는 없다.
+중앙 추천 방향을 다루면 [`ADR-0006`](adr/0006-central-recommendation-ai.md)과
+hosted Luna migration을 결정한 [`ADR-0008`](adr/0008-openai-luna-central-recommendation.md)을
+반드시 읽는다. 원격 Vision, Face 생산자, Eye 생산자 결정을 바꿀 때만 각각
+ADR-0001·0003·0004를 추가한다. Superseded 문서를 현재 기준처럼 읽지 않는다.
 
-## 2. 공식 문서와 역할
+## 2. 활성 공식 문서
 
-| 문서 | 언제 읽는가 | 이 문서가 답하는 질문 |
+| 문서 | 역할 | 언제 읽는가 |
 | --- | --- | --- |
-| [`README.md`](../README.md) | 프로젝트 첫 진입 | 무엇을 만들고 왜 만드는가? |
-| [`AGENTS.md`](../AGENTS.md) | 모든 AI 작업 시작 | 어떤 범위·우선순위·안전 규칙으로 일하는가? |
-| [`D1_TECHNICAL_DECISIONS.md`](D1_TECHNICAL_DECISIONS.md) | 구현 환경·공통 기본값 확인 | 팀장이 미리 정한 값과 검증 후 확정할 값은 무엇인가? |
-| [`OVERALL_DESIGN.md`](OVERALL_DESIGN.md) | 전체 파이프라인과 데이터 수명주기 확인 | 시스템 구성요소가 어떻게 연결되는가? |
-| [`DETAILED_DESIGN_PLAN.md`](DETAILED_DESIGN_PLAN.md) | 병렬 개발·통합 계획 확인 | 팀별 경계, 계약과 일별 Gate는 무엇인가? |
-| [`contracts/README.md`](../contracts/README.md) | API·event 작업 | 데이터 형식, 좌표·시간·무효 신호 규칙은 무엇인가? |
-| [`CONTRIBUTING.md`](../CONTRIBUTING.md) | branch·PR·병합 | 어떤 순서와 크기로 PR을 만드는가? |
-| [`docs/adr/README.md`](adr/README.md) | 기술·모델 결정을 바꿀 때 | 결정 근거와 대안을 어디에 남기는가? |
-| [`docs/benchmarks/README.md`](benchmarks/README.md) | Eye·Face 후보 평가 | 비교 결과와 재현 방법을 어디에 남기는가? |
-| [`docs/sjf/README.md`](sjf/README.md) | 과거 협업 자료가 필요할 때만 | 참고 자료는 어디에 있는가? |
+| [`README.md`](../README.md) | 서비스 목적, 고정 MVP 방향, 사용자 흐름과 현재 상태 | 첫 진입 |
+| [`AGENTS.md`](../AGENTS.md) | 우선순위, 소유권, 개인정보·작업 안전 규칙 | 모든 AI 작업 시작 |
+| [`OVERALL_DESIGN.md`](OVERALL_DESIGN.md) | canonical 구성요소·데이터 흐름·수명·고객 문구 | 전체 구조·경계 변경 |
+| [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) | 현재 Contract와 목표의 차이, owner·PR 순서·완료 Gate | 구현·스프린트·인계 |
+| [`ADR-0006`](adr/0006-central-recommendation-ai.md) | derived-only 중앙 판단, 1회 호출, 가방 10개·Top 1, evidence 폐기 | 추천·DB·프롬프트·결과 UI |
+| [`ADR-0007`](adr/0007-central-recommendation-model-selection.md) | 중앙 추천 model·artifact·runtime·variant 선정용 Proposed benchmark 결정 초안 | 후보 provenance·실행·사람 검토·선택 승인 |
+| [`ADR-0008`](adr/0008-openai-luna-central-recommendation.md) | Luna Max·max·variant C·prompt v4 선택과 hosted provider 통합 Gate | OpenAI 중앙 추천 선택·timeout·latency·실패 경계 |
+| [`CONTRIBUTING.md`](../CONTRIBUTING.md) | `dev` 기반 branch·PR·Contract First | 작업 시작·PR 준비 |
+| [`contracts/README.md`](../contracts/README.md) | 현재 구현 인터페이스, 좌표·시간·invalid 규칙 | producer·consumer·API 변경 |
+| [`중앙 추천 self-hosted benchmark`](../experiments/recommendation/README.md) | Google Colab GPU 7개 후보, A/B/C·12개 합성 case, 심리학적 보조 신호 grounding, smoke/full provenance·자원·안전 Gate | 중앙 model·runtime·input variant 평가 |
+| [`ADR 목록`](adr/README.md) | ADR 상태·관할과 번호 | 기술 결정 확인·변경 |
+| [`2026-08-16 dev 문서·브랜치 감사`](audits/2026-08-16-dev-document-branch-audit.md) | 기준 commit, PR 상태, 문서 정리 범위와 남은 차이 | 이번 방향 전환 근거 확인 |
 
-각 `apps/`, `services/`, `experiments/`, `tests/` 디렉터리의 `README.md`는 해당 영역의 입력·출력·소유자·금지사항을 설명한다.
+우선순위는 `현재 사용자 결정 → Accepted ADR → 현재 Contract → OVERALL_DESIGN → IMPLEMENTATION_PLAN → README`다. 목표 문서와 Contract가 다르면 구현 완료로 간주하지 않고 구현 계획의 호환성 차이로 처리한다.
 
-## 3. 기준이 충돌할 때
+## 3. ADR 관할
 
-| 판단 대상 | 공식 기준 |
-| --- | --- |
-| 사용자의 최신 요구 | 현재 사용자 요청과 승인된 결정 |
-| 기술·운영 기본값 | 승인된 ADR, `D1_TECHNICAL_DECISIONS.md` |
-| REST API | `contracts/openapi.yaml` |
-| event·manifest 형식 | `contracts/**/*.schema.json` |
-| 정상·경계 예시 | `contracts/examples/`, 단 schema와 일치할 때만 |
-| 병렬 개발과 통합 순서 | `DETAILED_DESIGN_PLAN.md`, `CONTRIBUTING.md` |
-| 서비스 설명 | `README.md`, `OVERALL_DESIGN.md` |
-
-하위 설명 문서가 계약과 다르면 계약을 몰래 바꾸지 않는다. 충돌을 보고하고 `계약 PR → 생산자 PR → 소비자 PR` 순서로 수정한다. 이 지도에 연결되지 않은 초안·개인 메모는 공식 기준이 아니다.
+| ADR | 상태 | 현재 관할 | 중앙 추천과 관계 |
+| --- | --- | --- | --- |
+| [`ADR-0001 원격 Eye·Face 추론`](adr/0001-remote-vision-inference.md) | Proposed | 고객 frame의 WSS 전송, Vision Gateway, 원본 비저장·장애·배포 Gate | 추천 AI 입력·파생 수명은 ADR-0006이 관할; frame은 중앙 AI에 전달하지 않음 |
+| [`ADR-0003 Face 모델·taxonomy·fallback`](adr/0003-face-model-taxonomy-fallback.md) | Proposed | Face 관찰 신호 생산자, invalid·fallback·lifecycle | 이전 추천 weight 문구는 ADR-0006이 대체 |
+| [`ADR-0004 EyeTrax MVP 선택`](adr/0004-eyetrax-mvp-selection.md) | Accepted (해커톤 MVP) | Eye 모델·보정·좌표 생산자와 재평가 Gate | dwell·revisit·최종 Top 1은 ADR-0006 경계 |
+| [`ADR-0006 중앙 판단 추천 AI`](adr/0006-central-recommendation-ai.md) | Accepted (불변조건·경계) | evidence 결합·수명, 중앙 AI, 상품 10개, 결과·설명, Deferred feedback | runtime migration은 ADR-0008 관할 |
+| [`ADR-0007 중앙 추천 모델 선정`](adr/0007-central-recommendation-model-selection.md) | Proposed / historical | self-hosted 후보 provenance·합성 benchmark 참고 | hosted Luna 선택은 ADR-0008 관할 |
+| [`ADR-0008 OpenAI Luna 중앙 추천 모델 선택`](adr/0008-openai-luna-central-recommendation.md) | Accepted — implementation baseline | Luna Max·max·variant C·prompt v4와 hosted provider migration | 실제 key·DB·domain/TLS는 배포 Gate |
 
 ## 4. 작업별 최소 읽기 묶음
 
-아래 파일만 먼저 읽고, 막힐 때 관련 문서를 추가한다.
+### 중앙 판단 모델·프롬프트 — 양유상
 
-| 작업 | 먼저 읽을 문서·계약 |
-| --- | --- |
-| 프로젝트 설명·발표 | `README.md` → `OVERALL_DESIGN.md` |
-| Kiosk S01-S04 UI | `D1_TECHNICAL_DECISIONS.md`의 Frontend·Kiosk 항목 → `apps/kiosk/README.md` → `contracts/openapi.yaml` → 필요한 event example |
-| Manager UI | `D1_TECHNICAL_DECISIONS.md`의 알림 항목 → `apps/manager/README.md` → `manager-event.schema.json` → `recommendation-result.schema.json` |
-| FastAPI·세션·DB | `apps/api/README.md` → `contracts/openapi.yaml` → 관련 schema/example → `D1_TECHNICAL_DECISIONS.md`의 PostgreSQL 항목 |
-| Eye Adapter·보정 | `services/eye/README.md` → `gaze-sample.schema.json` → `lookbook-manifest.schema.json` → `D1_TECHNICAL_DECISIONS.md`의 보정·실행 위치 항목 |
-| AOI Mapper·룩북 | `services/eye/README.md` → `lookbook-manifest.schema.json`과 example → `product-attention-event.schema.json` → 실제 `data/lookbooks/<version>/manifest.json` |
-| Face Adapter | `services/face/README.md` → `expression-sample.schema.json`과 example → `D1_TECHNICAL_DECISIONS.md`의 실행 위치 항목 |
-| 추천 엔진 | `services/recommendation/README.md` → `product-attention-event.schema.json` → `recommendation-result.schema.json` → 알고리즘 ADR |
-| 상품·QR | `product-catalog.schema.json`과 example → `data/products/` → `contracts/openapi.yaml` |
-| Contract 변경 | `contracts/README.md` → 대상 schema와 정상·invalid example → 생산자·소비자 README → `CONTRIBUTING.md` |
-| 모델 후보 조사 | `experiments/<eye 또는 face>/README.md` → `docs/benchmarks/README.md` → 대상 서비스 Adapter 계약 → 관련 ADR |
-| 통합·E2E | `DETAILED_DESIGN_PLAN.md`의 Gate·Contract 항목 → `tests/integration/README.md` 또는 `tests/e2e/README.md` → 관련 example |
-| PR·릴리스 | `CONTRIBUTING.md` → `.github/PULL_REQUEST_TEMPLATE.md` → 변경 영역 README |
+1. [`ADR-0006`](adr/0006-central-recommendation-ai.md)
+2. 모델·runtime을 평가하면 [`ADR-0007`](adr/0007-central-recommendation-model-selection.md), OpenAI 선택은 [`ADR-0008`](adr/0008-openai-luna-central-recommendation.md)과 [`benchmark README`](../experiments/recommendation/README.md)
+3. [`IMPLEMENTATION_PLAN`](IMPLEMENTATION_PLAN.md)의 W0·W4
+4. [`services/recommendation/README.md`](../services/recommendation/README.md)
+5. [`contracts/README.md`](../contracts/README.md)
+6. 후보를 실제 평가할 때만 관련 model card·license·runtime 문서
 
-파일명이 표에 짧게 적힌 schema는 모두 `contracts/` 아래에서 찾는다. 먼저 `rg --files contracts` 또는 `rg "필드명" contracts`로 대상 파일을 좁힌다.
+완료 기준은 정확한 hosted model ID·prompt SHA, strict output·안전 eval과 versioned system prompt다. 실제 key canary와 운영 rate-limit은 배포 Gate다.
 
-## 5. 팀원별 기본 진입점
+### Evidence Contract·Builder — 박형진·정은미, 양유상 리뷰
 
-| 팀원 | 첫 작업 경로 | 기본 문서 묶음 |
+1. [`OVERALL_DESIGN`](OVERALL_DESIGN.md)의 RecommendationEvidence·수명
+2. [`IMPLEMENTATION_PLAN`](IMPLEMENTATION_PLAN.md)의 W1·W2
+3. [`contracts/README.md`](../contracts/README.md)와 관련 schema·example
+4. [`services/recommendation/README.md`](../services/recommendation/README.md)
+5. producer별로 [`Eye README`](../services/eye/README.md) 또는 [`Face README`](../services/face/README.md)
+
+공유 JSON은 Contract PR에서 먼저 승인한다. 현재 v1의 결과 수와 새 Top 1 목표의 차이를 producer 코드에서 임의로 해소하지 않는다.
+
+### Eye 생산자·보정 — 양유상
+
+1. [`ADR-0004`](adr/0004-eyetrax-mvp-selection.md)
+2. [`services/eye/README.md`](../services/eye/README.md)
+3. [`experiments/eye/README.md`](../experiments/eye/README.md)
+4. [`EyeTrax 실험 README`](../experiments/eye/eyetrax/README.md)
+5. v2 AOI 작업이면 [`actual pending metadata`](../data/lookbooks/mcm-lookbook-v2/README.md)와 [`synthetic approved fixture`](../data/lookbooks/mcm-central-ai-replay-v2/README.md)
+
+Eye는 viewport 좌표·유효성·품질과 capture context를 보존한다. Kiosk가 video 좌표까지만 계산하고 Backend가 승인 AOI를 적용하므로 Eye Adapter에는 AOI·상품·최종 순위·고객 유형 판단을 넣지 않는다.
+
+### Face 생산자·taxonomy — 정은미
+
+1. [`ADR-0003`](adr/0003-face-model-taxonomy-fallback.md)
+2. [`services/face/README.md`](../services/face/README.md)
+3. [`experiments/face/README.md`](../experiments/face/README.md)
+4. [`Face benchmark README`](benchmarks/face/README.md)
+5. [`observable taxonomy`](adr/face-observable-actions-v1.json)
+
+Face는 관찰 가능한 신호·품질·invalid reason을 생산한다. 실제 감정·성격·구매 의도로 변환하지 않는다.
+
+### 상품 Catalog·API — 박형진, 양유상 내용 리뷰
+
+1. [`ADR-0006`](adr/0006-central-recommendation-ai.md)
+2. [`IMPLEMENTATION_PLAN`](IMPLEMENTATION_PLAN.md)의 W3·W5
+3. [`apps/api/README.md`](../apps/api/README.md)
+4. [`data/products/README.md`](../data/products/README.md)
+5. [`contracts/README.md`](../contracts/README.md)
+
+이 작업 브랜치에는 10개 profile JSON, 기존 migration을 보존한 `0003` 운영 migration,
+비덮어쓰기 seed, `/healthz`·`/readyz`, restart/orphan/retention cleanup과 direct
+backup/restore 절차가 있다. live Supabase에서 migration·정확히 10행·재시작·복구를 검증하고
+개별 URL, 이미지·QR과 tag를 승인하기 전에는 production readiness가 충족되지 않는다.
+
+### Kiosk·Manager 통합 — 조윤혜
+
+1. [`OVERALL_DESIGN`](OVERALL_DESIGN.md)의 사용자·Manager 흐름
+2. [`IMPLEMENTATION_PLAN`](IMPLEMENTATION_PLAN.md)의 W5
+3. [`apps/kiosk/README.md`](../apps/kiosk/README.md)
+4. [`apps/manager/README.md`](../apps/manager/README.md)
+5. [`apps/api/README.md`](../apps/api/README.md)와 [`contracts/README.md`](../contracts/README.md)
+
+S04는 Top 1·관찰 근거·분석 불가 상태를 다루고, 매니저 요청은 고객 버튼으로만 만든다.
+
+### Vision Gateway·원격 추론 — 박형진 관리
+
+1. [`ADR-0001`](adr/0001-remote-vision-inference.md)
+2. [`apps/vision_gateway/README.md`](../apps/vision_gateway/README.md)
+3. [`Vision 서버 선정 계획`](benchmarks/VISION_SERVER_SELECTION_PLAN.md)
+4. [`Vision Stream v1 계약`](../contracts/vision-stream-v1/README.md)과 Eye·Face producer README
+
+ADR-0001이 Proposed인 동안 실제 고객 frame 원격 전송은 승인된 운영 구현이 아니다. synthetic·Fake·Replay로 transport를 검증한다.
+
+### 테스트·검증
+
+- 계약: [`tests/contract/README.md`](../tests/contract/README.md)
+- replay: [`tests/replay/README.md`](../tests/replay/README.md)
+- integration: [`tests/integration/README.md`](../tests/integration/README.md)
+- E2E: [`tests/e2e/README.md`](../tests/e2e/README.md)
+- 전체: [`tests/README.md`](../tests/README.md)
+
+고객 원본 얼굴·영상을 Git fixture나 CI artifact로 사용하지 않는다.
+
+## 5. 보존 자료와 비권위 문서
+
+| 위치 | 분류 | 사용 원칙 |
 | --- | --- | --- |
-| 박형진 | `apps/api/`, `services/recommendation/`, `contracts/` | API·DB 또는 추천 최소 묶음 + `CONTRIBUTING.md` |
-| 양유상 | `services/eye/`, `experiments/eye/`, `data/lookbooks/` | Eye·보정 또는 AOI 최소 묶음 + benchmark/ADR |
-| 정은미 | `services/face/`, `experiments/face/` | Face 최소 묶음 + benchmark/ADR |
-| 조윤혜 | `apps/kiosk/`, `apps/manager/` | Kiosk 또는 Manager 최소 묶음 + 필요한 API/event example |
+| [`archive/D1_TECHNICAL_DECISIONS.md`](archive/D1_TECHNICAL_DECISIONS.md) | Superseded 역사 스냅샷 | 당시 기본값·결정 경위를 추적할 때만 읽음 |
+| [`archive/DETAILED_DESIGN_PLAN.md`](archive/DETAILED_DESIGN_PLAN.md) | Superseded 역사 스냅샷 | 당시 10일 계획·병렬 경계를 추적할 때만 읽음 |
+| [`benchmarks/`](benchmarks/) | 모델·환경별 근거 | 측정 범위를 넘겨 production 요구사항으로 일반화하지 않음 |
+| [`sjf/README.md`](sjf/README.md) | 외부 협업·평가 참고 | 외부 제출·branch 규칙을 저장소 현재 workflow와 혼동하지 않음 |
 
-담당자는 다른 팀의 내부 구현보다 자신의 입력·출력 계약을 우선 확인한다. 상대 팀 구현이 없어도 `contracts/examples/`의 fixture와 fake/replay Adapter로 개발을 계속한다.
+Eye·Face benchmark와 SJF 자료는 삭제하지 않는다. archive의 오래된 `main`, 복수 추천, fixed weight, 파생 저장과 conversion 문구는 역사적 내용이며 활성 기준이 아니다.
 
-## 6. 에이전트 병렬 작업 운영
+## 6. 문서 변경 규칙
 
-팀장 또는 주 에이전트는 작업을 배정할 때 다음 다섯 가지를 고정한다.
-
-1. 한 문장 목표
-2. 수정 가능한 디렉터리와 금지 경로
-3. 읽어야 할 최소 문서·계약
-4. 결과물과 검증 명령
-5. 범위 밖 항목과 다음 담당자
-
-예시:
-
-```text
-목표: FakeEyeAdapter가 gaze-sample v1 fixture를 재생하게 한다.
-허용 경로: services/eye/adapters/fake/, tests/contract/eye/
-읽기: services/eye/README.md, gaze-sample schema와 valid example
-완료 조건: valid/invalid sample contract test 통과
-범위 밖: 실제 모델 선정, AOI scoring, contract 수정
-검증: 해당 unit test + python scripts/validate_contracts.py
-```
-
-동시에 움직이는 에이전트끼리 같은 공용 파일을 맡기지 않는다. 계약·migration·lock file·CI·루트 문서 변경은 한 작업으로 따로 떼어 먼저 합친다. 에이전트의 최종 인계는 변경 파일, 검증 결과, 결정/TBD와 다음 담당자만 남긴다.
-
-## 7. 토큰 절약 규칙
-
-- 최초에는 작업별 최소 묶음 2~4개만 읽는다.
-- 긴 파일은 먼저 제목을 검색하고 필요한 절만 읽는다.
-- schema는 대상 event만 열고 모든 schema를 한 번에 붙여 넣지 않는다.
-- 전체 대화 대신 확정 결정 ID, 파일 경로와 contract version을 전달한다.
-- 이전 작업 결과는 긴 서술 대신 commit/PR, 변경 파일과 테스트 결과로 인계한다.
-- 같은 프로젝트 설명을 새 문서에 반복하지 않고 공식 문서로 링크한다.
-- 불확실한 값을 추측해 문맥을 늘리지 말고 `TBD`, 확인자와 결정 Gate를 기록한다.
-
-토큰을 줄이기 위해 검증을 생략하지 않는다. 읽을 범위를 줄이고 contract fixture와 자동 테스트로 사실을 확인한다.
-
-## 8. 문서 수명주기
-
-| 상태 | 처리 방식 |
-| --- | --- |
-| 공식 | `main`에 있고 이 문서 또는 공식 README에서 연결됨 |
-| 제안 | `docs/adr/`에서 `Proposed` 상태로 검토하며 확정값처럼 구현하지 않음 |
-| 대체됨 | 새 문서나 ADR을 가리키고 `Superseded` 상태와 이유를 남김 |
-| 개인 초안 | 공식 링크에 넣지 않으며 계약·구현의 근거로 사용하지 않음 |
-
-공식 문서를 추가하거나 위치를 바꾸면 이 지도, 관련 README와 링크 검사를 함께 갱신한다. 같은 내용을 여러 문서에서 수정해야 하는 구조가 보이면 하나를 기준 문서로 정하고 나머지는 링크와 짧은 요약만 남긴다.
+- 공식 방향 변경은 관련 ADR, `OVERALL_DESIGN`, `IMPLEMENTATION_PLAN`, `DOCUMENT_MAP`과 root README를 같은 변경에서 정합화한다.
+- 문서를 대체할 때는 삭제보다 Superseded 배너와 archive 이동을 우선해 결정 경위를 보존한다.
+- 이동한 Markdown의 상대 링크를 수정하고 전체 상대 링크 검사를 통과시킨다.
+- benchmark 결과에는 환경·명령·revision·license·checksum·수치와 한계를 남긴다.
+- fixture·example은 요구사항을 새로 정의하지 않으며 schema 검증 근거로만 사용한다.

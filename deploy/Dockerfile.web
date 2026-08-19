@@ -1,0 +1,32 @@
+FROM node:24.19.0-bookworm-slim AS build
+
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY apps/kiosk/package.json apps/kiosk/package.json
+COPY apps/manager/package.json apps/manager/package.json
+RUN npm ci
+COPY apps/kiosk apps/kiosk
+COPY apps/manager apps/manager
+
+ARG VITE_USE_MOCK_API=false
+ARG VITE_VISION_MODE=live
+ARG VITE_VISION_TOKEN_MODE=backend
+ARG VITE_VISION_TOKEN_URL=/api/v1/sessions/{session_id}/vision-stream-token
+ARG VITE_LOOKBOOK_ID=mcm-lookbook-v2
+ARG VITE_LOOKBOOK_VIDEO_URL=/media/mcm-lookbook-v2.mp4
+ARG VITE_API_BASE_URL=
+ARG VITE_VISION_GATEWAY_WS_URL=
+ENV VITE_USE_MOCK_API=$VITE_USE_MOCK_API \
+    VITE_VISION_MODE=$VITE_VISION_MODE \
+    VITE_VISION_TOKEN_MODE=$VITE_VISION_TOKEN_MODE \
+    VITE_VISION_TOKEN_URL=$VITE_VISION_TOKEN_URL \
+    VITE_LOOKBOOK_ID=$VITE_LOOKBOOK_ID \
+    VITE_LOOKBOOK_VIDEO_URL=$VITE_LOOKBOOK_VIDEO_URL \
+    VITE_API_BASE_URL=$VITE_API_BASE_URL \
+    VITE_VISION_GATEWAY_WS_URL=$VITE_VISION_GATEWAY_WS_URL
+RUN npm run build
+
+FROM nginx:1.27-alpine
+COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/apps/kiosk/dist /usr/share/nginx/html/kiosk
+COPY --from=build /app/apps/manager/dist /usr/share/nginx/html/manager

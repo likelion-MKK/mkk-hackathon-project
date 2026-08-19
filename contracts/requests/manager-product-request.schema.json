@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcm-lookbook.example/contracts/v1/requests/manager-product-request.schema.json",
+  "title": "ManagerProductRequest",
+  "description": "S04에서 고객이 매니저에게 추천 Top 2 제품을 요청할 때 Kiosk가 보내는 요청입니다. 상품 목록은 요청에 포함하지 않으며 Backend가 완료된 추천 결과에서 조회합니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "recommendation_id"
+  ],
+  "properties": {
+    "request_id": {
+      "$ref": "#/$defs/id",
+      "description": "재전송과 중복 클릭을 하나의 요청으로 묶기 위한 클라이언트 멱등 키입니다."
+    },
+    "recommendation_id": {
+      "$ref": "#/$defs/id",
+      "description": "해당 세션의 완료된 추천 결과 ID입니다."
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    }
+  }
+}

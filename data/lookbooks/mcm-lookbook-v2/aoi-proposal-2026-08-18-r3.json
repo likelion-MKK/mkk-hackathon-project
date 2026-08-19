@@ -1,0 +1,294 @@
+{
+  "proposal_schema_version": "1.1",
+  "proposal_revision": "mcm-lookbook-v2-aoi-proposal-2026-08-18-r3",
+  "proposal_status": "partially_approved_for_3b",
+  "non_production_notice": "이 파일은 실제 영상과 공식 상품 자료를 대조한 owner 검수 기록이다. owner_signoff에서 승인한 Toni top-left exposure 하나만 별도 approved metadata revision으로 복사한다. canonical pending metadata와 다른 모든 후보는 계속 Backend의 기본 경로에서 사용하지 않는다.",
+  "canonical_metadata_path": "data/lookbooks/mcm-lookbook-v2/aoi-metadata-v2.json",
+  "approved_metadata_path": "data/lookbooks/mcm-lookbook-v2/aoi-metadata-v2-r3-approved.json",
+  "video_id": "mcm-lookbook-v2",
+  "manifest_version": "mcm-lookbook-v2-2026-08-18",
+  "coordinate_space": "video_normalized",
+  "media_identity": {
+    "source_kind": "video_file",
+    "sha256": "dd40011e9a7767cf82f9cc7d04c15d7d987c86756170f3c98012644ed04c9c89",
+    "byte_length": 5754164,
+    "duration_ms": 33500,
+    "width_px": 1280,
+    "height_px": 720,
+    "fps": 24
+  },
+  "review_method": {
+    "prepared_on": "2026-08-18",
+    "prepared_by": "Codex local media inspection; human sign-off required",
+    "source_video": "C:\\Users\\andyw\\Desktop\\mcm 동영상.mp4",
+    "inspection_rule": "Stable product shots only. Transition frames, moving-model shots, and any region whose exact catalog identity is uncertain are excluded rather than assigned to the nearest product.",
+    "coordinate_rule": "Polygons are video_normalized and intentionally include the demo gaze-tolerance margin. They are clipped to [0,1] and separated wherever simultaneous different products are visible.",
+    "raw_artifact_policy": "Temporary review frames were not copied into the repository, metadata, logs, or database."
+  },
+  "owner_signoff": {
+    "reviewer_name": "양유상",
+    "reviewed_on": "2026-08-18",
+    "decision": "approve_selected_exposures",
+    "decision_options": ["approve_selected_exposures", "reject_and_request_redraw"],
+    "selected_exposure_ids": ["mcm-lookbook-v2-toni-grid-top-left"],
+    "approved_scope": "Vision 3-B demo only; this is not approval of the remaining Toni cells, Ella, Aren backpack, unresolved regions, or a production calibration margin.",
+    "checkpoints_confirmed_ms": [5000, 8500, 11000],
+    "polygon_confirmation": "The selected Toni top-left whole-product polygon contains the reviewed bag at every checkpoint and has no different-product AOI overlap.",
+    "margin_accepted": true,
+    "margin_acceptance": "Accept the provisional 0.04 normalized whole-product margin for this 3-B demo only. It must be replaced by 1.5 times calibration-error P95 before production approval.",
+    "unresolved_regions_confirmed_unmapped": true,
+    "required_confirmation": [
+      "Open the canonical video and inspect every listed start, midpoint, and end checkpoint.",
+      "Confirm the exact catalog product ID, not only the broad bag family.",
+      "Confirm the polygon contains the intended product and no different product.",
+      "Accept the demo-only 0.04 normalized margin or replace it with a measured calibration result.",
+      "Confirm the two unresolved regions remain unmapped."
+    ]
+  },
+  "calibration_margin": {
+    "status": "provisional_demo_only",
+    "margin_norm_x": 0.04,
+    "margin_norm_y": 0.04,
+    "equivalent_px_at_canonical_video": {
+      "x": 51.2,
+      "y": 28.8
+    },
+    "basis": "No calibration-error aggregate is available. The demo value is the midpoint of the repository's provisional 0.03-0.05 normalized band, applied symmetrically and clipped at the video boundary.",
+    "application": "The proposed whole-product polygons already include this outward margin. Component AOIs are not promoted in this revision, so no component inherits the margin.",
+    "production_replacement": "Before production approval, replace 0.04 with 1.5 times calibration-error P95, then rerun same-product containment and different-product overlap checks.",
+    "owner_decision": "양유상이 2026-08-18에 selected Toni top-left AOI의 3-B demo 값으로만 수용했다. 이 수용은 production calibration 결과를 인증하지 않는다."
+  },
+  "review_groups": [
+    {
+      "group_id": "toni-grid-5000-12000",
+      "interval": "[5000, 12000)",
+      "layout": "2x2 grid of four separate shopper/tote products",
+      "checkpoints_ms": [5000, 8500, 11000],
+      "identity_basis": "All four cells show the same geometric Visetos shopper profile: two leather top handles, long side straps, front logo plaque, and tote/shopper silhouette. Colorway is not used as a separate catalog identity.",
+      "official_reference": "https://us.mcmworldwide.com/en_US/women/bags/totes-shoppers/toni-top-zip-shopper-in-visetos/MWPGSMT08CO001.html",
+      "review_status": "partially_approved_for_3b",
+      "overlap_result": "Four polygons are disjoint; the grid gaps and cell boundaries are not assigned to any product.",
+      "approved_exposure_ids": ["mcm-lookbook-v2-toni-grid-top-left"],
+      "exposure_ids": [
+        "mcm-lookbook-v2-toni-grid-top-left",
+        "mcm-lookbook-v2-toni-grid-top-right",
+        "mcm-lookbook-v2-toni-grid-bottom-left",
+        "mcm-lookbook-v2-toni-grid-bottom-right"
+      ]
+    },
+    {
+      "group_id": "four-bag-grid-13000-21000",
+      "interval": "[13000, 21000)",
+      "layout": "2x2 grid; only top-left Ella and bottom-right backpack are mapped",
+      "checkpoints_ms": [13000, 17000, 20500],
+      "identity_basis": "Top-left is a Boston-shaped Visetos bag with top handles, detachable side strap and a hanging leather tag, matching the Ella profile. Bottom-right is a monogram backpack with top handle, front horizontal zip pocket and logo plaque; exact Aren-vs-Stark identity remains an owner check.",
+      "official_references": [
+        "https://us.mcmworldwide.com/en_US/mcm-icons/ella-bags",
+        "https://us.mcmworldwide.com/en_US/bags/backpacks"
+      ],
+      "review_status": "candidate_ready_for_owner_check",
+      "overlap_result": "Mapped top-left and bottom-right polygons are disjoint. Top-right flap bag and bottom-left zip pouch are explicitly excluded.",
+      "exposure_ids": [
+        "mcm-lookbook-v2-ella-grid-top-left",
+        "mcm-lookbook-v2-aren-nova-backpack-grid-bottom-right"
+      ]
+    }
+  ],
+  "proposed_exposures": [
+    {
+      "proposal_id": "proposal-r3-toni-grid-top-left",
+      "confidence": "high",
+      "human_check": "Confirm at 5000, 8500 and 11000 ms that the cognac bag, both handles and both side straps remain inside the polygon and that no neighboring cell enters it.",
+      "rationale": "The cell contains a single medium shopper/tote with Visetos pattern, top handles, side strap and front logo plaque. Only controlled visual tags visible in the video are used.",
+      "exposure": {
+        "aoi_id": "mcm-lookbook-v2-toni-grid-top-left",
+        "parent_aoi_id": null,
+        "specificity_rank": 0,
+        "start_ms": 5000,
+        "end_ms": 12000,
+        "shape": {
+          "type": "polygon",
+          "points": [[0.08, 0.02], [0.42, 0.02], [0.42, 0.49], [0.08, 0.49]]
+        },
+        "product_id": "mcm-toni-medium-disco-visetos",
+        "component_code": "whole_product",
+        "observed_visual_tag_ids": ["monogram", "shopper", "tote"]
+      }
+    },
+    {
+      "proposal_id": "proposal-r3-toni-grid-top-right",
+      "confidence": "high",
+      "human_check": "Confirm at 5000, 8500 and 11000 ms that the black bag is the same Toni canonical profile and not a different shopper variant.",
+      "rationale": "The cell contains one black bag with the same shopper geometry, handles, side strap and logo-plaque placement as the other Toni candidate cells.",
+      "exposure": {
+        "aoi_id": "mcm-lookbook-v2-toni-grid-top-right",
+        "parent_aoi_id": null,
+        "specificity_rank": 0,
+        "start_ms": 5000,
+        "end_ms": 12000,
+        "shape": {
+          "type": "polygon",
+          "points": [[0.58, 0.02], [0.92, 0.02], [0.92, 0.49], [0.58, 0.49]]
+        },
+        "product_id": "mcm-toni-medium-disco-visetos",
+        "component_code": "whole_product",
+        "observed_visual_tag_ids": ["monogram", "shopper", "tote"]
+      }
+    },
+    {
+      "proposal_id": "proposal-r3-toni-grid-bottom-left",
+      "confidence": "high",
+      "human_check": "Confirm at 5000, 8500 and 11000 ms that the soft-pink bag is the same Toni canonical profile and that the lower grid boundary is not included.",
+      "rationale": "The cell contains one soft-pink bag with the same shopper geometry and controlled visual features as the other Toni candidate cells.",
+      "exposure": {
+        "aoi_id": "mcm-lookbook-v2-toni-grid-bottom-left",
+        "parent_aoi_id": null,
+        "specificity_rank": 0,
+        "start_ms": 5000,
+        "end_ms": 12000,
+        "shape": {
+          "type": "polygon",
+          "points": [[0.08, 0.51], [0.42, 0.51], [0.42, 0.98], [0.08, 0.98]]
+        },
+        "product_id": "mcm-toni-medium-disco-visetos",
+        "component_code": "whole_product",
+        "observed_visual_tag_ids": ["monogram", "shopper", "tote"]
+      }
+    },
+    {
+      "proposal_id": "proposal-r3-toni-grid-bottom-right",
+      "confidence": "high",
+      "human_check": "Confirm at 5000, 8500 and 11000 ms that the cognac bag is the same Toni canonical profile and that the decorative transition mark at the far right is outside the polygon.",
+      "rationale": "The cell contains one cognac shopper/tote with the same visible Toni profile; the decorative mark at the far right is intentionally excluded.",
+      "exposure": {
+        "aoi_id": "mcm-lookbook-v2-toni-grid-bottom-right",
+        "parent_aoi_id": null,
+        "specificity_rank": 0,
+        "start_ms": 5000,
+        "end_ms": 12000,
+        "shape": {
+          "type": "polygon",
+          "points": [[0.58, 0.51], [0.92, 0.51], [0.92, 0.98], [0.58, 0.98]]
+        },
+        "product_id": "mcm-toni-medium-disco-visetos",
+        "component_code": "whole_product",
+        "observed_visual_tag_ids": ["monogram", "shopper", "tote"]
+      }
+    },
+    {
+      "proposal_id": "proposal-r3-ella-grid-top-left",
+      "confidence": "medium_high",
+      "human_check": "Confirm at 13000, 17000 and 20500 ms that the top-left Boston bag is the catalog's Small Ella in Disco Visetos, not Pina or another Boston variant.",
+      "rationale": "The bag is Boston-shaped and shows the defining visible combination of two top handles, detachable side strap and a hanging leather tag. The official Ella family description lists those same visible features. Exact colorway and size cannot be proven from the video alone.",
+      "exposure": {
+        "aoi_id": "mcm-lookbook-v2-ella-grid-top-left",
+        "parent_aoi_id": null,
+        "specificity_rank": 0,
+        "start_ms": 13000,
+        "end_ms": 21000,
+        "shape": {
+          "type": "polygon",
+          "points": [[0.06, 0.01], [0.44, 0.01], [0.44, 0.49], [0.06, 0.49]]
+        },
+        "product_id": "mcm-ella-small-disco-visetos",
+        "component_code": "whole_product",
+        "observed_visual_tag_ids": ["boston", "monogram", "top_handle"]
+      }
+    },
+    {
+      "proposal_id": "proposal-r3-aren-nova-backpack-grid-bottom-right",
+      "confidence": "medium",
+      "human_check": "Confirm at 13000, 17000 and 20500 ms that the bottom-right backpack is the canonical Aren Nova Medium in Monogram ECONYL, and reject this exposure if its visible side-stud treatment identifies Stark instead.",
+      "rationale": "The bag visibly has a rounded monogram backpack body, top carry handle, front horizontal zip pocket and front logo plaque. The video does not prove ECONYL material, capacity or use case, so those are not observed tags.",
+      "exposure": {
+        "aoi_id": "mcm-lookbook-v2-aren-nova-backpack-grid-bottom-right",
+        "parent_aoi_id": null,
+        "specificity_rank": 0,
+        "start_ms": 13000,
+        "end_ms": 21000,
+        "shape": {
+          "type": "polygon",
+          "points": [[0.60, 0.49], [0.90, 0.49], [0.90, 0.99], [0.60, 0.99]]
+        },
+        "product_id": "mcm-aren-nova-medium-backpack-econyl",
+        "component_code": "whole_product",
+        "observed_visual_tag_ids": ["backpack", "monogram"]
+      }
+    }
+  ],
+  "component_review_candidates": [
+    {
+      "parent_aoi_id": "mcm-lookbook-v2-toni-grid-top-left",
+      "status": "optional_followup_not_in_approved_exposures",
+      "candidates": [
+        { "component_code": "handle", "region": "upper center and upper side handle anchors", "reason": "visible but not needed to unblock 3-B" },
+        { "component_code": "strap", "region": "left and right outer strap arcs", "reason": "visible but broad margin could include background" },
+        { "component_code": "logo", "region": "front plaque", "reason": "too small for a reliable gaze AOI without calibration" }
+      ]
+    },
+    {
+      "parent_aoi_id": "mcm-lookbook-v2-ella-grid-top-left",
+      "status": "optional_followup_not_in_approved_exposures",
+      "candidates": [
+        { "component_code": "handle", "region": "two top handles", "reason": "same-product child AOI can be added after calibration" },
+        { "component_code": "strap", "region": "left and right detachable strap arcs", "reason": "same-product child AOI can be added after calibration" },
+        { "component_code": "trim", "region": "hanging leather tag", "reason": "exact tag boundary is too small for the first 3-B pass" }
+      ]
+    },
+    {
+      "parent_aoi_id": "mcm-lookbook-v2-aren-nova-backpack-grid-bottom-right",
+      "status": "optional_followup_not_in_approved_exposures",
+      "candidates": [
+        { "component_code": "handle", "region": "top carry handle", "reason": "identity and calibration must be confirmed first" },
+        { "component_code": "pocket", "region": "front horizontal zip pocket", "reason": "identity and calibration must be confirmed first" },
+        { "component_code": "logo", "region": "front logo plaque", "reason": "too small for the first 3-B pass" }
+      ]
+    }
+  ],
+  "unresolved_regions": [
+    {
+      "region_id": "mcm-lookbook-v2-grid-top-right-structured-flap-bag",
+      "interval": "[13000, 21000)",
+      "region_shape": {
+        "type": "polygon",
+        "points": [[0.58, 0.02], [0.93, 0.02], [0.93, 0.48], [0.58, 0.48]]
+      },
+      "status": "catalog_identity_unresolved",
+      "reason": "The video shows a structured flap/shoulder bag with a central closure, but no exact product ID in the current ten-product catalog is proven. Do not substitute Aren East-West or Pina Vanity by visual proximity."
+    },
+    {
+      "region_id": "mcm-lookbook-v2-grid-bottom-left-zip-pouch",
+      "interval": "[13000, 21000)",
+      "region_shape": {
+        "type": "polygon",
+        "points": [[0.12, 0.68], [0.40, 0.68], [0.40, 0.98], [0.12, 0.98]]
+      },
+      "status": "catalog_identity_unresolved",
+      "reason": "The video shows a flat monogram zip pouch, but no exact product ID in the current ten-product catalog is proven. It remains a non-exposure inventory item."
+    },
+    {
+      "region_id": "mcm-lookbook-v2-model-carrying-scene",
+      "interval": "[22000, 28000)",
+      "status": "dynamic_scene_excluded",
+      "reason": "Both bags move with the models and a broad polygon would include hands, clothes or background. A dynamic segmentation pass is safer than promoting a static rectangle for 3-B."
+    }
+  ],
+  "deliberately_unmapped": [
+    { "interval": "[0, 5000)", "reason": "Intro/title card." },
+    { "interval": "[12000, 13000)", "reason": "Transition into the four-bag grid." },
+    { "interval": "[21000, 22000)", "reason": "Transition into the moving-model scene." },
+    { "interval": "[22000, 28000)", "reason": "Moving-model scene excluded until dynamic object bounds are available." },
+    { "interval": "[28000, 33500)", "reason": "Model-to-closing transition and closing card." }
+  ],
+  "minimum_3b_unblock": {
+    "exposure_ids": ["mcm-lookbook-v2-toni-grid-top-left"],
+    "reason": "양유상이 Toni top-left stable whole-product exposure 하나를 승인했다. 이 하나로 valid gaze -> captured video_time_ms -> AOI -> product/component/tag aggregate를 검증한다.",
+    "required_owner_decision": "Completed: Toni top-left product ID, polygon, 5000/8500/11000 checkpoint, different-product non-overlap, and demo-only 0.04 margin were accepted on 2026-08-18."
+  },
+  "promotion_gate": [
+    "Completed: the owner recorded reviewer, date, approve_selected_exposures, one selected exposure, checkpoint confirmation, non-overlap confirmation, and demo-only margin acceptance.",
+    "Only the selected whole_product exposure is promoted in the first 3-B pass. Component AOIs remain optional follow-up items.",
+    "All unselected candidates, unresolved regions, and moving scenes remain excluded rather than being replaced by a nearest-looking catalog item.",
+    "The canonical pending metadata remains preserved. The separately named r3 approved revision is the only file usable for this 3-B demo."
+  ]
+}

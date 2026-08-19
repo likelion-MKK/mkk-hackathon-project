@@ -1,0 +1,358 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcm-lookbook.example/contracts/vision-stream/v1/vision-stream-message.schema.json",
+  "title": "VisionStreamTextMessageV1",
+  "description": "Text JSON messages exchanged around ephemeral binary webcam frames.",
+  "oneOf": [
+    { "$ref": "#/$defs/hello" },
+    { "$ref": "#/$defs/ready" },
+    { "$ref": "#/$defs/control" },
+    { "$ref": "#/$defs/controlResult" },
+    { "$ref": "#/$defs/result" },
+    { "$ref": "#/$defs/drop" },
+    { "$ref": "#/$defs/error" },
+    { "$ref": "#/$defs/close" }
+  ],
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+    },
+    "nullableReason": {
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/reason" }]
+    },
+    "mediaType": {
+      "type": "string",
+      "pattern": "^image/[a-z0-9][a-z0-9.+-]{0,63}$"
+    },
+    "base": {
+      "type": "object",
+      "required": ["type", "protocol_version"],
+      "properties": {
+        "type": { "type": "string" },
+        "protocol_version": { "const": "1.0" }
+      }
+    },
+    "frameRef": {
+      "type": "object",
+      "required": [
+        "session_id",
+        "video_id",
+        "frame_id",
+        "sequence",
+        "captured_at_mono_ms",
+        "video_time_ms",
+        "playback_epoch"
+      ],
+      "properties": {
+        "session_id": { "$ref": "#/$defs/id" },
+        "video_id": { "$ref": "#/$defs/id" },
+        "frame_id": { "$ref": "#/$defs/id" },
+        "sequence": { "type": "integer", "minimum": 0 },
+        "captured_at_mono_ms": { "type": "number", "minimum": 0 },
+        "video_time_ms": { "type": "integer", "minimum": 0 },
+        "playback_epoch": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "hello": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "required": [
+            "session_id",
+            "video_id",
+            "stream_token",
+            "offered_frame_encodings"
+          ],
+          "properties": {
+            "type": { "const": "hello" },
+            "session_id": { "$ref": "#/$defs/id" },
+            "video_id": { "$ref": "#/$defs/id" },
+            "stream_token": { "type": "string", "minLength": 32, "maxLength": 2048 },
+            "offered_frame_encodings": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/mediaType" }
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "ready": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "required": ["session_id", "video_id", "selected_frame_encoding", "limits"],
+          "properties": {
+            "type": { "const": "ready" },
+            "session_id": { "$ref": "#/$defs/id" },
+            "video_id": { "$ref": "#/$defs/id" },
+            "selected_frame_encoding": { "$ref": "#/$defs/mediaType" },
+            "limits": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "in_flight_limit",
+                "max_frame_bytes",
+                "max_fps",
+                "decode_timeout_ms",
+                "inference_timeout_ms"
+              ],
+              "properties": {
+                "in_flight_limit": { "const": 1 },
+                "max_frame_bytes": { "type": "integer", "minimum": 1 },
+                "max_fps": { "type": "number", "exclusiveMinimum": 0 },
+                "decode_timeout_ms": { "type": "integer", "minimum": 1 },
+                "inference_timeout_ms": { "type": "integer", "minimum": 1 }
+              }
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "calibrationPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pattern_id", "points"],
+      "properties": {
+        "pattern_id": { "$ref": "#/$defs/id" },
+        "points": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              { "type": "number", "minimum": 0, "maximum": 1 },
+              { "type": "number", "minimum": 0, "maximum": 1 }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        }
+      }
+    },
+    "control": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "required": ["request_id", "action"],
+          "properties": {
+            "type": { "const": "control" },
+            "request_id": { "$ref": "#/$defs/id" },
+            "action": {
+              "enum": [
+                "start_calibration",
+                "start_inference",
+                "stop_inference",
+                "stop_session"
+              ]
+            },
+            "payload": { "$ref": "#/$defs/calibrationPayload" }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": { "action": { "const": "start_calibration" } },
+                "required": ["action"]
+              },
+              "then": { "required": ["payload"] },
+              "else": { "properties": { "payload": false } }
+            }
+          ]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "controlResult": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "required": ["request_id", "action", "valid", "reason"],
+          "properties": {
+            "type": { "const": "control_result" },
+            "request_id": { "$ref": "#/$defs/id" },
+            "action": {
+              "enum": [
+                "start_calibration",
+                "start_inference",
+                "stop_inference",
+                "stop_session"
+              ]
+            },
+            "calibration_id": { "$ref": "#/$defs/id" },
+            "valid": { "type": "boolean" },
+            "reason": { "$ref": "#/$defs/nullableReason" }
+          },
+          "allOf": [
+            {
+              "if": { "properties": { "valid": { "const": true } }, "required": ["valid"] },
+              "then": { "properties": { "reason": { "type": "null" } } },
+              "else": { "properties": { "reason": { "$ref": "#/$defs/reason" } } }
+            },
+            {
+              "if": {
+                "properties": { "action": { "const": "start_calibration" } },
+                "required": ["action"]
+              },
+              "then": { "required": ["calibration_id"] },
+              "else": { "properties": { "calibration_id": false } }
+            }
+          ]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "result": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        { "$ref": "#/$defs/frameRef" },
+        {
+          "type": "object",
+          "required": ["gaze_sample", "gaze_reason", "expression_sample", "expression_reason"],
+          "properties": {
+            "type": { "const": "result" },
+            "gaze_sample": {
+              "oneOf": [
+                { "type": "null" },
+                { "$ref": "https://mcm-lookbook.example/contracts/v1/events/gaze-sample.schema.json" }
+              ]
+            },
+            "gaze_reason": { "$ref": "#/$defs/nullableReason" },
+            "expression_sample": {
+              "oneOf": [
+                { "type": "null" },
+                { "$ref": "https://mcm-lookbook.example/contracts/v1/events/expression-sample.schema.json" }
+              ]
+            },
+            "expression_reason": { "$ref": "#/$defs/nullableReason" }
+          },
+          "anyOf": [
+            { "properties": { "gaze_sample": { "type": "object" } } },
+            { "properties": { "expression_sample": { "type": "object" } } }
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": { "gaze_sample": { "type": "null" } },
+                "required": ["gaze_sample"]
+              },
+              "then": { "properties": { "gaze_reason": { "$ref": "#/$defs/reason" } } },
+              "else": { "properties": { "gaze_reason": { "type": "null" } } }
+            },
+            {
+              "if": {
+                "properties": { "expression_sample": { "type": "null" } },
+                "required": ["expression_sample"]
+              },
+              "then": { "properties": { "expression_reason": { "$ref": "#/$defs/reason" } } },
+              "else": { "properties": { "expression_reason": { "type": "null" } } }
+            }
+          ]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "drop": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        { "$ref": "#/$defs/frameRef" },
+        {
+          "type": "object",
+          "required": ["reason", "retryable"],
+          "properties": {
+            "type": { "const": "drop" },
+            "reason": {
+              "enum": [
+                "in_flight",
+                "duplicate_frame",
+                "out_of_order",
+                "stale_epoch",
+                "fps_limited",
+                "frame_too_large",
+                "decode_timeout",
+                "inference_timeout",
+                "server_overloaded",
+                "session_closing"
+              ]
+            },
+            "retryable": { "type": "boolean" },
+            "retry_after_ms": { "type": "integer", "minimum": 0 }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "error": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "required": ["code", "retryable"],
+          "properties": {
+            "type": { "const": "error" },
+            "request_id": { "$ref": "#/$defs/id" },
+            "frame": {
+              "allOf": [{ "$ref": "#/$defs/frameRef" }],
+              "unevaluatedProperties": false
+            },
+            "code": {
+              "enum": [
+                "vision_unavailable",
+                "inference_timeout",
+                "server_overloaded",
+                "protocol_error",
+                "unauthorized",
+                "unsupported_version",
+                "invalid_message"
+              ]
+            },
+            "retryable": { "type": "boolean" }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "close": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "required": ["code", "reason", "retryable"],
+          "properties": {
+            "type": { "const": "close" },
+            "code": { "enum": [1000, 1002, 1008, 1009, 1011, 1013] },
+            "reason": {
+              "enum": [
+                "normal",
+                "protocol_error",
+                "unauthorized",
+                "frame_too_large",
+                "vision_unavailable",
+                "server_overloaded"
+              ]
+            },
+            "retryable": { "type": "boolean" }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    }
+  }
+}

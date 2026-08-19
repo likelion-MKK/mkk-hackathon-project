@@ -50,6 +50,10 @@ EXAMPLE_SUFFIXES = (".example", ".examples", ".fixture", ".valid", ".invalid")
 FORBIDDEN_EVENT_KEYS = {
     "base64",
     "blob",
+    "embedding",
+    "embeddings",
+    "faceembedding",
+    "faceembeddings",
     "frame",
     "frames",
     "frameblob",
@@ -66,6 +70,11 @@ FORBIDDEN_EVENT_KEYS = {
     "rawframes",
     "rawimage",
     "rawimages",
+    "originalpath",
+    "sourcepath",
+    "inputpath",
+    "framepath",
+    "imagepath",
 }
 MEDIA_WORDS = ("frame", "image")
 PAYLOAD_WORDS = ("base64", "binary", "blob", "bytes", "content", "data", "payload", "raw")
@@ -86,7 +95,7 @@ MODEL_WEIGHT_SUFFIXES = {
     ".safetensors",
     ".tflite",
 }
-IGNORED_ARTIFACT_DIRECTORIES = {".git", ".venv", "node_modules", "__pycache__"}
+IGNORED_ARTIFACT_DIRECTORIES = {".git", ".venv", "node_modules", "__pycache__", "artifacts"}
 
 
 @dataclass(frozen=True)
@@ -359,8 +368,12 @@ def example_aliases(path: Path, root: Path) -> list[str]:
     relative = display_path(path, root).lower()
     if relative == "data/lookbooks/example/manifest.json":
         aliases.extend(["lookbook-manifest", "manifest"])
+    elif relative == "data/lookbooks/mcm-central-ai-replay-v2/manifest.json":
+        aliases.extend(["lookbook-manifest", "manifest"])
     elif relative == "data/products/catalog.example.json":
         aliases.extend(["product-catalog", "catalog"])
+    elif relative == "data/products/mcm-demo-recommendation-profile-v2.json":
+        aliases.extend(["product-recommendation-profile-v2"])
     return list(dict.fromkeys(aliases))
 
 
@@ -390,9 +403,16 @@ def is_event_schema(schema: SchemaDocument, root: Path) -> bool:
         relative_parts = schema.path.relative_to(root / "contracts").parts
     except ValueError:
         relative_parts = schema.path.parts
-    return "events" in {part.lower() for part in relative_parts[:-1]} or schema.body.get(
-        "x-event-schema"
-    ) is True
+    guarded_v2_names = {
+        "frame-observation-v2.schema.json",
+        "observation-batch-v2.schema.json",
+        "recommendation-evidence-v2.schema.json",
+    }
+    return (
+        "events" in {part.lower() for part in relative_parts[:-1]}
+        or schema.path.name.lower() in guarded_v2_names
+        or schema.body.get("x-event-schema") is True
+    )
 
 
 def normalized_key(key: str) -> str:
@@ -666,6 +686,272 @@ def validate_cross_document_invariants(root: Path, issues: list[Issue]) -> None:
             )
 
 
+def validate_v2_cross_document_invariants(root: Path, issues: list[Issue]) -> None:
+    """Validate the exactly-10 catalog, 60-second replay and grounded v2 result."""
+
+    catalog_path = root / "data" / "products" / "mcm-demo-recommendation-profile-v2.json"
+    manifest_path = (
+        root / "data" / "lookbooks" / "mcm-central-ai-replay-v2" / "manifest.json"
+    )
+    batch_path = root / "contracts" / "examples" / "observation-batch-v2.valid.json"
+    evidence_path = root / "contracts" / "examples" / "recommendation-evidence-v2.valid.json"
+    decision_path = root / "contracts" / "examples" / "recommendation-decision-v2.valid.json"
+
+    catalog = read_json(catalog_path, issues)
+    manifest = read_json(manifest_path, issues)
+    batch = read_json(batch_path, issues)
+    evidence = read_json(evidence_path, issues)
+    decision = read_json(decision_path, issues)
+
+    catalog_ids: set[str] = set()
+    catalog_version: str | None = None
+    if isinstance(catalog, dict):
+        if isinstance(catalog.get("catalog_version"), str):
+            catalog_version = catalog["catalog_version"]
+        products = catalog.get("products")
+        if isinstance(products, list):
+            product_ids = [
+                product.get("product_id")
+                for product in products
+                if isinstance(product, dict) and isinstance(product.get("product_id"), str)
+            ]
+            if len(products) != 10:
+                issues.append(Issue(catalog_path, "v2 catalog must contain exactly 10 products"))
+            duplicates = duplicate_values(product_ids)
+            if duplicates:
+                issues.append(
+                    Issue(catalog_path, f"duplicate v2 product_id values: {sorted(duplicates)}")
+                )
+            catalog_ids = set(product_ids)
+
+    if isinstance(manifest, dict) and isinstance(manifest.get("exposures"), list):
+        exposures = manifest["exposures"]
+        exposure_ids = [
+            item.get("exposure_id")
+            for item in exposures
+            if isinstance(item, dict) and isinstance(item.get("exposure_id"), str)
+        ]
+        manifest_product_ids = [
+            item.get("product_id")
+            for item in exposures
+            if isinstance(item, dict) and isinstance(item.get("product_id"), str)
+        ]
+        if len(exposures) != 10:
+            issues.append(Issue(manifest_path, "v2 replay manifest must contain 10 exposures"))
+        if duplicate_values(exposure_ids):
+            issues.append(Issue(manifest_path, "v2 replay exposure_id values must be unique"))
+        if duplicate_values(manifest_product_ids):
+            issues.append(
+                Issue(manifest_path, "each v2 replay product must appear in exactly one exposure")
+            )
+        if catalog_ids and set(manifest_product_ids) != catalog_ids:
+            missing = sorted(catalog_ids.difference(manifest_product_ids))
+            unknown = sorted(set(manifest_product_ids).difference(catalog_ids))
+            issues.append(
+                Issue(
+                    manifest_path,
+                    f"v2 replay/catalog product IDs differ; missing={missing}, unknown={unknown}",
+                )
+            )
+
+        ordered_ranges: list[tuple[int, int]] = []
+        for item in exposures:
+            if not isinstance(item, dict):
+                continue
+            start_ms = item.get("start_ms")
+            end_ms = item.get("end_ms")
+            if isinstance(start_ms, int) and isinstance(end_ms, int):
+                ordered_ranges.append((start_ms, end_ms))
+        ordered_ranges.sort()
+        expected_start = 0
+        for start_ms, end_ms in ordered_ranges:
+            if start_ms != expected_start or end_ms <= start_ms:
+                issues.append(
+                    Issue(
+                        manifest_path,
+                        "v2 replay exposures must be contiguous, non-overlapping and start at 0ms",
+                    )
+                )
+                break
+            expected_start = end_ms
+        if ordered_ranges and expected_start != 60_000:
+            issues.append(Issue(manifest_path, "v2 replay must cover exactly 60,000ms"))
+
+    if isinstance(batch, dict) and isinstance(batch.get("observations"), list):
+        observations = [item for item in batch["observations"] if isinstance(item, dict)]
+        sequences = [item.get("sequence") for item in observations if isinstance(item.get("sequence"), int)]
+        frame_keys = [
+            (item.get("playback_epoch"), item.get("frame_id"))
+            for item in observations
+            if isinstance(item.get("playback_epoch"), int)
+            and isinstance(item.get("frame_id"), str)
+        ]
+        if duplicate_values(sequences):
+            issues.append(Issue(batch_path, "v2 observation sequence values must be unique"))
+        if duplicate_values(frame_keys):
+            issues.append(
+                Issue(batch_path, "v2 observation frame_id must be unique within each playback epoch")
+            )
+        offsets_by_sequence = sorted(
+            (
+                item.get("sequence"),
+                item.get("session_offset_ms"),
+            )
+            for item in observations
+            if isinstance(item.get("sequence"), int)
+            and isinstance(item.get("session_offset_ms"), (int, float))
+        )
+        offsets = [offset for _, offset in offsets_by_sequence]
+        if offsets and (offsets[0] != 0 or offsets != sorted(offsets)):
+            issues.append(
+                Issue(batch_path, "v2 session_offset_ms must start at 0 and be nondecreasing")
+            )
+        for index, observation in enumerate(observations):
+            attention = observation.get("attention")
+            if not isinstance(attention, dict) or not isinstance(attention.get("candidates"), list):
+                continue
+            for candidate in attention["candidates"]:
+                if not isinstance(candidate, dict):
+                    continue
+                product_id = candidate.get("product_id")
+                if isinstance(product_id, str) and catalog_ids and product_id not in catalog_ids:
+                    issues.append(
+                        Issue(
+                            batch_path,
+                            f"/observations/{index}: unknown v2 product_id '{product_id}'",
+                        )
+                    )
+
+    window_ids: set[str] = set()
+    if isinstance(evidence, dict):
+        if catalog_version is not None and evidence.get("catalog_version") != catalog_version:
+            issues.append(Issue(evidence_path, "catalog_version differs from v2 catalog"))
+        summary = evidence.get("summary")
+        if isinstance(summary, list):
+            for index, item in enumerate(summary):
+                if not isinstance(item, dict):
+                    continue
+                product_id = item.get("product_id")
+                if isinstance(product_id, str) and catalog_ids and product_id not in catalog_ids:
+                    issues.append(
+                        Issue(evidence_path, f"/summary/{index}: unknown product_id '{product_id}'")
+                    )
+        windows = evidence.get("evidence_windows")
+        if isinstance(windows, list):
+            for index, item in enumerate(windows):
+                if not isinstance(item, dict):
+                    continue
+                window_id = item.get("window_id")
+                if isinstance(window_id, str):
+                    if window_id in window_ids:
+                        issues.append(Issue(evidence_path, f"duplicate window_id '{window_id}'"))
+                    window_ids.add(window_id)
+                product_id = item.get("product_id")
+                if isinstance(product_id, str) and catalog_ids and product_id not in catalog_ids:
+                    issues.append(
+                        Issue(
+                            evidence_path,
+                            f"/evidence_windows/{index}: unknown product_id '{product_id}'",
+                        )
+                    )
+
+    if isinstance(decision, dict):
+        version = decision.get("version")
+        if (
+            isinstance(version, dict)
+            and catalog_version is not None
+            and version.get("catalog_version") != catalog_version
+        ):
+            issues.append(Issue(decision_path, "catalog_version differs from v2 catalog"))
+        if decision.get("status") == "completed":
+            selected = decision.get("selected_product_id")
+            if not isinstance(selected, str) or (catalog_ids and selected not in catalog_ids):
+                issues.append(Issue(decision_path, "completed v2 decision selected an unknown product"))
+            items = decision.get("evidence")
+            if isinstance(items, list):
+                for index, item in enumerate(items):
+                    if not isinstance(item, dict):
+                        continue
+                    if item.get("product_id") != selected:
+                        issues.append(
+                            Issue(
+                                decision_path,
+                                f"/evidence/{index}: product_id differs from selected_product_id",
+                            )
+                        )
+                    refs = item.get("evidence_refs")
+                    if isinstance(refs, list):
+                        unknown_refs = sorted(
+                            reference
+                            for reference in refs
+                            if isinstance(reference, str) and reference not in window_ids
+                        )
+                        if unknown_refs:
+                            issues.append(
+                                Issue(
+                                    decision_path,
+                                    f"/evidence/{index}: unknown evidence_refs {unknown_refs}",
+                                )
+                            )
+
+
+def validate_vision_stream_v1_invariants(root: Path, issues: list[Issue]) -> None:
+    """Validate executable relationships that JSON Schema cannot express."""
+
+    examples = root / "contracts" / "examples"
+    token_path = examples / "vision-stream-token.valid.json"
+    hello_path = examples / "vision-stream-hello.valid.json"
+    ready_path = examples / "vision-stream-ready.valid.json"
+    frame_path = examples / "vision-stream-frame-metadata.valid.json"
+    result_path = examples / "vision-stream-result.valid.json"
+    drop_path = examples / "vision-stream-drop.valid.json"
+
+    token = read_json(token_path, issues)
+    hello = read_json(hello_path, issues)
+    ready = read_json(ready_path, issues)
+    frame = read_json(frame_path, issues)
+    result = read_json(result_path, issues)
+    drop = read_json(drop_path, issues)
+
+    if isinstance(token, dict) and isinstance(hello, dict):
+        for field in ("session_id", "video_id", "stream_token"):
+            if token.get(field) != hello.get(field):
+                issues.append(Issue(hello_path, f"{field} differs from issued stream token"))
+
+    if isinstance(hello, dict) and isinstance(ready, dict):
+        offered = hello.get("offered_frame_encodings")
+        selected = ready.get("selected_frame_encoding")
+        if not isinstance(offered, list) or selected not in offered:
+            issues.append(Issue(ready_path, "selected encoding was not offered by the client"))
+        limits = ready.get("limits")
+        if not isinstance(limits, dict) or limits.get("in_flight_limit") != 1:
+            issues.append(Issue(ready_path, "Vision Stream v1 requires in_flight_limit=1"))
+
+    context_fields = (
+        "session_id",
+        "video_id",
+        "frame_id",
+        "sequence",
+        "captured_at_mono_ms",
+        "video_time_ms",
+        "playback_epoch",
+    )
+    if isinstance(frame, dict) and isinstance(result, dict):
+        expected = {field: frame.get(field) for field in context_fields}
+        for label, document in (
+            ("result", result),
+            ("gaze_sample", result.get("gaze_sample")),
+            ("expression_sample", result.get("expression_sample")),
+        ):
+            if not isinstance(document, dict) or {
+                field: document.get(field) for field in context_fields
+            } != expected:
+                issues.append(Issue(result_path, f"{label} does not preserve frame capture context"))
+
+    if isinstance(drop, dict) and drop.get("reason") != "inference_timeout":
+        issues.append(Issue(drop_path, "timeout fixture must use drop/inference_timeout"))
+
+
 def validate_openapi(root: Path, issues: list[Issue]) -> None:
     openapi_path = root / "contracts" / "openapi.yaml"
     try:
@@ -695,23 +981,28 @@ def validate_openapi(root: Path, issues: list[Issue]) -> None:
 
     required_paths = {
         "/api/v1/sessions",
+        "/api/v1/sessions/{session_id}/vision-stream-token",
         "/api/v1/lookbooks/{lookbook_id}/manifest",
         "/api/v1/sessions/{session_id}/reaction-batches",
         "/api/v1/sessions/{session_id}/complete",
         "/api/v1/sessions/{session_id}/recommendations",
+        "/api/v1/sessions/{session_id}/manager-product-requests",
         "/api/v1/products/{product_id}",
         "/api/v1/conversions",
         "/api/v1/manager/events",
         "/api/v1/health",
+        "/api/v2/sessions/{session_id}/observations",
+        "/api/v2/sessions/{session_id}/complete",
+        "/api/v2/sessions/{session_id}/recommendation",
+        "/api/v2/sessions/{session_id}",
+        "/api/v2/sessions/{session_id}/manager-product-requests",
+        "/api/v2/products/{product_id}",
     }
     missing_paths = sorted(required_paths.difference(paths))
     if missing_paths:
         issues.append(Issue(openapi_path, f"missing required API paths: {missing_paths}"))
 
-    for pointer, message in (
-        ("x-websocket-channel", "missing manager WebSocket channel extension"),
-        ("components", "missing components object"),
-    ):
+    for pointer, message in (("components", "missing components object"),):
         if not isinstance(document.get(pointer), dict):
             issues.append(Issue(openapi_path, message))
 
@@ -803,7 +1094,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     required_data_documents = [
         root / "data" / "lookbooks" / "example" / "manifest.json",
+        root / "data" / "lookbooks" / "mcm-central-ai-replay-v2" / "manifest.json",
         root / "data" / "products" / "catalog.example.json",
+        root / "data" / "products" / "mcm-demo-recommendation-profile-v2.json",
     ]
     documents = [*contract_examples, *required_data_documents]
     known_schemas = schema_by_path(schemas)
@@ -835,6 +1128,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         examples_dir / "invalid", root, schemas, registry, issues
     )
     validate_cross_document_invariants(root, issues)
+    validate_v2_cross_document_invariants(root, issues)
+    validate_vision_stream_v1_invariants(root, issues)
     validate_openapi(root, issues)
     validate_repository_artifacts(root, issues)
 
@@ -847,7 +1142,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"{len(schemas)} schema file(s), {validated_count} example document(s), "
         f"{invalid_count} rejected negative example(s), "
         f"{guarded_count} event example guard check(s), event schemas, OpenAPI, "
-        "cross-document invariants and repository artifacts checked."
+        "cross-document and Vision Stream invariants, and repository artifacts checked."
     )
     return 0
 

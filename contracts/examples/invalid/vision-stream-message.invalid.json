@@ -1,0 +1,15 @@
+{
+  "type": "result",
+  "protocol_version": "1.0",
+  "session_id": "session-example-001",
+  "video_id": "mcm-lookbook-example-v1",
+  "frame_id": "frame-invalid-002",
+  "sequence": 0,
+  "captured_at_mono_ms": 0,
+  "video_time_ms": 0,
+  "playback_epoch": 0,
+  "gaze_sample": null,
+  "gaze_reason": "gaze_unavailable",
+  "expression_sample": null,
+  "expression_reason": "face_unavailable"
+}

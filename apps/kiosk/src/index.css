@@ -1,0 +1,92 @@
+:root {
+  --black: #111111;
+  --white: #ffffff;
+  --off-white: #f6f6f4;
+  --soft-gray: #ededeb;
+  --mid-gray: #777777;
+  --line: #d8d8d5;
+  --font-sans: "Helvetica Neue", Helvetica, Arial, "Noto Sans KR", "Apple SD Gothic Neo",
+    sans-serif;
+
+  font-family: var(--font-sans);
+  color: var(--black);
+  background: var(--white);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-width: 320px;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  min-height: 100vh;
+  min-height: 100svh;
+  overflow-x: hidden;
+  background: var(--white);
+}
+
+body,
+button {
+  font-family: var(--font-sans);
+}
+
+button {
+  color: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--black);
+  outline-offset: 3px;
+}
+
+h1,
+h2,
+p,
+dl,
+dd {
+  margin: 0;
+}
+
+img,
+svg {
+  display: block;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

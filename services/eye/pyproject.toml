@@ -1,0 +1,28 @@
+[project]
+name = "mcm-eye"
+version = "0.1.0"
+description = "Eye Adapter boundary for the MCM AI Lookbook Kiosk"
+readme = "README.md"
+requires-python = "==3.12.10"
+dependencies = [
+    "eyetrax==0.4.0",
+    "mediapipe==1.0.0",
+    "numpy==1.26.4",
+    "opencv-python==4.11.0.86",
+    "starlette>=0.37,<1",
+    "uvicorn[standard]>=0.30,<1",
+]
+
+[dependency-groups]
+dev = [
+    "jsonschema==4.26.0",
+    "pytest>=8.3,<9",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+addopts = "-q"
+pythonpath = ["src"]
+testpaths = ["tests"]

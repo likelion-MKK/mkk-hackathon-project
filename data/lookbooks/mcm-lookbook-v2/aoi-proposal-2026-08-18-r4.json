@@ -1,0 +1,135 @@
+{
+  "proposal_schema_version": "1.1",
+  "proposal_revision": "mcm-lookbook-v2-aoi-proposal-2026-08-18-r4",
+  "proposal_status": "pending_human_owner_review",
+  "non_production_notice": "This proposal records only a whole-product candidate observed in the canonical video. It is not approved AOI metadata and cannot be configured as a runtime metadata path. No R4 approved metadata is created until the owner records every required sign-off field.",
+  "canonical_metadata_path": "data/lookbooks/mcm-lookbook-v2/aoi-metadata-v2.json",
+  "pending_metadata_path": "data/lookbooks/mcm-lookbook-v2/aoi-metadata-v2-r4-pending.json",
+  "existing_r3_approved_metadata_path": "data/lookbooks/mcm-lookbook-v2/aoi-metadata-v2-r3-approved.json",
+  "video_id": "mcm-lookbook-v2",
+  "manifest_version": "mcm-lookbook-v2-2026-08-18",
+  "coordinate_space": "video_normalized",
+  "component_taxonomy_version": "mcm-component-v1",
+  "media_identity": {
+    "source_kind": "video_file",
+    "sha256": "dd40011e9a7767cf82f9cc7d04c15d7d987c86756170f3c98012644ed04c9c89",
+    "byte_length": 5754164,
+    "duration_ms": 33500,
+    "width_px": 1280,
+    "height_px": 720,
+    "fps": 24
+  },
+  "review_method": {
+    "prepared_on": "2026-08-18",
+    "prepared_by": "Codex local canonical-media inspection; this is not human owner sign-off",
+    "source_video": "C:\\Users\\andyw\\Desktop\\mcm 동영상.mp4",
+    "inspection_scope": "Static whole-product shots in the requested 5s-to-21s deployment scope. No handle, strap, logo, hardware, closure, or other component AOI is proposed.",
+    "coordinate_rule": "The sole candidate preserves the already human-reviewed R3 polygon unchanged. It is video_normalized against the 1280x720 video content rectangle and not against a player viewport.",
+    "raw_artifact_policy": "Temporary inspection frames were used only outside the repository and were not copied to Git, metadata, logs, tests, or a database.",
+    "demo_static_assumptions_policy": "aoi-metadata-v2-demo-static-assumptions.json was not copied, promoted, or used as a source for this proposal."
+  },
+  "observed_static_intervals": [
+    {
+      "interval": "[5000, 12958)",
+      "layout": "2x2 shopper grid",
+      "status": "static_scene_confirmed",
+      "mapped_candidate_ids": ["mcm-lookbook-v2-toni-grid-top-left"],
+      "unmapped_portion": "[12000, 12958) remains pending because the existing R3 owner sign-off ends at 12000ms and no R4 decision extends it."
+    },
+    {
+      "interval": "[12959, 20958)",
+      "layout": "2x2 product grid with a Boston-shaped bag, flap bag, zip pouch, and backpack",
+      "status": "static_scene_confirmed_catalog_identity_pending",
+      "reason": "The actual video shows four separate products, but no R4 owner record confirms an exact canonical product_id for any of them. No product_id, polygon, or exposure is proposed for this interval."
+    }
+  ],
+  "proposed_exposures": [
+    {
+      "proposal_id": "proposal-r4-preserve-r3-toni-grid-top-left",
+      "status": "pending_r4_owner_decision",
+      "source": "The field values below are preserved exactly from the existing R3 human-approved Toni top-left exposure. R3 approval was explicitly limited to the Vision 3-B demo and is not an R4 or production approval.",
+      "actual_video_checkpoints_ms": [5000, 8500, 11000],
+      "human_check": "Confirm the exact catalog product_id, the unchanged [5000,12000) half-open interval, all four polygon points, visible controlled tags, no different-product overlap, and acceptance of the provisional 0.04 normalized margin for the selected R4 scope.",
+      "overlap_result": "The preserved polygon is visually contained in the top-left grid cell. It does not intersect an R4 different-product AOI because no other R4 exposure is proposed; the owner must still accept the physical non-overlap check before approval.",
+      "exposure": {
+        "aoi_id": "mcm-lookbook-v2-toni-grid-top-left",
+        "parent_aoi_id": null,
+        "specificity_rank": 0,
+        "start_ms": 5000,
+        "end_ms": 12000,
+        "shape": {
+          "type": "polygon",
+          "points": [[0.08, 0.02], [0.42, 0.02], [0.42, 0.49], [0.08, 0.49]]
+        },
+        "product_id": "mcm-toni-medium-disco-visetos",
+        "component_code": "whole_product",
+        "observed_visual_tag_ids": ["monogram", "shopper", "tote"]
+      }
+    }
+  ],
+  "calibration_margin": {
+    "status": "provisional_demo_value_not_production_calibration",
+    "margin_norm_x": 0.04,
+    "margin_norm_y": 0.04,
+    "equivalent_px_at_canonical_video": {
+      "x": 51.2,
+      "y": 28.8
+    },
+    "application": "The preserved R3 whole-product polygon is recorded as already including this provisional margin. No component AOI inherits or uses it in R4.",
+    "production_replacement": "Replace this provisional value with 1.5 times calibration-error P95, then repeat containment and different-product overlap review before any production approval.",
+    "acceptance_for_r4": "not_recorded"
+  },
+  "deliberately_unmapped": [
+    {
+      "interval": "[0, 5000)",
+      "reason": "Intro/title and pre-scope frames."
+    },
+    {
+      "interval": "[12000, 12958)",
+      "reason": "The first grid remains visually static, but it is outside the existing R3 signed time range and has no R4 owner extension."
+    },
+    {
+      "interval": "[12958, 12959)",
+      "reason": "One-millisecond guard band around the hard cut observed at approximately 12958.3ms."
+    },
+    {
+      "interval": "[12959, 20958)",
+      "reason": "Static products are visible, but exact canonical catalog identities are not owner-confirmed."
+    },
+    {
+      "interval": "[20958, 28000)",
+      "reason": "The moving-model scene begins at approximately 20958.3ms, slightly before the requested 21s boundary. No moving-scene mapping is proposed."
+    },
+    {
+      "interval": "[28000, 33500)",
+      "reason": "Closing transition/card."
+    }
+  ],
+  "existing_r3_owner_signoff_reference": {
+    "reviewer_name": "양유상",
+    "reviewed_on": "2026-08-18",
+    "decision": "approve_selected_exposures",
+    "selected_exposure_ids": ["mcm-lookbook-v2-toni-grid-top-left"],
+    "margin_accepted": true,
+    "scope": "Vision 3-B demo only; it does not approve R4, the unreviewed static portions, other product candidates, or production calibration."
+  },
+  "owner_signoff": {
+    "reviewer_name": null,
+    "reviewed_on": null,
+    "decision": null,
+    "selected_exposure_ids": [],
+    "margin_accepted": null,
+    "required_before_approval": [
+      "Record reviewer_name and reviewed_on.",
+      "Choose approve_selected_exposures or reject_and_request_redraw.",
+      "Record every selected exposure ID and verify the exact catalog product_id, interval, polygon, component_code, controlled tags, and different-product non-overlap.",
+      "Record whether the provisional 0.04 normalized margin is accepted for this scope or replace it with a measured calibration result.",
+      "Create an R4 approved metadata file only from the selected whole-product exposures after every field above is present."
+    ]
+  },
+  "promotion_gate": [
+    "The R4 pending metadata must remain pending_review with no exposures until human owner sign-off is complete.",
+    "Do not copy this proposal, any unresolved static region, or the demo-static-assumptions file into an approved metadata revision.",
+    "After an approved R4 metadata revision exists, separately rerun the complete Vision 3-B path and its fail-closed cases."
+  ]
+}

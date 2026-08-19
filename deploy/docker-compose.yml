@@ -1,0 +1,87 @@
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    env_file: .env
+    command: ["uvicorn", "apps.api.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    expose: ["8000"]
+    environment:
+      LOOKBOOK_VIDEO_PATH: /srv/mcm/media/mcm-lookbook-v2.mp4
+      REQUIRE_LOOKBOOK_MEDIA_READINESS: "true"
+    volumes:
+      - ${MCM_SHARED_ROOT:-/srv/mcm/shared}/media:/srv/mcm/media:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=5)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  vision-gateway:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.vision
+    env_file: .env
+    command: ["uvicorn", "apps.vision_gateway.local_server:app", "--host", "0.0.0.0", "--port", "8765", "--workers", "1"]
+    expose: ["8765"]
+    volumes:
+      - ${MCM_SHARED_ROOT:-/srv/mcm/shared}/models:/srv/mcm/models:ro
+    depends_on:
+      - eye-worker
+    restart: unless-stopped
+
+  eye-worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.eye
+    environment:
+      EYE_WORKER_HOST: 0.0.0.0
+      EYE_WORKER_PORT: 8766
+      EYE_FACE_MODEL_PATH: /srv/mcm/models/face_landmarker.task
+    expose: ["8766"]
+    volumes:
+      - ${MCM_SHARED_ROOT:-/srv/mcm/shared}/models:/srv/mcm/models:ro
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+      args:
+        VITE_USE_MOCK_API: "false"
+        VITE_VISION_MODE: live
+        VITE_VISION_TOKEN_MODE: backend
+        VITE_VISION_TOKEN_URL: /api/v1/sessions/{session_id}/vision-stream-token
+        VITE_LOOKBOOK_ID: mcm-lookbook-v2
+        VITE_LOOKBOOK_VIDEO_URL: /media/mcm-lookbook-v2.mp4
+        VITE_API_BASE_URL: ""
+        VITE_VISION_GATEWAY_WS_URL: ""
+    expose: ["8080"]
+    volumes:
+      - ${MCM_SHARED_ROOT:-/srv/mcm/shared}/media:/usr/share/nginx/html/media:ro
+    depends_on:
+      - api
+      - vision-gateway
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    environment:
+      KIOSK_DOMAIN: ${KIOSK_DOMAIN:?KIOSK_DOMAIN is required}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

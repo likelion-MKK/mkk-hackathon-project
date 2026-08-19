@@ -1,0 +1,3 @@
+# The canonical lookbook video is staged locally and copied to the VPS at deploy time.
+*
+!.gitignore

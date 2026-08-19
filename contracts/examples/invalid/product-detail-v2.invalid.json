@@ -1,0 +1,22 @@
+{
+  "schema_version": "2.0",
+  "catalog_version": "mcm-us-pdp-verified-v3-2026-08-18",
+  "product": {
+    "product_id": "mcm-invented-product",
+    "display_name": "Invented Product",
+    "category": "bag",
+    "controlled_tags": ["daily", "compact", "classic"],
+    "recommendation_summary": "검증되지 않은 URL을 승인된 공식 정보처럼 넣은 잘못된 예입니다.",
+    "style": { "silhouette": "boxy", "visual_tone": "classic", "use_cases": ["daily"] },
+    "approved_asset": false,
+    "source_status": "official_listing_name_verified_assets_pending",
+    "official_product_url": "https://example.invalid/invented",
+    "official_product_url_reason": null,
+    "official_listing_url": "https://us.mcmworldwide.com/en_US/women/bags/all-bags",
+    "image_asset_path": null,
+    "image_asset_path_reason": "asset_license_review_pending",
+    "qr_asset_path": null,
+    "qr_asset_path_reason": "official_product_url_unverified",
+    "source_note": "invalid example"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcm-lookbook.example/contracts/v2/observation-batch-v2.schema.json",
+  "x-event-schema": true,
+  "title": "ObservationBatchV2",
+  "description": "Backend가 동일 캡처 frame의 파생 시선, video 좌표와 얼굴 동작을 수신하는 batch입니다. Kiosk가 보낸 product candidate는 금지되고 Backend가 승인 AOI로 재계산합니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "batch_id",
+    "batch_sequence",
+    "session_id",
+    "video_id",
+    "observations"
+  ],
+  "properties": {
+    "schema_version": { "const": "2.0" },
+    "batch_id": { "$ref": "#/$defs/id" },
+    "batch_sequence": { "type": "integer", "minimum": 0 },
+    "session_id": { "$ref": "#/$defs/id" },
+    "video_id": { "$ref": "#/$defs/id" },
+    "observations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": { "$ref": "frame-observation-v2.schema.json" }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    }
+  }
+}
