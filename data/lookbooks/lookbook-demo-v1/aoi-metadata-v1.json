@@ -32,24 +32,24 @@
       "visual_features": { "color_primary": "tan", "color_family": "beige", "silhouette": "shopper", "category_type": "tote_bag", "patterns": ["monogram"], "bag_accessories": ["logo_plaque", "shoulder_strap", "top_handle", "zipper"] }
     },
     {
-      "source_aoi_id": "source-scene-02-ella-top-left",
+      "source_aoi_id": "source-scene-02-boston-top-left",
       "exposure_id_prefixes": ["scene-02-ella-top-left."],
-      "visual_features": { "color_primary": "pink", "color_family": "pink", "silhouette": "boston", "category_type": "top_handle_bag", "patterns": ["monogram"], "bag_accessories": ["shoulder_strap", "tag", "top_handle", "zipper"] }
+      "visual_features": { "color_primary": "cognac", "color_family": "brown", "silhouette": "boston", "category_type": "top_handle_bag", "patterns": ["monogram"], "bag_accessories": ["shoulder_strap", "tag", "top_handle", "zipper"] }
     },
     {
-      "source_aoi_id": "source-scene-02-aren-east-west-top-right",
+      "source_aoi_id": "source-scene-02-shoulder-top-right",
       "exposure_id_prefixes": ["scene-02-aren-east-west-top-right."],
       "visual_features": { "color_primary": "cognac", "color_family": "brown", "silhouette": "east_west_shoulder", "category_type": "shoulder_bag", "patterns": ["monogram"], "bag_accessories": ["lock", "shoulder_strap"] }
     },
     {
-      "source_aoi_id": "source-scene-02-pina-vanity-bottom-left",
+      "source_aoi_id": "source-scene-02-pouch-bottom-left",
       "exposure_id_prefixes": ["scene-02-pina-vanity-bottom-left."],
-      "visual_features": { "color_primary": "black", "color_family": "black", "silhouette": "vanity_case", "category_type": "vanity_case", "patterns": ["solid", "studded"], "bag_accessories": ["shoulder_strap", "zipper"] }
+      "visual_features": { "color_primary": "cognac", "color_family": "brown", "silhouette": "pouch", "category_type": "pouch", "patterns": ["monogram"], "bag_accessories": ["zipper"] }
     },
     {
-      "source_aoi_id": "source-scene-02-stark-backpack-bottom-right",
+      "source_aoi_id": "source-scene-02-backpack-bottom-right",
       "exposure_id_prefixes": ["scene-02-stark-backpack-bottom-right."],
-      "visual_features": { "color_primary": "gold", "color_family": "metallic", "silhouette": "backpack", "category_type": "backpack", "patterns": ["crystal", "monogram"], "bag_accessories": ["front_pocket", "side_studs", "top_handle", "zipper"] }
+      "visual_features": { "color_primary": "cognac", "color_family": "brown", "silhouette": "backpack", "category_type": "backpack", "patterns": ["monogram"], "bag_accessories": ["front_pocket", "top_handle", "zipper"] }
     },
     {
       "source_aoi_id": "source-scene-03-toni-brown",

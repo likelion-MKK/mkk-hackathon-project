@@ -26,6 +26,7 @@ Silhouette = Literal[
     "backpack",
     "boston",
     "east_west_shoulder",
+    "pouch",
     "shopper",
     "tambourine",
     "tote",
@@ -35,6 +36,7 @@ Silhouette = Literal[
 CategoryType = Literal[
     "backpack",
     "crossbody_bag",
+    "pouch",
     "shoulder_bag",
     "top_handle_bag",
     "tote_bag",
