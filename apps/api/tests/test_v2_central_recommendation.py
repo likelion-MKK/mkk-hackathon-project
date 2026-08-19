@@ -842,10 +842,10 @@ def _resolve_demo_source_hits(frame: FrameObservationV2, bindings: tuple[object,
         "expected_exposure_id",
     ),
     [
-        (9_000, 0.20, 0.35, "source-scene-01-toni-brown-top", "scene-01-toni-brown-top.body"),
+        (9_000, 0.20, 0.35, "source-scene-01-toni-cognac-top", "scene-01-toni-brown-top.body"),
         (9_000, 0.70, 0.35, "source-scene-01-toni-black-top", "scene-01-toni-black-top.body"),
         (9_000, 0.20, 0.85, "source-scene-01-toni-pink-bottom", "scene-01-toni-pink-bottom.body"),
-        (9_000, 0.70, 0.85, "source-scene-01-toni-tan-bottom", "scene-01-toni-tan-bottom.body"),
+        (9_000, 0.70, 0.85, "source-scene-01-toni-beige-bottom", "scene-01-toni-tan-bottom.body"),
         (17_000, 0.20, 0.35, "source-scene-02-boston-top-left", "scene-02-ella-top-left.body"),
         (
             17_000,
@@ -899,7 +899,7 @@ def test_demo_source_aoi_scene_boundary_is_half_open() -> None:
     )
 
     assert [hit.source_aoi_id for hit in before] == [
-        "source-scene-01-toni-brown-top"
+        "source-scene-01-toni-cognac-top"
     ]
     assert before[0].exposure_ids == ("scene-01-toni-brown-top.body",)
     assert [hit.source_aoi_id for hit in after] == [
@@ -1010,10 +1010,10 @@ def test_source_aoi_preserves_distinct_source_overlap_as_ambiguous() -> None:
 def test_demo_source_aoi_visual_features_match_reference_frames() -> None:
     metadata, _ = _demo_source_aoi_fixture()
     expected = {
-        "source-scene-01-toni-brown-top": ("cognac", "brown", "shopper", "tote_bag"),
+        "source-scene-01-toni-cognac-top": ("cognac", "brown", "shopper", "tote_bag"),
         "source-scene-01-toni-black-top": ("black", "black", "shopper", "tote_bag"),
         "source-scene-01-toni-pink-bottom": ("pink", "pink", "shopper", "tote_bag"),
-        "source-scene-01-toni-tan-bottom": ("tan", "beige", "shopper", "tote_bag"),
+        "source-scene-01-toni-beige-bottom": ("beige", "beige", "shopper", "tote_bag"),
         "source-scene-02-boston-top-left": ("cognac", "brown", "boston", "top_handle_bag"),
         "source-scene-02-shoulder-top-right": (
             "cognac",
@@ -1052,10 +1052,10 @@ def test_source_sessions_strip_client_candidates_before_central_json() -> None:
             return super().recommend(request)
 
     source_cases = [
-        (9_000, 0.20, 0.35, "source-scene-01-toni-brown-top"),
+        (9_000, 0.20, 0.35, "source-scene-01-toni-cognac-top"),
         (9_000, 0.70, 0.35, "source-scene-01-toni-black-top"),
         (9_000, 0.20, 0.85, "source-scene-01-toni-pink-bottom"),
-        (9_000, 0.70, 0.85, "source-scene-01-toni-tan-bottom"),
+        (9_000, 0.70, 0.85, "source-scene-01-toni-beige-bottom"),
         (17_000, 0.20, 0.35, "source-scene-02-boston-top-left"),
         (17_000, 0.70, 0.35, "source-scene-02-shoulder-top-right"),
         (17_000, 0.22, 0.84, "source-scene-02-pouch-bottom-left"),

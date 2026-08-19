@@ -12,7 +12,7 @@
   },
   "source_aois": [
     {
-      "source_aoi_id": "source-scene-01-toni-brown-top",
+      "source_aoi_id": "source-scene-01-toni-cognac-top",
       "exposure_id_prefixes": ["scene-01-toni-brown-top."],
       "visual_features": { "color_primary": "cognac", "color_family": "brown", "silhouette": "shopper", "category_type": "tote_bag", "patterns": ["monogram"], "bag_accessories": ["logo_plaque", "shoulder_strap", "top_handle", "zipper"] }
     },
@@ -27,9 +27,9 @@
       "visual_features": { "color_primary": "pink", "color_family": "pink", "silhouette": "shopper", "category_type": "tote_bag", "patterns": ["monogram"], "bag_accessories": ["logo_plaque", "shoulder_strap", "top_handle", "zipper"] }
     },
     {
-      "source_aoi_id": "source-scene-01-toni-tan-bottom",
+      "source_aoi_id": "source-scene-01-toni-beige-bottom",
       "exposure_id_prefixes": ["scene-01-toni-tan-bottom."],
-      "visual_features": { "color_primary": "tan", "color_family": "beige", "silhouette": "shopper", "category_type": "tote_bag", "patterns": ["monogram"], "bag_accessories": ["logo_plaque", "shoulder_strap", "top_handle", "zipper"] }
+      "visual_features": { "color_primary": "beige", "color_family": "beige", "silhouette": "shopper", "category_type": "tote_bag", "patterns": ["monogram"], "bag_accessories": ["logo_plaque", "shoulder_strap", "top_handle", "zipper"] }
     },
     {
       "source_aoi_id": "source-scene-02-boston-top-left",
