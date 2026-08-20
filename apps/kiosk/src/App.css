@@ -891,6 +891,17 @@
   pointer-events: none;
 }
 
+.calibration-page--intro .calibration-page__copy {
+  top: 50%;
+  left: 50%;
+  pointer-events: auto;
+  transform: translate(-50%, -50%);
+}
+
+.calibration-page--active .calibration-page__copy {
+  display: none;
+}
+
 .calibration-page__copy h1 {
   margin: 0.55rem 0 0.65rem;
   font-size: clamp(1.5rem, 2.6vw, 2.35rem);
@@ -915,6 +926,20 @@
   font-size: 0.56rem !important;
   font-weight: 700;
   letter-spacing: 0.12em;
+}
+
+.calibration-page__warning {
+  max-width: 21rem;
+  margin-top: 0.8rem !important;
+  color: var(--black) !important;
+  font-weight: 700;
+}
+
+.calibration-start-button {
+  width: max-content;
+  min-width: 8rem;
+  margin-top: 1rem;
+  pointer-events: auto;
 }
 
 .calibration-page__copy .back-link {
@@ -963,11 +988,25 @@
 
 .lookbook-stage {
   position: relative;
-  height: calc(100svh - 112px);
-  min-height: 560px;
+  height: 100svh;
+  min-height: 0;
   overflow: hidden;
   isolation: isolate;
   background: #050505;
+}
+
+.lookbook-controls,
+.lookbook-debug-canvas,
+.lookbook-debug-panel {
+  transition:
+    opacity 320ms ease,
+    visibility 0s linear 320ms;
+}
+
+.lookbook-overlay--hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .lookbook-video,
@@ -1558,7 +1597,7 @@
   /* << S03-B: 820px 이하 AI LOOKBOOK 영상 >> */
 
   .lookbook-stage {
-    height: calc(100svh - 112px);
+    height: 100svh;
   }
 
   .lookbook-controls {
@@ -1595,8 +1634,8 @@
   /* << S03-B: 560px 이하 AI LOOKBOOK 영상 >> */
 
   .lookbook-stage {
-    height: calc(100svh - 104px);
-    min-height: 520px;
+    height: 100svh;
+    min-height: 0;
   }
 
   .lookbook-stage__heading h1 {

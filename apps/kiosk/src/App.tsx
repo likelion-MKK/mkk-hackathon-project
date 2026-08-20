@@ -31,6 +31,7 @@ import {
   SessionStartTimeoutError,
 } from "./app/consent-flow.ts";
 import {
+  CALIBRATION_ATTEMPT_DURATION_MS,
   CALIBRATION_CAPTURE_INTERVAL_MS,
   CALIBRATION_PATTERN,
   CALIBRATION_TARGET_TRANSITION_MS,
@@ -107,7 +108,8 @@ const mockApiClient = new MockApiClient({ sessionStartDelayMs: 450 });
 const httpApiClient = new HttpApiClient(apiBaseUrl);
 const apiClient: ApiClient = useMockApi ? mockApiClient : httpApiClient;
 const frameSource = new FrameSource();
-const configuredLookbookVideoUrl = actualLookbookConfig?.videoUrl ?? "";
+const configuredLookbookVideoUrl =
+  import.meta.env.VITE_LOOKBOOK_VIDEO_URL?.trim() || actualLookbookConfig?.videoUrl || "";
 const configuredVisionMode = import.meta.env.VITE_VISION_MODE?.trim() || "replay";
 if (configuredVisionMode !== "replay" && configuredVisionMode !== "live") {
   throw new Error("VITE_VISION_MODE must be replay or live.");
@@ -293,7 +295,7 @@ function StoreChrome({
 
         <div className="store-meta">
           <span>AI DISCOVERY</span>
-          {step && <span>{step} / 03</span>}
+          {step && <span>{step} / 04</span>}
         </div>
       </header>
     </>
@@ -710,15 +712,24 @@ function Calibration({
   onComplete: () => Promise<void>;
   onFrameCapture: () => Promise<void>;
 }) {
+  const [hasStarted, setHasStarted] = useState(false);
+
   useEffect(() => {
+    if (!hasStarted) return;
+
     let active = true;
+    let durationTimer: number | undefined;
     const frameTimer = window.setInterval(() => {
       void onFrameCapture().catch(() => undefined);
     }, CALIBRATION_CAPTURE_INTERVAL_MS);
+    const visualCalibrationComplete = new Promise<void>((resolve) => {
+      durationTimer = window.setTimeout(resolve, CALIBRATION_ATTEMPT_DURATION_MS);
+    });
 
     void (async () => {
       try {
         await onBegin();
+        await visualCalibrationComplete;
         if (active) await onComplete();
       } catch {
         // Complete the same guarded flow so a failed stream/calibration
@@ -727,17 +738,21 @@ function Calibration({
         if (active) await onComplete();
       } finally {
         window.clearInterval(frameTimer);
+        if (durationTimer !== undefined) window.clearTimeout(durationTimer);
       }
     })();
 
     return () => {
       active = false;
       window.clearInterval(frameTimer);
+      if (durationTimer !== undefined) window.clearTimeout(durationTimer);
     };
-  }, [onBegin, onComplete, onFrameCapture]);
+  }, [hasStarted, onBegin, onComplete, onFrameCapture]);
 
   const [targetIndex, setTargetIndex] = useState(0);
   useEffect(() => {
+    if (!hasStarted) return;
+
     let active = true;
     let currentIndex = 0;
     let targetTimer: number | undefined;
@@ -745,7 +760,8 @@ function Calibration({
       const duration = calibrationDwellMs(currentIndex);
       targetTimer = window.setTimeout(() => {
         if (!active) return;
-        currentIndex = (currentIndex + 1) % CALIBRATION_PATTERN.points.length;
+        if (currentIndex >= CALIBRATION_PATTERN.points.length - 1) return;
+        currentIndex += 1;
         setTargetIndex(currentIndex);
         scheduleNextTarget();
       }, duration);
@@ -755,7 +771,7 @@ function Calibration({
       active = false;
       if (targetTimer !== undefined) window.clearTimeout(targetTimer);
     };
-  }, []);
+  }, [hasStarted]);
   const [targetX, targetY] = CALIBRATION_PATTERN.points[targetIndex] ?? [0.5, 0.5];
   const isTrainingTarget = targetIndex < FULLSCREEN_TRAINING_POINTS.length;
   const phaseIndex = isTrainingTarget ? targetIndex + 1 : targetIndex - FULLSCREEN_TRAINING_POINTS.length + 1;
@@ -765,7 +781,12 @@ function Calibration({
 
   return (
     <main className="store-screen calibration-screen screen-enter">
-      <section className="calibration-page" aria-labelledby="calibration-title">
+      <section
+        className={`calibration-page ${
+          hasStarted ? "calibration-page--active" : "calibration-page--intro"
+        }`}
+        aria-labelledby="calibration-title"
+      >
         <div className="calibration-page__copy">
           <p className="section-label">EYE CALIBRATION</p>
           <h1 id="calibration-title">
@@ -776,23 +797,41 @@ function Calibration({
             고개는 편안히 두고 점만 눈으로 따라가세요. 점은 부드럽게 이동하며,
             한 번에 약 64초가 걸리며, 점이 멈춘 동안 계속 바라봐 주세요.
           </p>
-          <p className="calibration-page__progress" aria-live="polite">
-            {isTrainingTarget ? "보정" : "확인"} {phaseIndex}/{phaseCount}
-          </p>
+          {!hasStarted && (
+            <p className="calibration-page__warning" role="alert">
+              얼굴 위치를 화면 중앙에 맞추고, 보정이 끝날 때까지 얼굴과 몸을 움직이지 마세요.
+            </p>
+          )}
+          {hasStarted && (
+            <p className="calibration-page__progress" aria-live="polite">
+              {isTrainingTarget ? "보정" : "확인"} {phaseIndex}/{phaseCount}
+            </p>
+          )}
+          {!hasStarted && (
+            <button
+              className="store-button store-button--solid calibration-start-button"
+              type="button"
+              onClick={() => setHasStarted(true)}
+            >
+              시작
+            </button>
+          )}
           <button className="back-link" type="button" onClick={onHome}>
             ← 처음으로 돌아가기
           </button>
         </div>
 
         <div className="calibration-stage" aria-hidden="true">
-          <span
-            className="calibration-target"
-            style={{
-              left: `${targetX * 100}%`,
-              top: `${targetY * 100}%`,
-              transitionDuration: `${CALIBRATION_TARGET_TRANSITION_MS}ms`,
-            }}
-          />
+          {hasStarted && (
+            <span
+              className="calibration-target"
+              style={{
+                left: `${targetX * 100}%`,
+                top: `${targetY * 100}%`,
+                transitionDuration: `${CALIBRATION_TARGET_TRANSITION_MS}ms`,
+              }}
+            />
+          )}
         </div>
       </section>
     </main>
@@ -1721,8 +1760,7 @@ function App() {
       <LookbookPlayer
         key={manifest.video_id}
         cameraState={cameraState}
-        categoryLabel={selectedCategory ?? "전체 컬렉션"}
-        chrome={<StoreChrome onHome={restart} step="03" overlay />}
+        chrome={null}
         debugEnabled={enableAoiDebugOverlay}
         debugGazeLayout={latestGazeLayout}
         debugGazeReason={latestGazeReason}

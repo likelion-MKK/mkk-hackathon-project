@@ -29,7 +29,6 @@ export const ANALYSIS_SAMPLE_INTERVAL_MS = 250;
 
 type LookbookPlayerProps = {
   cameraState: CameraDisplayState;
-  categoryLabel: string;
   chrome: ReactNode;
   debugEnabled: boolean;
   debugGazeLayout: FrameContext["layout"] | null;
@@ -66,7 +65,6 @@ function toPixelRect(rect: DOMRect): PixelRect {
 
 export function LookbookPlayer({
   cameraState,
-  categoryLabel,
   chrome,
   debugEnabled,
   debugGazeLayout,
@@ -97,6 +95,31 @@ export function LookbookPlayer({
   const [playbackEpoch, setPlaybackEpoch] = useState(0);
   const [contextPreview, setContextPreview] = useState<FrameContext | null>(null);
   const [stageRect, setStageRect] = useState<PixelRect | null>(null);
+  const [areOverlaysVisible, setAreOverlaysVisible] = useState(true);
+  const overlayHideTimerRef = useRef<number | undefined>(undefined);
+
+  const revealOverlays = useCallback(() => {
+    setAreOverlaysVisible(true);
+    if (overlayHideTimerRef.current !== undefined) {
+      window.clearTimeout(overlayHideTimerRef.current);
+    }
+    overlayHideTimerRef.current = window.setTimeout(() => {
+      setAreOverlaysVisible(false);
+      overlayHideTimerRef.current = undefined;
+    }, 2_000);
+  }, []);
+
+  useEffect(() => {
+    overlayHideTimerRef.current = window.setTimeout(() => {
+      setAreOverlaysVisible(false);
+      overlayHideTimerRef.current = undefined;
+    }, 2_000);
+    return () => {
+      if (overlayHideTimerRef.current !== undefined) {
+        window.clearTimeout(overlayHideTimerRef.current);
+      }
+    };
+  }, [revealOverlays]);
 
   const incrementPlaybackEpoch = () => {
     playbackEpochRef.current = advancePlaybackEpoch(playbackEpochRef.current);
@@ -321,10 +344,17 @@ export function LookbookPlayer({
           : null;
 
   return (
-    <main className="store-screen lookbook-screen screen-enter" aria-labelledby="lookbook-title">
+    <main className="store-screen lookbook-screen screen-enter">
       {chrome}
 
-      <section className="lookbook-stage" ref={stageRef}>
+      <section
+        className="lookbook-stage"
+        ref={stageRef}
+        onPointerMove={revealOverlays}
+        onPointerDown={revealOverlays}
+        onFocusCapture={revealOverlays}
+        onKeyDown={revealOverlays}
+      >
         <video
           className="lookbook-video"
           ref={videoRef}
@@ -346,7 +376,13 @@ export function LookbookPlayer({
         {debugEnabled && (
           <>
             {contentStyle && (
-              <div className="lookbook-debug-canvas" style={contentStyle} aria-hidden="true">
+              <div
+                className={`lookbook-debug-canvas${
+                  areOverlaysVisible ? "" : " lookbook-overlay--hidden"
+                }`}
+                style={contentStyle}
+                aria-hidden="true"
+              >
                 {debugVideoPoint?.valid && !debugVideoPoint.outside_video && (
                   <span
                     className="lookbook-gaze-point"
@@ -359,7 +395,13 @@ export function LookbookPlayer({
               </div>
             )}
 
-            <aside className="lookbook-debug-panel" aria-label="AOI debug overlay" role="status">
+            <aside
+              className={`lookbook-debug-panel${
+                areOverlaysVisible ? "" : " lookbook-overlay--hidden"
+              }`}
+              aria-label="AOI debug overlay"
+              role="status"
+            >
               <div className="lookbook-debug-panel__topline">
                 <span>AOI MAP</span>
                 <span>DEV ONLY</span>
@@ -386,20 +428,6 @@ export function LookbookPlayer({
             </aside>
           </>
         )}
-
-        <div className="lookbook-stage__heading">
-          <p className="section-label">AI LOOKBOOK · {categoryLabel}</p>
-          <h1 id="lookbook-title">당신의 시선이 머무는 순간</h1>
-          <span>{videoId}</span>
-        </div>
-
-        <span className={`lookbook-camera-status is-${cameraState}`} role="status">
-          {cameraState === "ready"
-            ? "CAMERA ACTIVE · TEMPORARY VISION"
-            : cameraState === "requesting"
-              ? "CAMERA CONNECTING"
-              : "CAMERA OFF"}
-        </span>
 
         {(mediaMessage || cameraState !== "ready") && (
           <div className="lookbook-media-message" role="status">
@@ -430,7 +458,9 @@ export function LookbookPlayer({
           </div>
         )}
 
-        <div className="lookbook-controls">
+        <div
+          className={`lookbook-controls${areOverlaysVisible ? "" : " lookbook-overlay--hidden"}`}
+        >
           <button
             className="lookbook-play-button"
             type="button"
