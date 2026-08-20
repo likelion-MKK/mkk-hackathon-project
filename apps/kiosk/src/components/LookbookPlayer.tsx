@@ -41,6 +41,7 @@ type LookbookPlayerProps = {
   onCameraRetry: () => Promise<void>;
   onComplete: () => Promise<void>;
   onFrameCapture: (contextFactory: () => FrameContext) => Promise<void>;
+  nextFrameSequence: () => number;
   onHome: () => void;
   onPlaybackUnavailable: () => void;
 };
@@ -77,6 +78,7 @@ export function LookbookPlayer({
   onCameraRetry,
   onComplete,
   onFrameCapture,
+  nextFrameSequence,
   onHome,
   onPlaybackUnavailable,
 }: LookbookPlayerProps) {
@@ -84,7 +86,6 @@ export function LookbookPlayer({
   const stageRef = useRef<HTMLElement>(null);
   const playbackEpochRef = useRef(0);
   const sourceIdentityRef = useRef(`${videoId}\u0000${videoUrl}`);
-  const frameSequenceRef = useRef(0);
   const didCompleteRef = useRef(false);
   const [mediaState, setMediaState] = useState<MediaState>(
     videoUrl ? "loading" : "missing",
@@ -227,9 +228,8 @@ export function LookbookPlayer({
     const captureCurrentFrame = () => {
       if (!isActive) return;
 
-      const sequence = frameSequenceRef.current;
+      const sequence = nextFrameSequence();
       const frameId = `frame-${String(sequence).padStart(8, "0")}`;
-      frameSequenceRef.current += 1;
       void onFrameCapture(() => {
         const context = readFrameContext(sequence, frameId);
         if (!context) throw new Error("Lookbook frame context is unavailable.");
@@ -247,7 +247,7 @@ export function LookbookPlayer({
       isActive = false;
       window.clearInterval(captureTimer);
     };
-  }, [cameraState, isPlaying, mediaState, onFrameCapture, readFrameContext]);
+  }, [cameraState, isPlaying, mediaState, nextFrameSequence, onFrameCapture, readFrameContext]);
 
   const handleLoadedMetadata = () => {
     const video = videoRef.current;

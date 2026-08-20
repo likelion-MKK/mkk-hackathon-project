@@ -1,10 +1,24 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  SessionFrameSequence,
   advancePlaybackEpoch,
   calculateContainedVideoLayout,
   createFrameContext,
 } from "./video-context.ts";
+
+test("보정과 룩북 캡처는 Vision 세션 전체에서 증가하는 순번을 공유한다", () => {
+  const sequence = new SessionFrameSequence();
+
+  const calibrationSequences = [sequence.next(), sequence.next(), sequence.next()];
+  const lookbookSequences = [sequence.next(), sequence.next()];
+
+  assert.deepEqual(calibrationSequences, [0, 1, 2]);
+  assert.deepEqual(lookbookSequences, [3, 4]);
+
+  sequence.reset();
+  assert.equal(sequence.next(), 0);
+});
 
 test("seek, replay, source replacement each advance playback epoch", () => {
   let playbackEpoch = 0;

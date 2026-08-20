@@ -58,6 +58,7 @@ import {
   type RecommendationPresentation,
 } from "./app/recommendation-presentation.ts";
 import {
+  SessionFrameSequence,
   calculateContainedVideoLayout,
   createFrameContext,
   type FrameContext,
@@ -1094,8 +1095,13 @@ function App() {
   const sessionStartAbortController = useRef<AbortController | null>(null);
   const recommendationAbortController = useRef<AbortController | null>(null);
   const calibrationPromise = useRef<ReturnType<typeof visionClient.startCalibration> | null>(null);
-  const calibrationSequence = useRef(0);
+  const [visionFrameSequence] = useState(() => new SessionFrameSequence());
   const pollingSessionId = useRef<string | null>(null);
+
+  const nextVisionFrameSequence = useCallback(
+    () => visionFrameSequence.next(),
+    [visionFrameSequence],
+  );
 
   const abortSessionStart = useCallback(() => {
     sessionStartAbortController.current?.abort();
@@ -1151,7 +1157,7 @@ function App() {
     recommendationAbortController.current?.abort();
     recommendationAbortController.current = null;
     calibrationPromise.current = null;
-    calibrationSequence.current = 0;
+    visionFrameSequence.reset();
     frameSource.stop();
     if (session && screen !== "report") {
       if (useMockApi) void mockApiClient.discardSession(session.session_id);
@@ -1183,7 +1189,7 @@ function App() {
         setFlowError("이전 Vision 세션을 종료하지 못했습니다.");
       }
     }
-  }, [abortSessionStart, flowController, screen, send, session]);
+  }, [abortSessionStart, flowController, screen, send, session, visionFrameSequence]);
 
   const cancelConsent = useCallback(async () => {
     const generation = flowController.invalidateCurrentFlow();
@@ -1191,7 +1197,7 @@ function App() {
     recommendationAbortController.current?.abort();
     recommendationAbortController.current = null;
     calibrationPromise.current = null;
-    calibrationSequence.current = 0;
+    visionFrameSequence.reset();
     frameSource.stop();
     gazeSamples.current.length = 0;
     gazeUnavailableSamples.current.length = 0;
@@ -1219,11 +1225,13 @@ function App() {
         setFlowError("이전 Vision 세션을 종료하지 못했습니다.");
       }
     }
-  }, [abortSessionStart, flowController, send]);
+  }, [abortSessionStart, flowController, send, visionFrameSequence]);
 
   const handleConsentTimeout = useCallback(() => {
     const generation = flowController.invalidateCurrentFlow();
     abortSessionStart();
+    calibrationPromise.current = null;
+    visionFrameSequence.reset();
     frameSource.stop();
     gazeSamples.current.length = 0;
     gazeUnavailableSamples.current.length = 0;
@@ -1242,7 +1250,7 @@ function App() {
         setFlowError("시간 초과 후 Vision 세션을 정리하지 못했습니다.");
       }
     });
-  }, [abortSessionStart, flowController]);
+  }, [abortSessionStart, flowController, visionFrameSequence]);
 
   const beginSession = async () => {
     if (!selectedCategory || isStarting || sessionStartAbortController.current) return;
@@ -1251,6 +1259,8 @@ function App() {
     gazeUnavailableSamples.current.length = 0;
     videoLayoutsByFrameId.current.clear();
     pollingSessionId.current = null;
+    calibrationPromise.current = null;
+    visionFrameSequence.reset();
     setLatestGazeSample(null);
     setLatestGazeLayout(null);
     setLatestGazeReason(null);
@@ -1354,7 +1364,6 @@ function App() {
 
   const beginCalibration = useCallback(() => {
     if (calibrationPromise.current) return calibrationPromise.current;
-    calibrationSequence.current = 0;
     const promise = flowController.runSerialized(() =>
       visionClient.startCalibration(CALIBRATION_PATTERN),
     );
@@ -1408,8 +1417,7 @@ function App() {
         height_px: viewportHeight,
       },
     });
-    const sequence = calibrationSequence.current;
-    calibrationSequence.current += 1;
+    const sequence = nextVisionFrameSequence();
     const context = createFrameContext({
       session_id: session.session_id,
       sequence,
@@ -1424,7 +1432,7 @@ function App() {
     await frameSource.capture(context, async (frame, frameContext, signal) => {
       await visionClient.sendFrame(frame, frameContext, { signal });
     });
-  }, [manifest, session]);
+  }, [manifest, nextVisionFrameSequence, session]);
 
   const completeLookbook = useCallback(async () => {
     const generation = flowController.captureGeneration();
@@ -1772,6 +1780,7 @@ function App() {
         onCameraRetry={retryCamera}
         onComplete={completeLookbook}
         onFrameCapture={captureCameraFrame}
+        nextFrameSequence={nextVisionFrameSequence}
         onHome={restart}
         onPlaybackUnavailable={handlePlaybackUnavailable}
       />

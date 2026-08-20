@@ -45,6 +45,25 @@ export type FrameContextInput = {
   layout: VideoLayout;
 };
 
+/**
+ * Allocates frame sequences for one Vision Stream session.
+ * Calibration and lookbook captures must share the same instance because the
+ * gateway validates sequence ordering across the whole session.
+ */
+export class SessionFrameSequence {
+  private nextValue = 0;
+
+  next(): number {
+    const value = this.nextValue;
+    this.nextValue += 1;
+    return value;
+  }
+
+  reset(): void {
+    this.nextValue = 0;
+  }
+}
+
 function requirePositiveFinite(value: number, name: string): void {
   if (!Number.isFinite(value) || value <= 0) {
     throw new RangeError(`${name} must be a positive finite number.`);
