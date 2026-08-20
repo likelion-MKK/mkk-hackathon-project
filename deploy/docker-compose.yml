@@ -1,5 +1,6 @@
 services:
   api:
+    image: mcm-api:${MCM_RELEASE_ID:-manual}
     build:
       context: ..
       dockerfile: deploy/Dockerfile.api
@@ -20,6 +21,7 @@ services:
     restart: unless-stopped
 
   vision-gateway:
+    image: mcm-vision-gateway:${MCM_RELEASE_ID:-manual}
     build:
       context: ..
       dockerfile: deploy/Dockerfile.vision
@@ -33,6 +35,7 @@ services:
     restart: unless-stopped
 
   eye-worker:
+    image: mcm-eye-worker:${MCM_RELEASE_ID:-manual}
     build:
       context: ..
       dockerfile: deploy/Dockerfile.eye
@@ -46,6 +49,7 @@ services:
     restart: unless-stopped
 
   web:
+    image: mcm-web:${MCM_RELEASE_ID:-manual}
     build:
       context: ..
       dockerfile: deploy/Dockerfile.web

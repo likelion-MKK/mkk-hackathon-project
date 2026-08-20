@@ -1,0 +1,130 @@
+name: Deploy production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Test frontend workspaces
+        run: npm test
+
+      - name: Lint frontend workspaces
+        run: npm run lint
+
+      - name: Build frontend workspaces
+        run: npm run build
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13.15"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+
+      - name: Sync backend test dependencies
+        run: uv sync --project apps/api --locked --all-groups
+
+      - name: Validate contracts
+        run: uv run --project apps/api --locked python scripts/validate_contracts.py
+
+      - name: Run contract and integration tests
+        run: >-
+          uv run --project apps/api --locked pytest
+          -c apps/api/pyproject.toml
+          --rootdir .
+          tests/contract
+          tests/integration
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: https://yangyu.cloud/
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Configure pinned SSH access
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_USER"
+          test -n "$DEPLOY_SSH_KEY"
+          test -n "$DEPLOY_KNOWN_HOSTS"
+          install -d -m 0700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 0600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
+
+      - name: Package the exact main commit
+        shell: bash
+        run: git archive --format=tar.gz --output=mcm-release.tar.gz "$GITHUB_SHA"
+
+      - name: Upload and deploy release
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_id="${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          remote_archive="/srv/mcm/incoming/${release_id}.tar.gz"
+          ssh_options=(
+            -i "$HOME/.ssh/id_ed25519"
+            -o BatchMode=yes
+            -o IdentitiesOnly=yes
+            -o StrictHostKeyChecking=yes
+          )
+          ssh "${ssh_options[@]}" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "install -d -m 0755 /srv/mcm/incoming"
+          scp "${ssh_options[@]}" mcm-release.tar.gz \
+            "$DEPLOY_USER@$DEPLOY_HOST:$remote_archive"
+          ssh "${ssh_options[@]}" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "bash -s -- '$release_id' '$GITHUB_SHA'" < deploy/deploy-release.sh
+
+      - name: Record deployment summary
+        shell: bash
+        run: |
+          {
+            echo "### Production deployment"
+            echo ""
+            echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- Branch: \`$GITHUB_REF_NAME\`"
+            echo "- URL: https://yangyu.cloud/"
+          } >> "$GITHUB_STEP_SUMMARY"

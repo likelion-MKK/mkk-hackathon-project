@@ -173,6 +173,30 @@ curl -f http://127.0.0.1/readyz
 HTTP→HTTPS redirect, `wss://` 원격 camera E2E를 추가한다. public IP만으로는 고객
 브라우저 camera 운영을 acceptance로 보지 않는다.
 
+## GitHub main 자동 배포
+
+[`deploy-production.yml`](../.github/workflows/deploy-production.yml)은 `main` push와
+수동 실행을 production deployment로 기록한다. Frontend test·lint·build, Contract
+검증과 Backend contract·integration test가 모두 통과한 뒤에만 Gabia 서버로 정확한
+Git commit archive를 전송한다.
+
+GitHub repository Actions secrets에는 다음 값만 등록한다.
+
+- `DEPLOY_HOST`: Gabia public host
+- `DEPLOY_USER`: 전용 공개키가 등록된 SSH 사용자
+- `DEPLOY_SSH_KEY`: GitHub Actions 배포 전용 private key
+- `DEPLOY_KNOWN_HOSTS`: 신뢰한 서버의 pinned SSH host key
+
+운영 `OPENAI_API_KEY`, `DATABASE_URL`, `VISION_STREAM_TOKEN_SECRET`은 GitHub로
+전송하지 않는다. 서버의 `/srv/mcm/shared/deploy.env`에 권한 `0600`으로 보관하고
+새 릴리스가 이를 복사해 사용한다. Migration과 seed는 자동 배포에서 실행하지 않는다.
+
+서버의 [`deploy-release.sh`](deploy-release.sh)는
+`/srv/mcm/releases/<commit-run-attempt>`에 새 릴리스를 만들고 commit별 Docker image를
+모두 빌드한 뒤에만 `/srv/mcm/current`를 전환한다. 공개 `/readyz`, Kiosk root, 영상
+Range 응답과 모든 Compose service를 검증한다. 전환 뒤 검증이 실패하면 보존된 이전
+릴리스 symlink와 image로 자동 복구하며 기존 릴리스는 자동 삭제하지 않는다.
+
 ## 배포 전 확인
 
 - `npm test`, `npm run lint`, `npm run build`를 Node 24.19.0에서 실행
