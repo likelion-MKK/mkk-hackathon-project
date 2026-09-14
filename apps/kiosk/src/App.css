@@ -952,26 +952,201 @@
   inset: 0;
   overflow: hidden;
   background:
-    linear-gradient(rgba(0, 0, 0, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.035) 1px, transparent 1px),
+    linear-gradient(rgba(0, 0, 0, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.025) 1px, transparent 1px),
     #ecebe8;
   background-size: 12.5% 12.5%;
 }
 
 .calibration-target {
   position: absolute;
-  z-index: 3;
-  width: 32px;
-  height: 32px;
-  border: 8px solid var(--black);
+  z-index: 6;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid rgba(17, 17, 17, 0.82);
   border-radius: 50%;
   background: var(--white);
-  box-shadow: 0 0 0 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 0 0 6px rgba(17, 17, 17, 0.06);
+  cursor: default;
   pointer-events: none;
   transform: translate(-50%, -50%);
   transition-property: left, top;
   transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
   will-change: left, top;
+}
+
+.calibration-target--focused {
+  box-shadow:
+    0 0 0 6px rgba(17, 17, 17, 0.1),
+    0 0 0 11px rgba(17, 17, 17, 0.04);
+}
+
+button.calibration-target {
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.calibration-target__core {
+  position: relative;
+  z-index: 1;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--black);
+}
+
+.calibration-target__dwell {
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  left: 50%;
+  width: 46px;
+  height: 46px;
+  border: 1px solid rgba(17, 17, 17, 0.32);
+  border-radius: 50%;
+  opacity: 0.72;
+  transform-origin: center;
+  transition: border-color 160ms ease, opacity 160ms ease;
+}
+
+.calibration-target--focused .calibration-target__dwell {
+  opacity: 1;
+  border-color: rgba(17, 17, 17, 0.72);
+}
+
+.calibration-target--focused .calibration-target__core {
+  transform: scale(1.25);
+}
+
+.calibration-target--tracking .calibration-target__core,
+.calibration-target--holding .calibration-target__core {
+  animation: calibration-target-breathe 1.4s ease-in-out infinite;
+}
+
+.calibration-feedback {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid rgba(17, 17, 17, 0.34);
+  border-radius: 50%;
+  color: var(--black);
+  font-size: 0.7rem;
+  font-weight: 700;
+  transform: translate(-50%, -50%);
+  animation: calibration-feedback-out 260ms ease-out both;
+  pointer-events: none;
+}
+
+.calibration-feedback--captured {
+  border-color: var(--black);
+}
+
+.calibration-feedback--preview {
+  border-style: dashed;
+}
+
+.calibration-hud {
+  position: absolute;
+  z-index: 5;
+  top: clamp(0.9rem, 2vw, 1.6rem);
+  left: clamp(0.9rem, 2vw, 1.6rem);
+  width: min(13rem, calc(100vw - 1.8rem));
+  pointer-events: none;
+}
+
+.calibration-hud__meta {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 0.65rem;
+  color: #4f4f4f;
+  font-size: 0.47rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.calibration-hud__meta strong {
+  color: var(--black);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+}
+
+.calibration-hud__remaining {
+  color: #7a7a7a;
+  font-size: 0.42rem;
+}
+
+.calibration-hud__progress {
+  height: 2px;
+  margin-top: 0.45rem;
+  overflow: hidden;
+  background: rgba(17, 17, 17, 0.14);
+}
+
+.calibration-hud__progress span {
+  display: block;
+  height: 100%;
+  background: var(--black);
+  transition: width 180ms linear;
+}
+
+.calibration-hud__status {
+  margin-top: 0.5rem;
+  color: #3e3e3e;
+  font-size: 0.58rem;
+  line-height: 1.45;
+}
+
+.calibration-hud__fallback {
+  margin-top: 0.4rem;
+  color: #777;
+  font-size: 0.4rem;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+}
+
+@keyframes calibration-target-breathe {
+  0%,
+  100% {
+    opacity: 0.7;
+    transform: scale(0.84);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes calibration-feedback-out {
+  0% {
+    opacity: 0.56;
+    transform: translate(-50%, -50%) scale(0.84);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.32);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .calibration-target__core,
+  .calibration-feedback {
+    animation: none !important;
+  }
+
+  .calibration-feedback {
+    opacity: 0;
+  }
+
+  .calibration-target--focused .calibration-target__core {
+    transform: none;
+  }
 }
 
 /* << S03-B: AI LOOKBOOK 영상 >> */
@@ -1481,6 +1656,22 @@
     visibility: hidden;
   }
 
+  /* << S03-A: 작은 화면에서도 보정 stage는 viewport를 고정 사용 >> */
+
+  .calibration-screen--active {
+    height: 100svh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .calibration-page--active {
+    min-height: 100svh;
+  }
+
+  .calibration-hud {
+    width: min(12.5rem, calc(100vw - 2rem));
+  }
+
   .store-meta span:first-child {
     display: none;
   }
@@ -1625,6 +1816,25 @@
 
   .store-header {
     height: 68px;
+  }
+
+  .calibration-hud {
+    top: 0.75rem;
+    left: 0.75rem;
+    width: min(12rem, calc(100vw - 1.5rem));
+  }
+
+  .calibration-hud__meta {
+    gap: 0.45rem;
+  }
+
+  .calibration-hud__status {
+    font-size: 0.54rem;
+  }
+
+  .calibration-target__dwell {
+    width: 40px;
+    height: 40px;
   }
 
   .wordmark {

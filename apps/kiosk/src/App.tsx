@@ -133,6 +133,7 @@ const visionClient =
         frameEncoder: browserFrameEncoder,
       })
     : new FakeRemoteVisionClient();
+const calibrationFallbackEnabled = import.meta.env.DEV;
 const enableAoiDebugOverlay =
   import.meta.env.DEV || import.meta.env.VITE_KIOSK_DEBUG_AOI === "true";
 const MAX_CAPTURED_FRAME_LAYOUTS = 2_048;
@@ -707,13 +708,64 @@ function Calibration({
   onBegin,
   onComplete,
   onFrameCapture,
+  gazeSample,
 }: {
   onHome: () => void;
   onBegin: () => Promise<unknown>;
   onComplete: () => Promise<void>;
   onFrameCapture: () => Promise<void>;
+  gazeSample: GazeSample | null;
 }) {
   const [hasStarted, setHasStarted] = useState(false);
+  const [targetIndex, setTargetIndex] = useState(0);
+  const [targetStartMonoMs, setTargetStartMonoMs] = useState(0);
+  const [targetElapsedMs, setTargetElapsedMs] = useState(0);
+  const [targetFocusedElapsedMs, setTargetFocusedElapsedMs] = useState(0);
+  const [lastFeedback, setLastFeedback] = useState<{
+    index: number;
+    kind: "captured" | "step-complete" | "preview";
+  } | null>(null);
+  const targetFocusedDuration = useRef(0);
+  const isGazeNearTargetRef = useRef(false);
+  const lastAnimationAt = useRef(0);
+  const targetStartedAt = useRef(0);
+  const feedbackTimer = useRef<number | undefined>(undefined);
+  const completionRequested = useRef(false);
+
+  const totalTargetCount = CALIBRATION_PATTERN.points.length;
+  const currentDwellMs = calibrationDwellMs(targetIndex);
+  const targetProgress = Math.min(1, targetElapsedMs / currentDwellMs);
+  const gazeDwellProgress = Math.min(1, targetFocusedElapsedMs / currentDwellMs);
+  const [targetX, targetY] = CALIBRATION_PATTERN.points[targetIndex] ?? [0.5, 0.5];
+  const isTrainingTarget = targetIndex < FULLSCREEN_TRAINING_POINTS.length;
+  const phaseIndex = isTrainingTarget
+    ? targetIndex + 1
+    : targetIndex - FULLSCREEN_TRAINING_POINTS.length + 1;
+  const phaseCount = isTrainingTarget
+    ? FULLSCREEN_TRAINING_POINTS.length
+    : totalTargetCount - FULLSCREEN_TRAINING_POINTS.length;
+  const hasGazeCoordinates = gazeSample?.valid === true;
+  const hasFreshGazeCoordinates =
+    hasGazeCoordinates &&
+    gazeSample !== null &&
+    gazeSample.captured_at_mono_ms >= targetStartMonoMs;
+  const gazeDistance = hasFreshGazeCoordinates && gazeSample
+    ? Math.hypot(
+        gazeSample.screen_x_norm - targetX,
+        gazeSample.screen_y_norm - targetY,
+      )
+    : Number.POSITIVE_INFINITY;
+  const isGazeNearTarget = hasFreshGazeCoordinates && gazeDistance <= 0.14;
+  const targetState = isGazeNearTarget
+    ? "focused"
+    : targetElapsedMs > CALIBRATION_TARGET_TRANSITION_MS
+      ? "holding"
+      : "tracking";
+  const holdingProgress = hasFreshGazeCoordinates ? gazeDwellProgress : targetProgress;
+  const overallProgress = Math.min(
+    100,
+    ((targetIndex + targetProgress) / totalTargetCount) * 100,
+  );
 
   useEffect(() => {
     if (!hasStarted) return;
@@ -731,12 +783,18 @@ function Calibration({
       try {
         await onBegin();
         await visualCalibrationComplete;
-        if (active) await onComplete();
+        if (active && !completionRequested.current) {
+          completionRequested.current = true;
+          await onComplete();
+        }
       } catch {
         // Complete the same guarded flow so a failed stream/calibration
         // request is surfaced by the parent instead of becoming an
         // unhandled promise rejection.
-        if (active) await onComplete();
+        if (active && !completionRequested.current) {
+          completionRequested.current = true;
+          await onComplete();
+        }
       } finally {
         window.clearInterval(frameTimer);
         if (durationTimer !== undefined) window.clearTimeout(durationTimer);
@@ -750,43 +808,135 @@ function Calibration({
     };
   }, [hasStarted, onBegin, onComplete, onFrameCapture]);
 
-  const [targetIndex, setTargetIndex] = useState(0);
+  useEffect(() => {
+    if (!hasStarted) return;
+
+    targetStartedAt.current = performance.now();
+    targetFocusedDuration.current = 0;
+    isGazeNearTargetRef.current = false;
+    lastAnimationAt.current = targetStartedAt.current;
+
+    let animationFrame: number | undefined;
+    const tick = () => {
+      const now = performance.now();
+      if (isGazeNearTargetRef.current) {
+        targetFocusedDuration.current += now - lastAnimationAt.current;
+        setTargetFocusedElapsedMs(targetFocusedDuration.current);
+      }
+      lastAnimationAt.current = now;
+      const elapsed = Math.min(currentDwellMs, now - targetStartedAt.current);
+      setTargetElapsedMs(elapsed);
+      if (elapsed < currentDwellMs) {
+        animationFrame = window.requestAnimationFrame(tick);
+      }
+    };
+    animationFrame = window.requestAnimationFrame(tick);
+
+    return () => {
+      if (animationFrame !== undefined) window.cancelAnimationFrame(animationFrame);
+    };
+  }, [currentDwellMs, hasStarted, targetIndex]);
+
+  useEffect(() => {
+    isGazeNearTargetRef.current = hasStarted && isGazeNearTarget;
+  }, [hasStarted, isGazeNearTarget]);
+
+  const showFeedback = useCallback((feedback: {
+    index: number;
+    kind: "captured" | "step-complete" | "preview";
+  }) => {
+    if (feedbackTimer.current !== undefined) {
+      window.clearTimeout(feedbackTimer.current);
+    }
+    setLastFeedback(feedback);
+    feedbackTimer.current = window.setTimeout(() => {
+      setLastFeedback(null);
+      feedbackTimer.current = undefined;
+    }, 260);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (feedbackTimer.current !== undefined) {
+        window.clearTimeout(feedbackTimer.current);
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
     if (!hasStarted) return;
 
     let active = true;
-    let currentIndex = 0;
-    let targetTimer: number | undefined;
-    const scheduleNextTarget = () => {
-      const duration = calibrationDwellMs(currentIndex);
-      targetTimer = window.setTimeout(() => {
-        if (!active) return;
-        if (currentIndex >= CALIBRATION_PATTERN.points.length - 1) return;
-        currentIndex += 1;
-        setTargetIndex(currentIndex);
-        scheduleNextTarget();
-      }, duration);
-    };
-    scheduleNextTarget();
+    const targetTimer = window.setTimeout(() => {
+      if (!active) return;
+
+      const currentIndex = targetIndex;
+      const focusedDurationAtCompletion =
+        targetFocusedDuration.current +
+        (isGazeNearTargetRef.current ? performance.now() - lastAnimationAt.current : 0);
+      showFeedback({
+        index: currentIndex,
+        kind:
+          focusedDurationAtCompletion >= currentDwellMs - CALIBRATION_CAPTURE_INTERVAL_MS
+            ? "captured"
+            : "step-complete",
+      });
+      if (currentIndex < totalTargetCount - 1) {
+        setTargetStartMonoMs(performance.now());
+        setTargetElapsedMs(0);
+        setTargetFocusedElapsedMs(0);
+        setTargetIndex(currentIndex + 1);
+      }
+    }, currentDwellMs);
+
     return () => {
       active = false;
-      if (targetTimer !== undefined) window.clearTimeout(targetTimer);
+      window.clearTimeout(targetTimer);
     };
-  }, [hasStarted]);
-  const [targetX, targetY] = CALIBRATION_PATTERN.points[targetIndex] ?? [0.5, 0.5];
-  const isTrainingTarget = targetIndex < FULLSCREEN_TRAINING_POINTS.length;
-  const phaseIndex = isTrainingTarget ? targetIndex + 1 : targetIndex - FULLSCREEN_TRAINING_POINTS.length + 1;
-  const phaseCount = isTrainingTarget
-    ? FULLSCREEN_TRAINING_POINTS.length
-    : CALIBRATION_PATTERN.points.length - FULLSCREEN_TRAINING_POINTS.length;
+  }, [currentDwellMs, hasStarted, showFeedback, targetIndex, totalTargetCount]);
+
+  const advanceFallbackTarget = useCallback(() => {
+    if (!calibrationFallbackEnabled || targetIndex >= totalTargetCount - 1) return;
+    showFeedback({ index: targetIndex, kind: "preview" });
+    setTargetStartMonoMs(performance.now());
+    setTargetElapsedMs(0);
+    setTargetFocusedElapsedMs(0);
+    setTargetIndex((currentIndex) => Math.min(currentIndex + 1, totalTargetCount - 1));
+  }, [showFeedback, targetIndex, totalTargetCount]);
+
+  useEffect(() => {
+    if (!hasStarted || !calibrationFallbackEnabled) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      advanceFallbackTarget();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [advanceFallbackTarget, hasStarted]);
+
+  const liveStatus = isGazeNearTarget
+    ? "시선이 타깃에 머물고 있습니다."
+    : "타깃을 바라보며 잠시 머물러 주세요.";
+  const targetAriaLabel = `보정 타깃 ${targetIndex + 1}번. ${liveStatus}`;
+  const startTracking = () => {
+    setTargetStartMonoMs(performance.now());
+    setHasStarted(true);
+  };
 
   return (
-    <main className="store-screen calibration-screen screen-enter">
+    <main
+      className={`store-screen calibration-screen screen-enter ${
+        hasStarted ? "calibration-screen--active" : ""
+      }`}
+    >
       <section
         className={`calibration-page ${
           hasStarted ? "calibration-page--active" : "calibration-page--intro"
         }`}
-        aria-labelledby="calibration-title"
+        aria-labelledby={hasStarted ? "calibration-tracking-title" : "calibration-title"}
       >
         <div className="calibration-page__copy">
           <p className="section-label">EYE CALIBRATION</p>
@@ -812,7 +962,7 @@ function Calibration({
             <button
               className="store-button store-button--solid calibration-start-button"
               type="button"
-              onClick={() => setHasStarted(true)}
+              onClick={startTracking}
             >
               시작
             </button>
@@ -822,16 +972,102 @@ function Calibration({
           </button>
         </div>
 
-        <div className="calibration-stage" aria-hidden="true">
-          {hasStarted && (
+        {hasStarted && (
+          <div className="calibration-hud" aria-describedby="calibration-tracking-status">
+            <h2 id="calibration-tracking-title" className="sr-only">
+              시선 보정 진행 중
+            </h2>
+            <div className="calibration-hud__meta">
+              <span className="calibration-hud__phase-name">
+                {isTrainingTarget ? "TRAINING" : "VALIDATION"}
+              </span>
+              <strong>
+                {String(targetIndex + 1).padStart(2, "0")} / {String(totalTargetCount).padStart(2, "0")}
+              </strong>
+              <span className="calibration-hud__remaining">
+                {totalTargetCount - targetIndex - 1} LEFT
+              </span>
+            </div>
+            <div
+              className="calibration-hud__progress"
+              role="progressbar"
+              aria-label="보정 전체 진행률"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(overallProgress)}
+            >
+              <span style={{ width: `${overallProgress}%` }} />
+            </div>
+            <p id="calibration-tracking-status" className="calibration-hud__status" aria-live="polite">
+              <span className="sr-only">
+                타깃 {targetIndex + 1}/{totalTargetCount}. {isTrainingTarget ? "보정" : "확인"} {phaseIndex}/{phaseCount}.
+              </span>
+              {liveStatus}
+            </p>
+            {calibrationFallbackEnabled && (
+              <p className="calibration-hud__fallback">
+                DEV PREVIEW · CLICK / ENTER / SPACE
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="calibration-stage" aria-hidden={!hasStarted}>
+          {hasStarted && lastFeedback && (
             <span
-              className="calibration-target"
+              className={`calibration-feedback calibration-feedback--${lastFeedback.kind}`}
               style={{
-                left: `${targetX * 100}%`,
-                top: `${targetY * 100}%`,
-                transitionDuration: `${CALIBRATION_TARGET_TRANSITION_MS}ms`,
+                left: `${Math.min(95, Math.max(5, (CALIBRATION_PATTERN.points[lastFeedback.index]?.[0] ?? 0.5) * 100))}%`,
+                top: `${Math.min(95, Math.max(5, (CALIBRATION_PATTERN.points[lastFeedback.index]?.[1] ?? 0.5) * 100))}%`,
               }}
-            />
+              aria-hidden="true"
+            >
+              {lastFeedback.kind === "captured" ? "✓" : ""}
+            </span>
+          )}
+          {hasStarted && (
+            calibrationFallbackEnabled ? (
+              <button
+                className={`calibration-target calibration-target--${targetState}`}
+                type="button"
+                aria-label={targetAriaLabel}
+                onClick={advanceFallbackTarget}
+                style={{
+                  left: `${Math.min(95, Math.max(5, targetX * 100))}%`,
+                  top: `${Math.min(95, Math.max(5, targetY * 100))}%`,
+                  transitionDuration: `${CALIBRATION_TARGET_TRANSITION_MS}ms`,
+                }}
+              >
+                <span
+                  className="calibration-target__dwell"
+                  style={{
+                    transform: `translate(-50%, -50%) scale(${1.55 - holdingProgress * 0.55})`,
+                  }}
+                  aria-hidden="true"
+                />
+                <span className="calibration-target__core" aria-hidden="true" />
+              </button>
+            ) : (
+              <span
+                className={`calibration-target calibration-target--${targetState}`}
+                role="img"
+                aria-label={targetAriaLabel}
+                style={{
+                  left: `${Math.min(95, Math.max(5, targetX * 100))}%`,
+                  top: `${Math.min(95, Math.max(5, targetY * 100))}%`,
+                  transitionDuration: `${CALIBRATION_TARGET_TRANSITION_MS}ms`,
+                }}
+              >
+                <span
+                  className="calibration-target__dwell"
+                  style={{
+                    transform: `translate(-50%, -50%) scale(${1.55 - holdingProgress * 0.55})`,
+                  }}
+                  aria-hidden="true"
+                />
+                <span className="calibration-target__core" aria-hidden="true" />
+              </span>
+            )
           )}
         </div>
       </section>
@@ -1749,6 +1985,7 @@ function App() {
         onBegin={beginCalibration}
         onComplete={completeCalibration}
         onFrameCapture={captureCalibrationFrame}
+        gazeSample={latestGazeSample}
         onHome={restart}
       />
     );
