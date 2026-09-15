@@ -15,7 +15,7 @@
 - model: `gpt-5.6-luna`
 - reasoning: `effort=medium`, `context=current_turn` (2026-09-15 사용자 결정으로 변경)
 - input: variant C 전체 파생 JSON, 검수된 상품 정확히 10개
-- prompt: `central-recommender-ko-v4`, SHA-256 `bc1186d1e3f1e908e8a865ae8f89c35f7e6c3172ccd010018101141d5a350149`
+- prompt: `central-recommender-ko-v7`
 - API: Responses API, `store=false`, tool·web·conversation 없음
 - retry: 0
 - client timeout: 없음

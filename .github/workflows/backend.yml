@@ -60,7 +60,7 @@ jobs:
       - name: Sync dependencies
         run: uv sync --locked --all-groups
 
-      - name: Run contract and integration tests
+      - name: Run unit, contract and integration tests
         env:
           PYTHONPATH: ${{ github.workspace }}
-        run: uv run --locked pytest ../../tests/contract ../../tests/integration
+        run: uv run --locked pytest tests ../../tests/contract ../../tests/integration

@@ -39,7 +39,7 @@ $env:CENTRAL_AI_MODEL_REVISION = "gpt-5.6-luna"
 $env:CENTRAL_AI_REASONING_EFFORT = "medium"
 $env:CENTRAL_AI_REASONING_CONTEXT = "current_turn"
 $env:CENTRAL_AI_INPUT_VARIANT = "C"
-$env:CENTRAL_AI_PROMPT_VERSION = "central-recommender-ko-v6"
+$env:CENTRAL_AI_PROMPT_VERSION = "central-recommender-ko-v7"
 [Environment]::SetEnvironmentVariable("RECOMMENDATION_CATALOG_PATH", $null, "Process")
 [Environment]::SetEnvironmentVariable("RECOMMENDATION_MATCHING_CATALOG_PATH", $null, "Process")
 
