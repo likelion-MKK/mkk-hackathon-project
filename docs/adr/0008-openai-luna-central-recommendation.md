@@ -13,9 +13,9 @@
 중앙 추천 production candidate로 다음 조합을 선택한다.
 
 - model: `gpt-5.6-luna`
-- reasoning: `effort=max`, `context=current_turn`
+- reasoning: `effort=medium`, `context=current_turn` (2026-09-15 사용자 결정으로 변경)
 - input: variant C 전체 파생 JSON, 검수된 상품 정확히 10개
-- prompt: `central-recommender-ko-v4`, SHA-256 `bc1186d1e3f1e908e8a865ae8f89c35f7e6c3172ccd010018101141d5a350149`
+- prompt: `central-recommender-ko-v7`
 - API: Responses API, `store=false`, tool·web·conversation 없음
 - retry: 0
 - client timeout: 없음
@@ -26,6 +26,10 @@
 
 이 결정은 배포 구현의 기준이다. 실제 API key, Supabase project, domain/TLS와
 운영 canary는 별도 배포 Gate이며, 이 ADR의 수락만으로 외부 고객 트래픽을 시작하지 않는다.
+
+## 2026-09-15 추론 강도 변경
+
+응답 대기시간을 줄이려는 사용자 요청에 따라 운영 추론 강도를 `max`에서 `medium`으로 변경한다. 모델 ID와 기존 프롬프트는 유지한다. 코드 기본값·검증, 환경 설정 예제와 로컬 실행 스크립트에 함께 반영한다. 기존 배포 환경의 `CENTRAL_AI_REASONING_EFFORT`도 `medium`으로 바꾸고 API를 재시작해야 적용된다. 아래 Max 평가 수치는 역사적 근거이며 Medium의 품질·지연 검증 결과가 아니다. Medium의 실제 지연·품질은 별도 확인이 필요하다.
 
 ## 근거
 

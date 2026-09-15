@@ -13,7 +13,7 @@
 
 모델 입력에는 정확히 10개 상품의 `product_id`, controlled tag, 팀 작성 추천 summary만 사용합니다. `official_product_url`, image와 QR asset이 미검증이면 `null+reason`을 유지하며 추천 model이 URL이나 상품 정보를 만들게 하지 않습니다.
 
-운영 provider는 `CENTRAL_AI_PROVIDER=openai_luna`, `gpt-5.6-luna`, reasoning `max/current_turn`, `store=false`, tools/web/conversation 없음, retry 0, inference deadline 없음으로 고정합니다. Responses API의 strict JSON과 서버 catalog·evidence·tag validator를 모두 통과하지 못하면 fail-closed합니다.
+운영 provider는 `CENTRAL_AI_PROVIDER=openai_luna`, `gpt-5.6-luna`, reasoning `medium/current_turn`, `store=false`, tools/web/conversation 없음, retry 0, inference deadline 없음으로 고정합니다. Responses API의 strict JSON과 서버 catalog·evidence·tag validator를 모두 통과하지 못하면 fail-closed합니다.
 
 ## 입력·출력 계약
 

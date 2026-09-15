@@ -72,7 +72,7 @@ Max 기반 중앙 추천 v2 vertical slice와 로컬 배포 준비가 구현되�
 - bounded session buffer, frame fusion, 비동기 1회 호출, strict output 검증과
   성공·실패·취소·TTL cleanup
 - Kiosk의 real HTTP v2 흐름과 code+DB tag 기반 고객 문구, Manager REST polling
-- versioned Korean prompt, Luna Max variant C strict adapter, no-timeout cancellable job과 30분 orphan cleanup
+- versioned Korean prompt, Luna Medium variant C strict adapter, no-timeout cancellable job과 30분 orphan cleanup
 - Backend Vision token endpoint, signed one-time token, private Eye worker client와 fail-closed gaze 경계
 - Vision 3-A의 capture-time context, letterbox 보정 영상 좌표, Gateway 동일-frame 검증과 Backend 승인 AOI 경계
 - Supabase pooler runtime, direct admin URL 분리, job restart/orphan/24시간 retention 운영화

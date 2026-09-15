@@ -17,7 +17,7 @@
 | W1 v2 계약 | 완료 | 22 schema, v1/v2 example, AOI metadata, privacy negative fixture와 OpenAPI | 공동 리뷰·PR 승인 |
 | W2 Vision·fusion·evidence | **3-A 완료 / 전체 미완료** | capture-time context, exact Eye·Face join, video 좌표, Backend 승인 AOI 경계, synthetic 계층·중첩 집계 | 실제 영상 AOI 검수(5번) 후 3-B 및 실기기 HTTPS/WSS E2E |
 | W3 API·DB 운영화 | 로컬 구현 완료 | pooler/direct 분리, 0003 migration, 비덮어쓰기 10개 seed/readiness, atomic job lifecycle, restart/orphan/24h retention, backup/restore 절차 | live Supabase migration·backup/restore 및 개별 URL·자산·QR·tag 검수 |
-| W4 모델·prompt | 구현 완료 | Luna Max, variant C, prompt v4, strict Responses adapter, no retry/timeout | 실제 key canary와 비용·rate-limit 운영 검증 |
+| W4 모델·prompt | 구현 완료 | Luna Medium, variant C, prompt v4, strict Responses adapter, no retry/timeout | 실제 key canary와 비용·rate-limit 운영 검증 |
 | W5 Frontend 연결 | 구현 완료 | Kiosk v2 HTTP Top 1·template·cleanup, indefinite terminal polling, Vision token route, actual 33.5초 media identity | actual AOI·상품 자산·domain/TLS Browser E2E |
 | W6 통합 검증 | 자동화 일부 완료 | Contract/API/Vision/Kiosk/Manager unit·replay·build, DB failure/readiness/lifecycle synthetic 검증 | Node 24, live Supabase, 실 Eye calibration, 로그/APM·browser 잔존 감사 |
 

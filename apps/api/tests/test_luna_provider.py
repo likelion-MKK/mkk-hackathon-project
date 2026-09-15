@@ -71,7 +71,6 @@ def _client() -> OpenAILunaCentralClient:
         endpoint="https://api.openai.com/v1/responses",
         api_key=API_KEY,
         model_id=MODEL_ID,
-        reasoning_effort="max",
         reasoning_context="current_turn",
         prompt_version="central-recommender-ko-v7",
     )
@@ -132,7 +131,7 @@ def test_luna_provider_sends_canonical_variant_c_and_accepts_one_output_text(
 
     body = captured["body"]
     assert body["model"] == MODEL_ID
-    assert body["reasoning"] == {"effort": "max", "context": "current_turn"}
+    assert body["reasoning"] == {"effort": "medium", "context": "current_turn"}
     assert body["store"] is False
     assert "tools" not in body
     assert "conversation" not in body
