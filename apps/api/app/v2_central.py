@@ -34,7 +34,7 @@ MAX_MODEL_RESPONSE_BYTES = 64 * 1024
 MAX_PROVIDER_ERROR_BODY_BYTES = 8 * 1024
 APPROVED_PROMPT_VERSION = "central-recommender-ko-v7"
 LUNA_MODEL_ID = "gpt-5.6-luna"
-LUNA_REASONING_EFFORT = "max"
+LUNA_REASONING_EFFORT = "medium"
 LUNA_REASONING_CONTEXT = "current_turn"
 LUNA_INPUT_VARIANT = "C"
 LUNA_RESPONSES_URL = "https://api.openai.com/v1/responses"
@@ -500,7 +500,7 @@ class OpenAILunaCentralClient:
         if self.model_revision != LUNA_MODEL_ID:
             raise ValueError(f"CENTRAL_AI_MODEL_REVISION must be {LUNA_MODEL_ID}")
         if self.reasoning_effort != LUNA_REASONING_EFFORT:
-            raise ValueError("CENTRAL_AI_REASONING_EFFORT must be max")
+            raise ValueError("CENTRAL_AI_REASONING_EFFORT must be medium")
         if self.reasoning_context != LUNA_REASONING_CONTEXT:
             raise ValueError("CENTRAL_AI_REASONING_CONTEXT must be current_turn")
         if self.prompt_version != APPROVED_PROMPT_VERSION:

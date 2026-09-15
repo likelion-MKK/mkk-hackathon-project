@@ -92,7 +92,7 @@ Actual `mcm-lookbook-v2` media identity는 SHA-256
   `model_unavailable`로 종료한다.
 - `OPENAI_API_KEY`: process secret으로만 주입하며 request body·raw response와 함께 로그에 남기지 않는다.
 - `CENTRAL_AI_MODEL_ID`, `CENTRAL_AI_MODEL_REVISION`, `CENTRAL_AI_PROMPT_VERSION`: Luna 결과 version 기록.
-- `CENTRAL_AI_REASONING_EFFORT=max`, `CENTRAL_AI_REASONING_CONTEXT=current_turn`, `CENTRAL_AI_INPUT_VARIANT=C`.
+- `CENTRAL_AI_REASONING_EFFORT=medium`, `CENTRAL_AI_REASONING_CONTEXT=current_turn`, `CENTRAL_AI_INPUT_VARIANT=C`.
 - `VISION_STREAM_TOKEN_SECRET`, `VISION_EYE_WORKER_URL`: API·Vision Gateway shared token과 private Eye worker 경계.
 - `LOOKBOOK_VIDEO_PATH`, `REQUIRE_LOOKBOOK_MEDIA_READINESS`: actual MP4의 exact SHA/byte readiness. 배포 Compose는 검증을 필수로 한다.
 - `KIOSK_CORS_ORIGINS`: 쉼표로 구분한 명시적 origin. wildcard는 거부한다.

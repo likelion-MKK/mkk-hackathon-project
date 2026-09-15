@@ -31,7 +31,7 @@ ADR-0001·0003·0004를 추가한다. Superseded 문서를 현재 기준처럼 �
 | [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) | 현재 Contract와 목표의 차이, owner·PR 순서·완료 Gate | 구현·스프린트·인계 |
 | [`ADR-0006`](adr/0006-central-recommendation-ai.md) | derived-only 중앙 판단, 1회 호출, 가방 10개·Top 1, evidence 폐기 | 추천·DB·프롬프트·결과 UI |
 | [`ADR-0007`](adr/0007-central-recommendation-model-selection.md) | 중앙 추천 model·artifact·runtime·variant 선정용 Proposed benchmark 결정 초안 | 후보 provenance·실행·사람 검토·선택 승인 |
-| [`ADR-0008`](adr/0008-openai-luna-central-recommendation.md) | Luna Max·max·variant C·prompt v4 선택과 hosted provider 통합 Gate | OpenAI 중앙 추천 선택·timeout·latency·실패 경계 |
+| [`ADR-0008`](adr/0008-openai-luna-central-recommendation.md) | Luna Medium·medium 운영 설정과 기존 Max 평가·hosted provider 통합 Gate | OpenAI 중앙 추천 선택·timeout·latency·실패 경계 |
 | [`CONTRIBUTING.md`](../CONTRIBUTING.md) | `dev` 기반 branch·PR·Contract First | 작업 시작·PR 준비 |
 | [`contracts/README.md`](../contracts/README.md) | 현재 구현 인터페이스, 좌표·시간·invalid 규칙 | producer·consumer·API 변경 |
 | [`중앙 추천 self-hosted benchmark`](../experiments/recommendation/README.md) | Google Colab GPU 7개 후보, A/B/C·12개 합성 case, 심리학적 보조 신호 grounding, smoke/full provenance·자원·안전 Gate | 중앙 model·runtime·input variant 평가 |
@@ -49,7 +49,7 @@ ADR-0001·0003·0004를 추가한다. Superseded 문서를 현재 기준처럼 �
 | [`ADR-0004 EyeTrax MVP 선택`](adr/0004-eyetrax-mvp-selection.md) | Accepted (해커톤 MVP) | Eye 모델·보정·좌표 생산자와 재평가 Gate | dwell·revisit·최종 Top 1은 ADR-0006 경계 |
 | [`ADR-0006 중앙 판단 추천 AI`](adr/0006-central-recommendation-ai.md) | Accepted (불변조건·경계) | evidence 결합·수명, 중앙 AI, 상품 10개, 결과·설명, Deferred feedback | runtime migration은 ADR-0008 관할 |
 | [`ADR-0007 중앙 추천 모델 선정`](adr/0007-central-recommendation-model-selection.md) | Proposed / historical | self-hosted 후보 provenance·합성 benchmark 참고 | hosted Luna 선택은 ADR-0008 관할 |
-| [`ADR-0008 OpenAI Luna 중앙 추천 모델 선택`](adr/0008-openai-luna-central-recommendation.md) | Accepted — implementation baseline | Luna Max·max·variant C·prompt v4와 hosted provider migration | 실제 key·DB·domain/TLS는 배포 Gate |
+| [`ADR-0008 OpenAI Luna 중앙 추천 모델 선택`](adr/0008-openai-luna-central-recommendation.md) | Accepted — implementation baseline | Luna Medium·medium 운영 설정과 hosted provider migration | 실제 key·DB·domain/TLS는 배포 Gate |
 
 ## 4. 작업별 최소 읽기 묶음
 
