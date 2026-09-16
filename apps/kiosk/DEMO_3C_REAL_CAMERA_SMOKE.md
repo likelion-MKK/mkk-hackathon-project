@@ -83,11 +83,15 @@ npm run dev:kiosk
 ```
 
 Open the printed local URL in a browser, consent, and grant camera access. The
-original full-viewport Dense5 calibration moves through 25 training points and
-8 validation points. One attempt has 64 seconds of planned capture time; one
-full retry has 128 seconds of capture plus local processing overhead. If the
-Eye worker is unavailable, calibration must stop with an error; do not
-continue by inventing a gaze point.
+The default `adaptive-dense5-v2` profile uses 25 worker-driven training targets
+and eight independent validation targets. Each camera frame carries the target
+that was actually painted and its monotonic presentation time; stale frames are
+discarded by the four-frame worker queue. The flow starts only after the face
+position check is stable. A local error may trigger bounded target repair and a
+fresh verification; a quality failure stops the flow and discards the mapping.
+See [local calibration v2](../../docs/eye-calibration-local-v2.md) for the
+quality limits and aggregate diagnostics. If the Eye worker is unavailable,
+calibration must stop with an error; do not continue by inventing a gaze point.
 
 ## Success procedure
 

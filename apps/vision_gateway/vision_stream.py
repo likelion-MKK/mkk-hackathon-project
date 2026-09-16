@@ -85,6 +85,7 @@ class FrameMetadata:
     width_px: int
     height_px: int
     byte_length: int
+    calibration_target: Mapping[str, object] | None = None
 
     def as_payload(self) -> dict[str, object]:
         """Return metadata only; image bytes remain a separate transient body."""
@@ -94,6 +95,7 @@ class FrameMetadata:
             "protocol_version": "1.0",
             **self.context.as_payload(),
             "layout": dict(self.layout),
+            **({"calibration_target": dict(self.calibration_target)} if self.calibration_target is not None else {}),
             "camera_frame": {
                 "encoding": self.encoding,
                 "width_px": self.width_px,
@@ -104,7 +106,7 @@ class FrameMetadata:
 
     @classmethod
     def from_payload(cls, payload: Mapping[str, object]) -> "FrameMetadata":
-        if set(payload) != _FRAME_FIELDS:
+        if set(payload) - {"calibration_target"} != _FRAME_FIELDS:
             raise VisionStreamProtocolError("frame metadata fields are invalid")
         if payload.get("type") != "frame" or payload.get("protocol_version") != "1.0":
             raise VisionStreamProtocolError("unsupported frame message")
@@ -136,7 +138,15 @@ class FrameMetadata:
         width_px = _positive_int(camera, "width_px")
         height_px = _positive_int(camera, "height_px")
         byte_length = _positive_int(camera, "byte_length")
+        marker = None
+        if "calibration_target" in payload:
+            from .calibration_protocol import validate_target_marker
+            try:
+                marker = validate_target_marker(payload["calibration_target"])
+            except ValueError as exc:
+                raise VisionStreamProtocolError("invalid calibration marker") from exc
         return cls(
+            calibration_target=marker,
             context=context,
             layout=dict(layout),
             encoding=encoding,

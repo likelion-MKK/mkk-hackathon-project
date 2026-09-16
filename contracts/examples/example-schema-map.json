@@ -1,5 +1,8 @@
 {
   "examples": {
+    "vision-stream-face-positioning.valid.json": "../vision-stream-v1/vision-stream-message.schema.json",
+    "vision-stream-calibration-frame.valid.json": "../vision-stream-v1/vision-stream-frame-metadata.schema.json",
+    "vision-stream-calibration-progress.valid.json": "../vision-stream-v1/vision-stream-message.schema.json",
     "vision-stream-hello.valid.json": "../vision-stream-v1/vision-stream-message.schema.json",
     "vision-stream-ready.valid.json": "../vision-stream-v1/vision-stream-message.schema.json",
     "vision-stream-control.valid.json": "../vision-stream-v1/vision-stream-message.schema.json",

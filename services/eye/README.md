@@ -41,10 +41,13 @@ NumPy `1.26.4`, OpenCV `4.11.0.86`으로 고정한다. 다른 Python 서비스�
 기록한다.
 
 `FakeEyeAdapter.calibrate()`는 lifecycle과 `calibration_id` 전달을 검증하는 개발용
-placeholder다. `EyeTraxAdapter`는 초기 Dense5의 25개 학습점과 별도 8점 검증을 최대 두
-번 수행한다. 한 시도는 64초이고 실패하면 전체 과정을 한 번 재시도한다. 각 학습점과
-검증점은 예상 20 frame의 절반인 최소 10개를 제공해야 하며, 실제 카메라 시연을 위해 완화한 aggregate valid
-ratio 50%, 검증 오차 p50·p95 대각선 50% Gate를 통과해야 한다. 보정 요청 전 추론은
+placeholder다. 브라우저 기본 `adaptive-dense5-v2`는 25개 학습점과 학습에 사용하지 않은
+8개 검증점을 사용한다. 각 표적은 브라우저가 실제로 표시한 `target_id`와 단조 표시 시각을
+함께 전송한 frame만 수집한다. 유효 표본 15개와 500ms 표본 폭을 확보하면 다음 점으로
+이동하며, 위치 오류가 국소적일 때만 최대 4개 지점을 자동 재수집한 뒤 새 8개 지점으로
+다시 검증한다. 전체 유효 비율 85%, 대각선 오차 p50 15%·p95 30%, 개별 점 유효 비율
+70%, p50 25%·p95 40%가 성공 조건이다. 품질 검증에 실패한 모델은 폐기하며 세션은
+새 보정이 필요하다. 보정 요청 전 추론은
 lifecycle 오류이며, 보정 중이거나 최종 실패한 뒤에는 현재 `calibration_id`로
 `valid=false`, `reason=gaze_unavailable`을 반환한다.
 
@@ -52,16 +55,16 @@ EyeTrax가 유효 좌표를 만들면 `confidence=1.0`을 사용한다. 이 값�
 해당 frame에서 사용할 수 있는 좌표라는 이진 표시다. `no_face`, `blink`, 비유효한 예측과
 viewport 밖 예측은 좌표 없이 `valid=false`로 유지한다.
 
-Dense5 학습과 8점 정확도 Gate에는 원시 좌표만 사용한다. 실제 얼굴 A/B에서 안정화 경로가
-오차 p95를 늘렸고, 기존 jitter 비교는 서로 다른 frame pair를 사용해 철회했으므로 기본
-모드는 `raw`다. 수정된 동일-pair jitter 지표는 실제 카메라 재실행 전까지 미검증이다.
+Dense5 학습과 8점 정확도 Gate에는 원시 좌표만 사용한다. 기본 실시간 출력도 raw mode를
+사용한다. 안정화 필터가 실제 눈의 빠른 이동을 늦춰 보정 표적과 frame의 시간축을 섞지
+않도록 하기 위해서다. 안정화는 보정 통과 여부나 검증 오차를 좋게 보이게 하는 데 쓰지
+않는다.
 
 ```text
 원시 좌표 -> GazeSample
 ```
 
-`kalman_ema`는 후속 3점 tune 비교 전까지 명시적으로 선택하는 실험 옵션이며 다음 순서로
-처리한다.
+`kalman_ema`는 명시적으로 선택하는 실험 옵션이며 다음 순서로 처리한다.
 
 ```text
 원시 좌표 → 급속 이동 2프레임 확인 → EyeTrax Kalman + EMA 0.25 → GazeSample

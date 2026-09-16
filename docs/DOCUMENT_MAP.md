@@ -78,9 +78,10 @@ ADR-0001·0003·0004를 추가한다. Superseded 문서를 현재 기준처럼 �
 
 1. [`ADR-0004`](adr/0004-eyetrax-mvp-selection.md)
 2. [`services/eye/README.md`](../services/eye/README.md)
-3. [`experiments/eye/README.md`](../experiments/eye/README.md)
-4. [`EyeTrax 실험 README`](../experiments/eye/eyetrax/README.md)
-5. v2 AOI 작업이면 [`actual pending metadata`](../data/lookbooks/mcm-lookbook-v2/README.md)와 [`synthetic approved fixture`](../data/lookbooks/mcm-central-ai-replay-v2/README.md)
+3. [`로컬 보정 v2`](eye-calibration-local-v2.md)
+4. [`experiments/eye/README.md`](../experiments/eye/README.md)
+5. [`EyeTrax 실험 README`](../experiments/eye/eyetrax/README.md)
+6. v2 AOI 작업이면 [`actual pending metadata`](../data/lookbooks/mcm-lookbook-v2/README.md)와 [`synthetic approved fixture`](../data/lookbooks/mcm-central-ai-replay-v2/README.md)
 
 Eye는 viewport 좌표·유효성·품질과 capture context를 보존한다. Kiosk가 video 좌표까지만 계산하고 Backend가 승인 AOI를 적용하므로 Eye Adapter에는 AOI·상품·최종 순위·고객 유형 판단을 넣지 않는다.
 

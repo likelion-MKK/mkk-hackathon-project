@@ -14,6 +14,123 @@
     { "$ref": "#/$defs/close" }
   ],
   "$defs": {
+    "calibrationProgress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "calibration_id",
+        "profile_id",
+        "phase",
+        "target_id",
+        "target",
+        "hint",
+        "accepted_samples",
+        "required_samples",
+        "completed_targets",
+        "total_targets"
+      ],
+      "properties": {
+        "calibration_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "profile_id": {
+          "enum": [
+            "adaptive-dense5-v2",
+            "adaptive-sparse16-v2",
+            "fixed-dense5-v2"
+          ]
+        },
+        "phase": {
+          "enum": [
+            "positioning",
+            "training",
+            "validation",
+            "repair",
+            "verification",
+            "fitting"
+          ]
+        },
+        "target_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "target": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "hint": {
+          "enum": [
+            "follow_target",
+            "hold_still",
+            "no_face",
+            "blink",
+            "more_samples",
+            "fitting",
+            "center_face",
+            "move_closer",
+            "move_back",
+            "face_forward",
+            "eyes_visible",
+            "position_ready"
+          ]
+        },
+        "positioning": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["face_detected", "eyes_visible", "centered", "distance_ok", "facing_forward", "stable_ms"],
+          "properties": {
+            "face_detected": { "type": "boolean" },
+            "eyes_visible": { "type": "boolean" },
+            "centered": { "type": "boolean" },
+            "distance_ok": { "type": "boolean" },
+            "facing_forward": { "type": "boolean" },
+            "stable_ms": { "type": "integer", "minimum": 0, "maximum": 1000 }
+          },
+          "allOf": [{
+            "if": { "properties": { "stable_ms": { "minimum": 1 } } },
+            "then": { "properties": {
+              "face_detected": { "const": true }, "eyes_visible": { "const": true },
+              "centered": { "const": true }, "distance_ok": { "const": true }, "facing_forward": { "const": true }
+            } }
+          }]
+        },
+        "accepted_samples": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 128
+        },
+        "required_samples": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 128
+        },
+        "completed_targets": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 128
+        },
+        "total_targets": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 128
+        }
+      },
+      "allOf": [{
+        "if": { "required": ["positioning"] },
+        "then": { "properties": { "phase": { "const": "positioning" } } }
+      }]
+    },
     "id": {
       "type": "string",
       "minLength": 1,
@@ -241,13 +358,22 @@
                 { "$ref": "https://mcm-lookbook.example/contracts/v1/events/expression-sample.schema.json" }
               ]
             },
-            "expression_reason": { "$ref": "#/$defs/nullableReason" }
+            "expression_reason": { "$ref": "#/$defs/nullableReason" },
+            "calibration_progress": { "$ref": "#/$defs/calibrationProgress" }
           },
           "anyOf": [
             { "properties": { "gaze_sample": { "type": "object" } } },
-            { "properties": { "expression_sample": { "type": "object" } } }
+            { "properties": { "expression_sample": { "type": "object" } } },
+            { "properties": { "gaze_sample": { "type": "null" }, "gaze_reason": { "$ref": "#/$defs/reason" }, "expression_reason": { "const": "calibration_in_progress" } } }
           ],
           "allOf": [
+            {
+              "if": { "required": ["calibration_progress"] },
+              "then": { "properties": {
+                "gaze_sample": { "type": "null" }, "expression_sample": { "type": "null" },
+                "gaze_reason": { "const": "calibration_in_progress" }, "expression_reason": { "const": "calibration_in_progress" }
+              } }
+            },
             {
               "if": {
                 "properties": { "gaze_sample": { "type": "null" } },

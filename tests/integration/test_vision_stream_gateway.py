@@ -410,7 +410,8 @@ def test_long_request_id_keeps_generated_calibration_id_within_contract() -> Non
             assert result["calibration_id"].startswith("calibration-unavailable-")
 
 
-def test_calibration_keeps_accepting_bounded_frames_until_eye_finishes() -> None:
+@pytest.mark.parametrize("positioning", [False, True])
+def test_calibration_keeps_accepting_bounded_frames_until_eye_finishes(positioning) -> None:
     started = threading.Event()
     release = threading.Event()
 
@@ -421,7 +422,14 @@ def test_calibration_keeps_accepting_bounded_frames_until_eye_finishes() -> None
             return True, None
 
         async def infer(self, _frame: object) -> EyeInferenceResult:
-            return EyeInferenceResult(None, "calibration_in_progress")
+            assert _frame.metadata.calibration_target["target_id"] == "target-2"
+            return EyeInferenceResult({**_frame.metadata.context.as_payload(), "valid": True}, "calibration_in_progress", {
+                "calibration_id": "calibration-calibration-stream", "profile_id": "adaptive-dense5-v2",
+                "phase": "positioning" if positioning else "training", "target_id": "target-2", "target": [.1, .1],
+                "accepted_samples": 9, "required_samples": 15, "completed_targets": 1,
+                "total_targets": 34, "hint": "position_ready" if positioning else "more_samples",
+                **({"positioning": dict(face_detected=True, eyes_visible=True, centered=True,
+                                       distance_ok=True, facing_forward=True, stable_ms=600)} if positioning else {})})
 
         async def close(self) -> None:
             release.set()
@@ -450,10 +458,13 @@ def test_calibration_keeps_accepting_bounded_frames_until_eye_finishes() -> None
             )
             assert started.wait(timeout=1)
             websocket.send_bytes(
-                encode_binary_frame(frame_metadata(), b"\xff\xd8\xff\xd9")
+                encode_binary_frame({**frame_metadata(), "calibration_target": {"calibration_id": "calibration-calibration-stream", "target_id": "target-2", "presented_at_mono_ms": 100.}}, b"\xff\xd8\xff\xd9")
             )
             frame_result = websocket.receive_json()
             assert frame_result["type"] == "result"
+            assert frame_result["calibration_progress"]["accepted_samples"] == 9
+            if positioning:
+                assert frame_result["calibration_progress"]["positioning"]["stable_ms"] == 600
             assert frame_result["gaze_sample"] is None
             assert frame_result["expression_sample"] is None
             assert frame_result["expression_reason"] == "calibration_in_progress"

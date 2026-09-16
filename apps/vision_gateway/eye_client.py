@@ -14,6 +14,7 @@ from apps.vision_gateway.vision_stream import DecodedBinaryFrame, encode_binary_
 class EyeInferenceResult:
     gaze_sample: Mapping[str, object] | None
     reason: str | None
+    calibration_progress: Mapping[str, object] | None = None
 
 
 class EyeWorkerClient(Protocol):
@@ -106,10 +107,8 @@ class HttpEyeWorkerClient:
             "pattern": dict(pattern),
         }
         try:
-            # EyeTrax's fixed full-viewport training/validation calibration is a
-            # user-driven operation and intentionally has no inference
-            # deadline. It uses a separate connection/semaphore so frame
-            # ingress can continue while this request waits for completion.
+            # A separate connection lets calibration frames arrive while the
+            # bounded worker session runs. Inference keeps its short deadline.
             async with self._calibration_semaphore:
                 client = await self._calibration_http_client()
                 response = await client.post(
@@ -124,6 +123,10 @@ class HttpEyeWorkerClient:
             reason = body.get("reason")
             return body["valid"], reason if isinstance(reason, str) else None
         except asyncio.CancelledError:
+            # Closing a waiting HTTP connection does not reliably cancel a server thread.
+            with contextlib.suppress(Exception):
+                client = await self._http_client()
+                await client.post(f"{self.base_url.rstrip('/')}/internal/eye/v1/cancel", json={"calibration_id": calibration_id, "session_id": session_id, "video_id": video_id})
             raise
         except Exception:
             return False, "eye_worker_unavailable"
@@ -147,14 +150,24 @@ class HttpEyeWorkerClient:
                 return EyeInferenceResult(None, "eye_worker_invalid_response")
             sample = value.get("gaze_sample")
             reason = value.get("gaze_reason")
+            progress = None
+            if value.get("calibration_progress") is not None:
+                from .calibration_protocol import validate_progress
+                progress = validate_progress(value["calibration_progress"])
             return EyeInferenceResult(
                 sample if isinstance(sample, Mapping) else None,
                 reason if isinstance(reason, str) else None,
+                progress,
             )
         except asyncio.CancelledError:
             raise
         except Exception:
             return EyeInferenceResult(None, "eye_worker_unavailable")
+
+    async def end_session(self, session_id: str, video_id: str) -> None:
+        client = await self._http_client()
+        await client.post(f"{self.base_url.rstrip('/')}/internal/eye/v1/session/end",
+                          json={"session_id": session_id, "video_id": video_id})
 
     async def close(self) -> None:
         client = self._client

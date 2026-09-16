@@ -70,9 +70,13 @@ test-only deterministic Top 1을 위한 loopback-only 수동 smoke 절차다. �
 production acceptance가 아니며, fake media device·Luna·Supabase를 사용하지
 않는다.
 
-실제 Kiosk 보정 화면은 browser viewport 전체를 기준으로 초기 Dense5의 25개 학습점과
-8개 확인점을 부드럽게 이동시킨다. 한 시도의 점 수집 계획은 64초이며, 실패할 때 전체
-과정을 한 번 재시도한다(수집 128초와 로컬 처리 시간).
+기본 보정은 worker가 순서를 정하는 25점 가변 수집과 독립 8점 확인이다. 브라우저는 점이
+실제로 표시된 뒤의 단조 시각과 target ID를 각 frame에 붙이며, worker는 일치하는 frame만
+학습에 쓴다. 카메라 큐는 4개로 제한하고 오래된 frame은 버린다. 시작 전에는 같은 카메라
+stream 미리보기에서 얼굴 중앙·상대 거리·양쪽 눈·고개 방향이 1초 안정됐는지 확인한다.
+국소 오류는 최대 4지점만 자동 재수집하고 새로운 검증점으로 다시 확인한다. 품질 실패는
+추론으로 우회하지 않으며 새 보정을 요구한다. 상세 기준은
+[`로컬 보정 v2`](../../docs/eye-calibration-local-v2.md)를 따른다.
 
 저장소 루트에서 Node.js `24.19.0`과 npm을 사용한다.
 

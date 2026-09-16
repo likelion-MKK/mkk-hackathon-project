@@ -1,3 +1,4 @@
+import { parseCalibrationProgress, type CalibrationProgress } from "../../app/calibration-session.ts";
 import type {
   CalibrationPattern,
   CalibrationResult,
@@ -358,6 +359,9 @@ export class LocalVisionStreamClient implements RemoteVisionClient {
   private ready: ReadyMessage | null = null;
   private pendingFrame: PendingFrame | null = null;
   private frameCaptureActive = false;
+  private calibrationProfile: string | null = null;
+  private calibrationIdentity: string | null = null;
+  private calibrationListeners = new Set<(progress: CalibrationProgress) => void>();
   private requestSequence = 0;
   private terminalError: Error | null = null;
 
@@ -432,6 +436,8 @@ export class LocalVisionStreamClient implements RemoteVisionClient {
     // The Gateway keeps this control request pending until EyeTrax finishes.
     // Frames must be allowed through while that request is in flight.
     this.frameCaptureActive = true;
+    this.calibrationProfile = pattern.pattern_id;
+    this.calibrationIdentity = null;
     let result: ControlResultMessage;
     try {
       result = await this.sendControl(
@@ -441,11 +447,17 @@ export class LocalVisionStreamClient implements RemoteVisionClient {
     } catch (error) {
       this.frameCaptureActive = false;
       throw error;
+    } finally {
+      this.calibrationProfile = null;
     }
     if (!result.valid) this.frameCaptureActive = false;
     if (result.calibration_id === undefined) {
       this.frameCaptureActive = false;
       throw new Error("Vision Stream calibration response has no calibration_id.");
+    }
+    if (result.valid && this.calibrationIdentity !== null && result.calibration_id !== this.calibrationIdentity) {
+      this.frameCaptureActive = false;
+      throw new Error("Calibration result does not match the collected targets.");
     }
     return {
       calibration_id: requireIdentifier(result.calibration_id, "calibration_id"),
@@ -458,6 +470,11 @@ export class LocalVisionStreamClient implements RemoteVisionClient {
     const result = await this.sendControl("start_inference");
     if (!result.valid) throw new Error(result.reason ?? "Vision inference could not start.");
     this.frameCaptureActive = true;
+  }
+
+  onCalibrationProgress(listener: (progress: CalibrationProgress) => void): Unsubscribe {
+    this.calibrationListeners.add(listener);
+    return () => this.calibrationListeners.delete(listener);
   }
 
   onGazeSample(listener: GazeSampleListener): Unsubscribe {
@@ -530,6 +547,7 @@ export class LocalVisionStreamClient implements RemoteVisionClient {
             video_time_ms: context.video_time_ms,
             playback_epoch: context.playback_epoch,
             layout: context.layout,
+            ...(context.calibration_target ? { calibration_target: context.calibration_target } : {}),
             camera_frame: {
               encoding: ready.selected_frame_encoding,
               width_px: frame.width,
@@ -643,6 +661,8 @@ export class LocalVisionStreamClient implements RemoteVisionClient {
 
   private clearSessionState(): void {
     this.sessionContext = null;
+    this.calibrationProfile = null;
+    this.calibrationIdentity = null;
     this.ready = null;
     this.frameCaptureActive = false;
     this.pendingFrame = null;
@@ -780,6 +800,15 @@ export class LocalVisionStreamClient implements RemoteVisionClient {
     const pending = this.pendingFrame;
     if (!pending) throw new Error("Vision Stream result has no pending frame.");
     validateFrameReference(message, pending.context);
+    if (message.calibration_progress !== undefined && this.calibrationProfile !== null) {
+      const progress = parseCalibrationProgress(message.calibration_progress);
+      if (progress.profile_id !== this.calibrationProfile
+          || (this.calibrationIdentity !== null && progress.calibration_id !== this.calibrationIdentity)) {
+        throw new Error("Calibration progress does not match the active calibration.");
+      }
+      this.calibrationIdentity = progress.calibration_id;
+      if (!pending.callerAborted) for (const listener of this.calibrationListeners) listener(progress);
+    }
     const expression = message.expression_sample;
     if (expression !== null) {
       const sample = requireRecord(expression, "ExpressionSample is invalid.");
@@ -908,6 +937,9 @@ export class LocalVisionStreamClient implements RemoteVisionClient {
     const requestId = `control-${++this.requestSequence}`;
     const waiter = createDeferred<ControlResultMessage>();
     this.controlWaiters.set(requestId, waiter);
+    const timeout = globalThis.setTimeout(() => {
+      this.failTransport(new Error(action === "start_calibration" ? "calibration_timed_out" : "vision_control_timed_out"));
+    }, action === "start_calibration" ? 125_000 : 10_000);
     try {
       const message: Record<string, unknown> = {
         type: "control",
@@ -921,6 +953,8 @@ export class LocalVisionStreamClient implements RemoteVisionClient {
     } catch (error: unknown) {
       this.controlWaiters.delete(requestId);
       throw toError(error, "Vision Stream control request failed.");
+    } finally {
+      globalThis.clearTimeout(timeout);
     }
   }
 }

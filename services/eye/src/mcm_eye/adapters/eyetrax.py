@@ -75,11 +75,10 @@ CALIBRATION_ATTEMPT_SECONDS = (
 MIN_TRAINING_SAMPLES_PER_POINT = 10
 MIN_VALIDATION_FRAMES_PER_POINT = 10
 RIDGE_ALPHA_CANDIDATES = (0.001, 0.01, 0.1, 1.0, 10.0)
-# Diagnostic-only thresholds for the physical-camera run. They are still
-# reported by the validation path but do not block the best-effort model.
-VALID_RATIO_GATE = 0.50
-ERROR_DIAGONAL_P50_GATE = 0.50
-ERROR_DIAGONAL_P95_GATE = 0.50
+# Independent raw-coordinate validation must pass before gaze becomes valid.
+VALID_RATIO_GATE = 0.90
+ERROR_DIAGONAL_P50_GATE = 0.10
+ERROR_DIAGONAL_P95_GATE = 0.25
 
 
 class EyeTraxModelError(RuntimeError):
@@ -271,9 +270,9 @@ def prepare_face_model(path: Path = DEFAULT_FACE_MODEL_PATH, *, offline: bool = 
 
 
 def _default_estimator_factory(model_path: Path) -> _GazeEstimator:
-    from eyetrax import GazeEstimator
+    from ..guided_estimator import GuidedGazeEstimator
 
-    return GazeEstimator(face_landmarker_model=model_path)
+    return GuidedGazeEstimator(face_landmarker_model=model_path)
 
 
 def _create_ridge_model(alpha: float) -> _RidgeModel:
@@ -321,6 +320,7 @@ def _select_ridge_alpha(
     features: np.ndarray,
     targets: np.ndarray,
     samples_per_point: Sequence[int],
+    check_cancelled=None,
 ) -> float:
     if sum(samples_per_point) != len(features) or len(features) != len(targets):
         raise ValueError("Calibration feature, target and point counts do not match")
@@ -337,6 +337,8 @@ def _select_ridge_alpha(
     for alpha in RIDGE_ALPHA_CANDIDATES:
         errors: list[float] = []
         for held_out, held_out_count in enumerate(samples_per_point):
+            if check_cancelled is not None:
+                check_cancelled()
             if held_out_count == 0:
                 continue
             train_mask = groups != held_out
@@ -389,6 +391,7 @@ class EyeTraxAdapter:
         self._calibrating = False
         self._calibrated = False
         self._calibration_id: str | None = None
+        self._calibration_confidence = 1.0
         self._stream_identity: tuple[str, str, int] | None = None
         self._last_order: tuple[float, int] | None = None
         self._sample_cache: dict[str, GazeSample] = {}
@@ -463,6 +466,7 @@ class EyeTraxAdapter:
         self._reset_runtime_state()
         self._calibration_id = request.calibration_id
         self._calibrated = False
+        self._calibration_confidence = 1.0
         self._calibrating = True
         final_reason = "calibration_failed"
         try:
@@ -471,10 +475,8 @@ class EyeTraxAdapter:
             if not self._train_once(attempt):
                 final_reason = "no_face"
             else:
-                # Keep the validation run and its p50/p95/ratio observations,
-                # but use the trained model whenever at least one face feature
-                # was captured during the full calibration.
-                self._validate_once(attempt)
+                if not self._validate_once(attempt).passed:
+                    return CalibrationResult(request.calibration_id, False, "quality_gate_failed")
                 self._calibrated = True
                 return CalibrationResult(
                     calibration_id=request.calibration_id,
@@ -487,12 +489,77 @@ class EyeTraxAdapter:
             final_reason = "calibration_error"
         finally:
             self._calibrating = False
+            if not self._calibrated:
+                self._require_estimator().model = _create_ridge_model(1.0)
 
         return CalibrationResult(
             calibration_id=request.calibration_id,
             valid=False,
             reason=final_reason,
         )
+
+    def calibrate_synchronized(self, request: CalibrationRequest, source, profile_id: str) -> CalibrationResult:
+        from ..calibration import CalibrationFailure, SessionCalibration
+        self._require_warmed()
+        self._reset_runtime_state()
+        self._calibration_id = request.calibration_id
+        self._calibrated = False
+        self._calibration_confidence = 1.0
+        self._calibrating = True
+        estimator = self._require_estimator()
+        def fit(features, targets, counts):
+            estimator.model = _create_ridge_model(_select_ridge_alpha(features, targets, counts, source.check_cancelled))
+            estimator.train(features, targets)
+        # Every browser profile repairs the *measured* weak locations once before
+        # it is allowed to fail.  The repair samples are followed by a separate
+        # verification set, so a bad calibration is never merely retried and
+        # then accepted on its own training data.
+        engine = SessionCalibration(estimator, source, fit, profile_id=profile_id,
+                                    repair_accuracy=True)
+        try:
+            engine.run()
+            self._calibrated = True
+            return CalibrationResult(request.calibration_id, True, None)
+        except CalibrationFailure as exc:
+            engine.summary["reason"] = str(exc)
+            return CalibrationResult(request.calibration_id, False, str(exc))
+        except Exception:
+            engine.summary["reason"] = "calibration_error"
+            return CalibrationResult(request.calibration_id, False, "calibration_error")
+        finally:
+            self._calibrating = False
+            engine.summary["inference_ready"] = self._calibrated
+            engine.summary["confidence_weight"] = self._calibration_confidence if self._calibrated else 0.0
+            self.calibration_summary = dict(engine.summary)
+            if self._calibrated:
+                # Even a weak model must use the viewport it was trained for.
+                from dataclasses import replace
+                self._config = replace(self._config, viewport_width_px=source.viewport[0], viewport_height_px=source.viewport[1])
+                self._stabilizer = GazeStabilizer(*source.viewport, ema_alpha=self._config.ema_alpha)
+                suffix = "raw-v1" if self._config.smoothing_mode == "raw" else "gaze-filter-v1"
+                quality_suffix = "+low-confidence" if not engine.summary["valid"] else ""
+                self._model_revision = f"{EYETRAX_SOURCE_REVISION}+{suffix}+calibration-v2{quality_suffix}"
+            else:
+                estimator.model = _create_ridge_model(1.0)
+                # A failed mapping is not a calibrated session.  Clearing the
+                # identifier prevents direct callers from producing a default-
+                # model gaze sample between the failed attempt and a retry.
+                self._calibration_id = None
+            source.close()
+
+    @property
+    def inference_ready(self) -> bool:
+        """Inference is available only after a calibration quality gate passes."""
+        return self._calibrated and not self._calibrating
+
+    def discard_calibration(self) -> None:
+        """Release the fitted session model without reloading the face detector."""
+        self._reset_runtime_state()
+        self._calibration_id = None
+        self._calibrated = False
+        self.calibration_summary = None
+        self._calibration_confidence = 1.0
+        self._require_estimator().model = _create_ridge_model(1.0)
 
     def infer(self, frame_ref: BgrFrame, context: GazeFrameContext) -> GazeSample:
         self._require_warmed()
@@ -602,7 +669,7 @@ class EyeTraxAdapter:
             sample = GazeSample(
                 **self._common_fields(context, event_id),
                 valid=True,
-                confidence=1.0,
+                confidence=self._calibration_confidence,
                 reason=None,
                 screen_x_norm=normalized[0],
                 screen_y_norm=normalized[1],
@@ -617,7 +684,7 @@ class EyeTraxAdapter:
             sample = GazeSample(
                 **self._common_fields(context, event_id),
                 valid=True,
-                confidence=1.0,
+                confidence=self._calibration_confidence,
                 reason=None,
                 screen_x_norm=stabilized[0][0],
                 screen_y_norm=stabilized[0][1],
@@ -700,7 +767,7 @@ class EyeTraxAdapter:
             all_features.extend(point_features)
             all_targets.extend([target] * len(point_features))
 
-        if not all_features:
+        if not all_features or min(samples_per_point, default=0) < MIN_TRAINING_SAMPLES_PER_POINT:
             return False
 
         feature_matrix = np.asarray(all_features)

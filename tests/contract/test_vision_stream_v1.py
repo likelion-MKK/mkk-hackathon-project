@@ -90,3 +90,54 @@ def test_result_preserves_frame_capture_context() -> None:
     assert {field: result[field] for field in CONTEXT_FIELDS} == expected
     assert {field: result["gaze_sample"][field] for field in CONTEXT_FIELDS} == expected
     assert {field: result["expression_sample"][field] for field in CONTEXT_FIELDS} == expected
+
+
+def test_calibration_frame_roundtrip_and_progress_validation():
+    from apps.vision_gateway.vision_stream import decode_binary_frame, encode_binary_frame, VisionStreamProtocolError
+    from apps.vision_gateway.calibration_protocol import validate_progress
+    metadata = load_example("vision-stream-calibration-frame.valid.json")
+    binary = encode_binary_frame(metadata, b"\xff\xd8\xff\xd9")
+    assert decode_binary_frame(binary, max_frame_bytes=524288).metadata.as_payload() == metadata
+    progress = load_example("vision-stream-calibration-progress.valid.json")["calibration_progress"]
+    assert validate_progress(progress) == progress
+    for change in ({"accepted_samples": 16}, {"required_samples": 0}, {"target": [float("nan"), .1]},
+                   {"completed_targets": 35}, {"raw_image": "not allowed"}, {"profile_id": "unknown"}):
+        with pytest.raises(ValueError):
+            validate_progress({**progress, **change})
+    metadata["calibration_target"]["presented_at_mono_ms"] = -1
+    with pytest.raises(VisionStreamProtocolError):
+        decode_binary_frame(encode_binary_frame(metadata, b"\xff\xd8\xff\xd9"), max_frame_bytes=524288)
+
+
+def test_calibration_progress_schema_does_not_allow_preference_evidence():
+    from jsonschema import Draft202012Validator
+    from referencing import Registry, Resource
+    documents = [json.loads(path.read_text(encoding="utf-8")) for path in (ROOT / "contracts").rglob("*.schema.json")]
+    registry = Registry().with_resources((s["$id"], Resource.from_contents(s)) for s in documents)
+    schema = json.loads((ROOT / "contracts/vision-stream-v1/vision-stream-message.schema.json").read_text(encoding="utf-8"))
+    validator = Draft202012Validator(schema, registry=registry)
+    result = load_example("vision-stream-calibration-progress.valid.json")
+    assert validator.is_valid(result)
+    result["gaze_sample"] = load_example("vision-stream-result.valid.json")["gaze_sample"]
+    result["gaze_reason"] = None
+    assert not validator.is_valid(result)
+
+
+def test_face_positioning_progress_is_optional_and_strictly_limited_to_readiness():
+    from copy import deepcopy
+    from jsonschema import Draft202012Validator
+    from apps.vision_gateway.calibration_protocol import validate_progress
+    schema = json.loads((ROOT / "contracts/vision-stream-v1/vision-stream-message.schema.json").read_text(encoding="utf-8"))
+    validator = Draft202012Validator(schema["$defs"]["calibrationProgress"])
+    progress = load_example("vision-stream-face-positioning.valid.json")["calibration_progress"]
+    assert validate_progress(progress) == progress
+    assert validator.is_valid(progress)
+    for change in ({"phase": "training"}, {"positioning": None},
+                   {"positioning": {**progress["positioning"], "stable_ms": 1001}},
+                   {"positioning": {**progress["positioning"], "stable_ms": True}},
+                   {"positioning": {**progress["positioning"], "eyes_visible": False}},
+                   {"positioning": {**progress["positioning"], "landmarks": []}}):
+        invalid = {**deepcopy(progress), **change}
+        assert not validator.is_valid(invalid)
+        with pytest.raises(ValueError):
+            validate_progress(invalid)

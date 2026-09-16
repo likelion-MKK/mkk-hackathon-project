@@ -366,7 +366,7 @@ def test_dense5_training_excludes_validation_samples(
         adapter.dispose()
 
 
-def test_sparse_training_uses_one_best_effort_calibration(
+def test_sparse_training_fails_without_full_retry(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -374,8 +374,8 @@ def test_sparse_training_uses_one_best_effort_calibration(
     adapter, _, _ = initialized_adapter(tmp_path, monkeypatch, source)
     try:
         result = calibrate(adapter)
-        assert result.valid is True
-        assert sum(call.attempt == 1 for call in source.calls) == 33
+        assert result.valid is False
+        assert sum(call.attempt == 1 for call in source.calls) == 25
         assert all(call.attempt == 1 for call in source.calls)
     finally:
         adapter.dispose()
@@ -397,7 +397,7 @@ def test_zero_face_features_stop_calibration_as_no_face(
         adapter.dispose()
 
 
-def test_quality_gate_failure_remains_diagnostic_for_best_effort_model(
+def test_quality_gate_failure_blocks_inference(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -405,15 +405,15 @@ def test_quality_gate_failure_remains_diagnostic_for_best_effort_model(
     adapter, _, _ = initialized_adapter(tmp_path, monkeypatch, source)
     try:
         result = calibrate(adapter)
-        assert result.valid is True
-        assert result.reason is None
+        assert result.valid is False
+        assert result.reason == "quality_gate_failed"
         assert sum(call.attempt == 1 for call in source.calls) == 33
         assert all(call.attempt == 1 for call in source.calls)
     finally:
         adapter.dispose()
 
 
-def test_missing_validation_points_do_not_block_best_effort_model(
+def test_missing_validation_points_block_inference(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -426,8 +426,8 @@ def test_missing_validation_points_do_not_block_best_effort_model(
     adapter, _, _ = initialized_adapter(tmp_path, monkeypatch, source)
     try:
         result = calibrate(adapter)
-        assert result.valid is True
-        assert result.reason is None
+        assert result.valid is False
+        assert result.reason == "quality_gate_failed"
         assert sum(call.attempt == 1 for call in source.calls) == 33
         assert all(call.attempt == 1 for call in source.calls)
     finally:
@@ -463,21 +463,21 @@ def test_participant_cancel_does_not_retry(
         adapter.dispose()
 
 
-def test_fifty_percent_quality_gates_include_boundary_and_reject_worse_values() -> None:
+def test_quality_gates_include_boundary_and_reject_worse_values() -> None:
     passing = eyetrax_module._ValidationMetrics(
         total_frames=120,
-        valid_frames=60,
+        valid_frames=108,
         frames_per_point=(15,) * 8,
-        valid_ratio=0.50,
-        error_diagonal_p50=0.50,
-        error_diagonal_p95=0.50,
+        valid_ratio=0.90,
+        error_diagonal_p50=0.10,
+        error_diagonal_p95=0.25,
     )
     assert passing.passed is True
 
     for field, value in (
-        ("valid_ratio", 0.499),
-        ("error_diagonal_p50", 0.501),
-        ("error_diagonal_p95", 0.501),
+        ("valid_ratio", 0.899),
+        ("error_diagonal_p50", 0.101),
+        ("error_diagonal_p95", 0.251),
     ):
         values = {
             "total_frames": passing.total_frames,
@@ -495,19 +495,19 @@ def test_valid_ratio_counts_no_face_frames_as_invalid(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    passing = FixedCalibrationSource(validation_invalid_frames=10)
+    passing = FixedCalibrationSource(validation_invalid_frames=2)
     adapter, _, _ = initialized_adapter(tmp_path / "pass", monkeypatch, passing)
     try:
-        assert calibrate(adapter).valid is True  # exactly 50 percent valid
+        assert calibrate(adapter).valid is True  # exactly 90 percent valid
     finally:
         adapter.dispose()
 
-    failing = FixedCalibrationSource(validation_invalid_frames=20)
+    failing = FixedCalibrationSource(validation_invalid_frames=3)
     adapter, _, _ = initialized_adapter(tmp_path / "fail", monkeypatch, failing)
     try:
         result = calibrate(adapter)
-        assert result.valid is True
-        assert result.reason is None
+        assert result.valid is False
+        assert result.reason == "quality_gate_failed"
     finally:
         adapter.dispose()
 
@@ -977,5 +977,79 @@ def test_invalid_frame_error_does_not_include_frame_contents(
             adapter.infer(np.asarray([[123456]], dtype=np.int64), FrameContext())
         assert "123456" not in str(error.value)
         assert "dtype=int64" in str(error.value)
+    finally:
+        adapter.dispose()
+
+
+def test_synchronized_adapter_uses_browser_viewport_and_discards_session_model(tmp_path, monkeypatch):
+    from mcm_eye.calibration import Samples
+    class Source:
+        viewport = (200, 100)
+        total_targets = 0
+        closed = False
+        def check_cancelled(self):
+            pass
+        def set_fitting(self):
+            pass
+        def capture(self, point, phase):
+            return Samples([np.array(point) * self.viewport for _ in range(15)], 15)
+        def close(self):
+            self.closed = True
+    source = Source()
+    adapter, estimator, _ = initialized_adapter(tmp_path, monkeypatch, FixedCalibrationSource(), smoothing_mode="raw")
+    try:
+        result = adapter.calibrate_synchronized(CalibrationRequest("cal-sync"), source, "adaptive-dense5-v2")
+        assert result.valid and source.closed
+        sample = adapter.infer(make_frame(100, 50), FrameContext()).to_payload()
+        assert sample["screen_x_norm"] == .5 and sample["screen_y_norm"] == .5
+        assert sample["model_revision"].endswith("+calibration-v2")
+        assert adapter.calibration_summary["valid"]
+        adapter.discard_calibration()
+        assert estimator.model.train_features is None and adapter.calibration_summary is None
+        with pytest.raises(AdapterStateError):
+            adapter.infer(make_frame(100, 50), FrameContext())
+    finally:
+        adapter.dispose()
+
+
+@pytest.mark.parametrize("failure", ["accuracy", "no_face", "cancelled", "viewport_changed"])
+def test_synchronized_quality_failure_discards_the_session_model(tmp_path, monkeypatch, failure):
+    from mcm_eye.calibration import CalibrationFailure, Samples
+
+    class Source:
+        viewport = (200, 100)
+        total_targets = 0
+        closed = False
+        phases = []
+        def check_cancelled(self):
+            pass
+        def set_fitting(self):
+            pass
+        def capture(self, point, phase):
+            self.phases.append(phase)
+            if failure == "no_face":
+                return Samples([], 15, {"no_face": 15})
+            if phase == "validation" and failure in ("cancelled", "viewport_changed"):
+                raise CalibrationFailure("calibration_cancelled" if failure == "cancelled" else "viewport_changed")
+            coordinates = [0., 0.] if phase == "validation" else np.array(point) * self.viewport
+            return Samples([np.array(coordinates) for _ in range(15)], 15)
+        def close(self):
+            self.closed = True
+
+    source = Source()
+    source.phases = []
+    adapter, estimator, _ = initialized_adapter(tmp_path, monkeypatch, FixedCalibrationSource(), smoothing_mode="raw")
+    try:
+        result = adapter.calibrate_synchronized(CalibrationRequest("cal-weak"), source, "adaptive-dense5-v2")
+        assert not result.valid and source.closed
+        assert adapter.calibration_summary["valid"] is False
+        assert "repair" not in source.phases and "verification" not in source.phases
+        assert not adapter.inference_ready
+        assert estimator.model.train_features is None
+        assert adapter.calibration_summary["inference_ready"] is False
+        with pytest.raises(AdapterStateError):
+            adapter.infer(make_frame(100, 50), FrameContext())
+        adapter.discard_calibration()
+        assert not adapter.inference_ready and estimator.model.train_features is None
     finally:
         adapter.dispose()

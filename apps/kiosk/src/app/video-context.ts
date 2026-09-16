@@ -1,3 +1,5 @@
+import type { CalibrationMarker } from "./calibration-session.ts";
+
 export type PixelRect = Readonly<{
   x_px: number;
   y_px: number;
@@ -24,6 +26,7 @@ export type FrameContext = Readonly<{
   video_time_ms: number;
   playback_epoch: number;
   layout: VideoLayout;
+  calibration_target?: CalibrationMarker;
 }>;
 
 export type VideoLayoutInput = {

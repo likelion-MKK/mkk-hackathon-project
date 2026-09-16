@@ -1,0 +1,38 @@
+{
+  "type": "result",
+  "protocol_version": "1.0",
+  "session_id": "session-example-001",
+  "video_id": "mcm-lookbook-example-v1",
+  "frame_id": "frame-000007",
+  "sequence": 7,
+  "captured_at_mono_ms": 143220.4,
+  "video_time_ms": 4200,
+  "playback_epoch": 0,
+  "gaze_sample": null,
+  "gaze_reason": "calibration_in_progress",
+  "expression_sample": null,
+  "expression_reason": "calibration_in_progress",
+  "calibration_progress": {
+    "calibration_id": "calibration-local-v2",
+    "profile_id": "adaptive-dense5-v2",
+    "phase": "positioning",
+    "target_id": "target-1",
+    "target": [
+      0.5,
+      0.5
+    ],
+    "accepted_samples": 9,
+    "required_samples": 15,
+    "completed_targets": 0,
+    "total_targets": 34,
+    "hint": "position_ready",
+    "positioning": {
+      "face_detected": true,
+      "eyes_visible": true,
+      "centered": true,
+      "distance_ok": true,
+      "facing_forward": true,
+      "stable_ms": 600
+    }
+  }
+}

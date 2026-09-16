@@ -31,14 +31,10 @@ import {
   SessionStartTimeoutError,
 } from "./app/consent-flow.ts";
 import {
-  CALIBRATION_ATTEMPT_DURATION_MS,
-  CALIBRATION_CAPTURE_INTERVAL_MS,
-  CALIBRATION_PATTERN,
-  CALIBRATION_TARGET_TRANSITION_MS,
-  FULLSCREEN_TRAINING_POINTS,
   calibrationFailureMessage,
-  calibrationDwellMs,
+  resolveCalibrationPattern,
 } from "./app/calibration-plan.ts";
+import type { CalibrationMarker } from "./app/calibration-session.ts";
 import {
   INITIAL_KIOSK_SCREEN,
   transitionKioskScreen,
@@ -94,6 +90,7 @@ import {
   LookbookPlayer,
   type CameraDisplayState,
 } from "./components/LookbookPlayer.tsx";
+import { Calibration } from "./components/Calibration.tsx";
 import "./App.css";
 
 const useMockApi = import.meta.env.VITE_USE_MOCK_API?.trim().toLowerCase() === "true";
@@ -702,143 +699,6 @@ function CameraConsent({
   );
 }
 
-function Calibration({
-  onHome,
-  onBegin,
-  onComplete,
-  onFrameCapture,
-}: {
-  onHome: () => void;
-  onBegin: () => Promise<unknown>;
-  onComplete: () => Promise<void>;
-  onFrameCapture: () => Promise<void>;
-}) {
-  const [hasStarted, setHasStarted] = useState(false);
-
-  useEffect(() => {
-    if (!hasStarted) return;
-
-    let active = true;
-    let durationTimer: number | undefined;
-    const frameTimer = window.setInterval(() => {
-      void onFrameCapture().catch(() => undefined);
-    }, CALIBRATION_CAPTURE_INTERVAL_MS);
-    const visualCalibrationComplete = new Promise<void>((resolve) => {
-      durationTimer = window.setTimeout(resolve, CALIBRATION_ATTEMPT_DURATION_MS);
-    });
-
-    void (async () => {
-      try {
-        await onBegin();
-        await visualCalibrationComplete;
-        if (active) await onComplete();
-      } catch {
-        // Complete the same guarded flow so a failed stream/calibration
-        // request is surfaced by the parent instead of becoming an
-        // unhandled promise rejection.
-        if (active) await onComplete();
-      } finally {
-        window.clearInterval(frameTimer);
-        if (durationTimer !== undefined) window.clearTimeout(durationTimer);
-      }
-    })();
-
-    return () => {
-      active = false;
-      window.clearInterval(frameTimer);
-      if (durationTimer !== undefined) window.clearTimeout(durationTimer);
-    };
-  }, [hasStarted, onBegin, onComplete, onFrameCapture]);
-
-  const [targetIndex, setTargetIndex] = useState(0);
-  useEffect(() => {
-    if (!hasStarted) return;
-
-    let active = true;
-    let currentIndex = 0;
-    let targetTimer: number | undefined;
-    const scheduleNextTarget = () => {
-      const duration = calibrationDwellMs(currentIndex);
-      targetTimer = window.setTimeout(() => {
-        if (!active) return;
-        if (currentIndex >= CALIBRATION_PATTERN.points.length - 1) return;
-        currentIndex += 1;
-        setTargetIndex(currentIndex);
-        scheduleNextTarget();
-      }, duration);
-    };
-    scheduleNextTarget();
-    return () => {
-      active = false;
-      if (targetTimer !== undefined) window.clearTimeout(targetTimer);
-    };
-  }, [hasStarted]);
-  const [targetX, targetY] = CALIBRATION_PATTERN.points[targetIndex] ?? [0.5, 0.5];
-  const isTrainingTarget = targetIndex < FULLSCREEN_TRAINING_POINTS.length;
-  const phaseIndex = isTrainingTarget ? targetIndex + 1 : targetIndex - FULLSCREEN_TRAINING_POINTS.length + 1;
-  const phaseCount = isTrainingTarget
-    ? FULLSCREEN_TRAINING_POINTS.length
-    : CALIBRATION_PATTERN.points.length - FULLSCREEN_TRAINING_POINTS.length;
-
-  return (
-    <main className="store-screen calibration-screen screen-enter">
-      <section
-        className={`calibration-page ${
-          hasStarted ? "calibration-page--active" : "calibration-page--intro"
-        }`}
-        aria-labelledby="calibration-title"
-      >
-        <div className="calibration-page__copy">
-          <p className="section-label">EYE CALIBRATION</p>
-          <h1 id="calibration-title">
-            화면 전체를 쓰는<br />
-            정밀 시선 보정
-          </h1>
-          <p>
-            고개는 편안히 두고 점만 눈으로 따라가세요. 점은 부드럽게 이동하며,
-            한 번에 약 64초가 걸리며, 점이 멈춘 동안 계속 바라봐 주세요.
-          </p>
-          {!hasStarted && (
-            <p className="calibration-page__warning" role="alert">
-              얼굴 위치를 화면 중앙에 맞추고, 보정이 끝날 때까지 얼굴과 몸을 움직이지 마세요.
-            </p>
-          )}
-          {hasStarted && (
-            <p className="calibration-page__progress" aria-live="polite">
-              {isTrainingTarget ? "보정" : "확인"} {phaseIndex}/{phaseCount}
-            </p>
-          )}
-          {!hasStarted && (
-            <button
-              className="store-button store-button--solid calibration-start-button"
-              type="button"
-              onClick={() => setHasStarted(true)}
-            >
-              시작
-            </button>
-          )}
-          <button className="back-link" type="button" onClick={onHome}>
-            ← 처음으로 돌아가기
-          </button>
-        </div>
-
-        <div className="calibration-stage" aria-hidden="true">
-          {hasStarted && (
-            <span
-              className="calibration-target"
-              style={{
-                left: `${targetX * 100}%`,
-                top: `${targetY * 100}%`,
-                transitionDuration: `${CALIBRATION_TARGET_TRANSITION_MS}ms`,
-              }}
-            />
-          )}
-        </div>
-      </section>
-    </main>
-  );
-}
-
 type AnalysisStatus =
   | "idle"
   | "preparing"
@@ -1364,12 +1224,11 @@ function App() {
 
   const beginCalibration = useCallback(() => {
     if (calibrationPromise.current) return calibrationPromise.current;
-    const promise = flowController.runSerialized(() =>
-      visionClient.startCalibration(CALIBRATION_PATTERN),
-    );
+    const profile = import.meta.env.VITE_CALIBRATION_PROFILE?.trim() || undefined;
+    const promise = visionClient.startCalibration(resolveCalibrationPattern(profile));
     calibrationPromise.current = promise;
     return promise;
-  }, [flowController]);
+  }, []);
 
   const completeCalibration = useCallback(async () => {
     const generation = flowController.captureGeneration();
@@ -1398,7 +1257,7 @@ function App() {
     }
   }, [beginCalibration, flowController, send]);
 
-  const captureCalibrationFrame = useCallback(async () => {
+  const captureCalibrationFrame = useCallback(async (marker?: CalibrationMarker) => {
     if (!session || !manifest) return;
     const dimensions = frameSource.getVideoDimensions();
     if (!dimensions) return;
@@ -1429,7 +1288,10 @@ function App() {
       layout,
     });
 
-    await frameSource.capture(context, async (frame, frameContext, signal) => {
+    const calibrationContext: FrameContext = marker
+      ? { ...context, calibration_target: marker }
+      : context;
+    await frameSource.capture(calibrationContext, async (frame, frameContext, signal) => {
       await visionClient.sendFrame(frame, frameContext, { signal });
     });
   }, [manifest, nextVisionFrameSequence, session]);
@@ -1746,6 +1608,8 @@ function App() {
   if (screen === "calibration") {
     return (
       <Calibration
+        visionClient={visionClient}
+        cameraStream={frameSource.getPreviewStream()}
         onBegin={beginCalibration}
         onComplete={completeCalibration}
         onFrameCapture={captureCalibrationFrame}

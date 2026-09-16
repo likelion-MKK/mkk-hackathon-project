@@ -119,6 +119,11 @@ test("동시에 열어도 카메라 stream은 한 번만 요청한다", async ()
   assert.equal(source.isOpen(), true);
   assert.equal(fixture.video.muted, true);
   assert.equal(fixture.video.playsInline, true);
+  assert.equal(source.getPreviewStream(), fixture.stream);
+  assert.equal(requestCount, 1);
+  source.stop();
+  assert.equal(source.getPreviewStream(), null);
+  assert.equal(fixture.stopCount, 1);
 });
 
 test("FrameSource가 frame과 FrameContext를 전달한 뒤 원본 frame을 해제한다", async () => {
