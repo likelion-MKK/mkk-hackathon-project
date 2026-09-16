@@ -30,15 +30,9 @@ import {
   runSessionStartWithTimeout,
   SessionStartTimeoutError,
 } from "./app/consent-flow.ts";
-import {
-  CALIBRATION_ATTEMPT_DURATION_MS,
-  CALIBRATION_CAPTURE_INTERVAL_MS,
-  CALIBRATION_PATTERN,
-  CALIBRATION_TARGET_TRANSITION_MS,
-  FULLSCREEN_TRAINING_POINTS,
-  calibrationFailureMessage,
-  calibrationDwellMs,
-} from "./app/calibration-plan.ts";
+import { resolveCalibrationPattern, calibrationFailureMessage, canContinueAfterCalibration } from "./app/calibration-plan.ts";
+import type { CalibrationMarker } from "./app/calibration-session.ts";
+import { Calibration } from "./components/Calibration.tsx";
 import {
   INITIAL_KIOSK_SCREEN,
   transitionKioskScreen,
@@ -134,7 +128,7 @@ const visionClient =
       })
     : new FakeRemoteVisionClient();
 const enableAoiDebugOverlay =
-  import.meta.env.DEV || import.meta.env.VITE_KIOSK_DEBUG_AOI === "true";
+  import.meta.env.VITE_KIOSK_DEBUG_AOI === "true";
 const MAX_CAPTURED_FRAME_LAYOUTS = 2_048;
 
 function rememberCapturedFrameLayout(
@@ -702,143 +696,6 @@ function CameraConsent({
   );
 }
 
-function Calibration({
-  onHome,
-  onBegin,
-  onComplete,
-  onFrameCapture,
-}: {
-  onHome: () => void;
-  onBegin: () => Promise<unknown>;
-  onComplete: () => Promise<void>;
-  onFrameCapture: () => Promise<void>;
-}) {
-  const [hasStarted, setHasStarted] = useState(false);
-
-  useEffect(() => {
-    if (!hasStarted) return;
-
-    let active = true;
-    let durationTimer: number | undefined;
-    const frameTimer = window.setInterval(() => {
-      void onFrameCapture().catch(() => undefined);
-    }, CALIBRATION_CAPTURE_INTERVAL_MS);
-    const visualCalibrationComplete = new Promise<void>((resolve) => {
-      durationTimer = window.setTimeout(resolve, CALIBRATION_ATTEMPT_DURATION_MS);
-    });
-
-    void (async () => {
-      try {
-        await onBegin();
-        await visualCalibrationComplete;
-        if (active) await onComplete();
-      } catch {
-        // Complete the same guarded flow so a failed stream/calibration
-        // request is surfaced by the parent instead of becoming an
-        // unhandled promise rejection.
-        if (active) await onComplete();
-      } finally {
-        window.clearInterval(frameTimer);
-        if (durationTimer !== undefined) window.clearTimeout(durationTimer);
-      }
-    })();
-
-    return () => {
-      active = false;
-      window.clearInterval(frameTimer);
-      if (durationTimer !== undefined) window.clearTimeout(durationTimer);
-    };
-  }, [hasStarted, onBegin, onComplete, onFrameCapture]);
-
-  const [targetIndex, setTargetIndex] = useState(0);
-  useEffect(() => {
-    if (!hasStarted) return;
-
-    let active = true;
-    let currentIndex = 0;
-    let targetTimer: number | undefined;
-    const scheduleNextTarget = () => {
-      const duration = calibrationDwellMs(currentIndex);
-      targetTimer = window.setTimeout(() => {
-        if (!active) return;
-        if (currentIndex >= CALIBRATION_PATTERN.points.length - 1) return;
-        currentIndex += 1;
-        setTargetIndex(currentIndex);
-        scheduleNextTarget();
-      }, duration);
-    };
-    scheduleNextTarget();
-    return () => {
-      active = false;
-      if (targetTimer !== undefined) window.clearTimeout(targetTimer);
-    };
-  }, [hasStarted]);
-  const [targetX, targetY] = CALIBRATION_PATTERN.points[targetIndex] ?? [0.5, 0.5];
-  const isTrainingTarget = targetIndex < FULLSCREEN_TRAINING_POINTS.length;
-  const phaseIndex = isTrainingTarget ? targetIndex + 1 : targetIndex - FULLSCREEN_TRAINING_POINTS.length + 1;
-  const phaseCount = isTrainingTarget
-    ? FULLSCREEN_TRAINING_POINTS.length
-    : CALIBRATION_PATTERN.points.length - FULLSCREEN_TRAINING_POINTS.length;
-
-  return (
-    <main className="store-screen calibration-screen screen-enter">
-      <section
-        className={`calibration-page ${
-          hasStarted ? "calibration-page--active" : "calibration-page--intro"
-        }`}
-        aria-labelledby="calibration-title"
-      >
-        <div className="calibration-page__copy">
-          <p className="section-label">EYE CALIBRATION</p>
-          <h1 id="calibration-title">
-            화면 전체를 쓰는<br />
-            정밀 시선 보정
-          </h1>
-          <p>
-            고개는 편안히 두고 점만 눈으로 따라가세요. 점은 부드럽게 이동하며,
-            한 번에 약 64초가 걸리며, 점이 멈춘 동안 계속 바라봐 주세요.
-          </p>
-          {!hasStarted && (
-            <p className="calibration-page__warning" role="alert">
-              얼굴 위치를 화면 중앙에 맞추고, 보정이 끝날 때까지 얼굴과 몸을 움직이지 마세요.
-            </p>
-          )}
-          {hasStarted && (
-            <p className="calibration-page__progress" aria-live="polite">
-              {isTrainingTarget ? "보정" : "확인"} {phaseIndex}/{phaseCount}
-            </p>
-          )}
-          {!hasStarted && (
-            <button
-              className="store-button store-button--solid calibration-start-button"
-              type="button"
-              onClick={() => setHasStarted(true)}
-            >
-              시작
-            </button>
-          )}
-          <button className="back-link" type="button" onClick={onHome}>
-            ← 처음으로 돌아가기
-          </button>
-        </div>
-
-        <div className="calibration-stage" aria-hidden="true">
-          {hasStarted && (
-            <span
-              className="calibration-target"
-              style={{
-                left: `${targetX * 100}%`,
-                top: `${targetY * 100}%`,
-                transitionDuration: `${CALIBRATION_TARGET_TRANSITION_MS}ms`,
-              }}
-            />
-          )}
-        </div>
-      </section>
-    </main>
-  );
-}
-
 type AnalysisStatus =
   | "idle"
   | "preparing"
@@ -948,6 +805,7 @@ function ReportScreen({
   const isCentralProduct = "controlled_tags" in product;
   const displayPolicy = resolveProductDisplayPolicy(product);
   const hasApprovedProductDetails = displayPolicy.showProductDetails;
+  const isCameraTest = recommendation.mode === "camera_test_v2";
 
   return (
     <main className="store-screen report-screen">
@@ -962,23 +820,25 @@ function ReportScreen({
             />
           ) : (
             <div className="report-media__pending" role="status">
-              <strong>상품 정보 준비 중</strong>
-              <span>승인된 이미지가 연결된 뒤 표시됩니다.</span>
+              <strong>{hasApprovedProductDetails ? "상품 이미지를 불러올 수 없습니다" : "상품 정보가 연결되지 않았습니다"}</strong>
+              <span>{hasApprovedProductDetails
+                ? "상품 정보와 공식 상품 페이지를 확인해주세요."
+                : "결과 처리는 끝났지만 상품 정보를 표시할 수 없습니다."}</span>
             </div>
           )}
-          <span>{hasApprovedProductDetails ? `TOP 1 · ${product.product_id}` : "TOP 1 · PENDING"}</span>
+          <span>{hasApprovedProductDetails ? `${isCameraTest ? "TEST RESULT" : "TOP 1"} · ${product.product_id}` : "PRODUCT UNAVAILABLE"}</span>
         </div>
         <div className="report-copy">
-          <p className="section-label">YOUR RECOMMENDATION</p>
+          <p className="section-label">{isCameraTest ? "CAMERA TEST RESULT" : "YOUR RECOMMENDATION"}</p>
           <h1>
-            {hasApprovedProductDetails
-              ? "시선 분석 AI가 선정했습니다"
-              : "상품 정보 준비 중"}
+            {isCameraTest ? "카메라 테스트 완료" : hasApprovedProductDetails
+              ? "AI가 고른 추천 상품"
+              : "상품 정보가 연결되지 않았습니다"}
           </h1>
           {hasApprovedProductDetails ? (
             <>
               <p className="report-tendency">
-                이번 세션의 시선 흐름: {recommendation.tendency}
+                {recommendation.tendency}
               </p>
               <h2>{product.display_name}</h2>
               {isCentralProduct && <p className="report-reason">{product.recommendation_summary}</p>}
@@ -986,7 +846,7 @@ function ReportScreen({
             </>
           ) : (
             <p className="report-reason">
-              선정된 상품의 공식 정보와 자산은 담당자 검수 후 표시됩니다. 임의의 이미지나 링크로 대체하지 않습니다.
+              결과 처리는 끝났지만 상품 정보가 연결되지 않아 표시할 수 없습니다.
             </p>
           )}
           {displayPolicy.qrUrl && !qrFailed && (
@@ -1002,14 +862,14 @@ function ReportScreen({
           {recommendation.mode === "mock_v1" && (
             <p className="report-disclaimer">개발 환경에서만 사용하는 v1 Mock fixture 결과입니다.</p>
           )}
+          {isCameraTest && (
+            <p className="report-disclaimer">
+              현재는 로컬 카메라 테스트 모드입니다. 추천 모델 Luna는 호출하지 않았습니다.
+            </p>
+          )}
           {recommendation.mode === "replay_v2" && (
             <p className="report-disclaimer">
               개발 검증용 replay 파생 신호 결과이며 실제 고객 분석 결과가 아닙니다.
-            </p>
-          )}
-          {recommendation.mode === "demo_fallback_v2" && (
-            <p className="report-disclaimer">
-              유효 시선이 부족한 로컬 제출 데모 결과이며 실제 시선 기반 추천으로 해석하지 않습니다.
             </p>
           )}
           {displayPolicy.unavailableMessage && (
@@ -1018,7 +878,7 @@ function ReportScreen({
             </p>
           )}
           <p className="report-disclaimer">
-            이번 세션의 시선 신호만 사용했으며, 체험이 끝나면 저장하지 않고 폐기합니다.
+            체험 중 수집한 시선 신호는 세션 종료 후 폐기합니다.
           </p>
           <div className="report-actions">
             {displayPolicy.officialProductUrl && (
@@ -1095,6 +955,7 @@ function App() {
   const sessionStartAbortController = useRef<AbortController | null>(null);
   const recommendationAbortController = useRef<AbortController | null>(null);
   const calibrationPromise = useRef<ReturnType<typeof visionClient.startCalibration> | null>(null);
+  const limitedSignals = useRef(false);
   const [visionFrameSequence] = useState(() => new SessionFrameSequence());
   const pollingSessionId = useRef<string | null>(null);
 
@@ -1115,6 +976,9 @@ function App() {
   useEffect(() => {
     const layoutsByFrameId = videoLayoutsByFrameId.current;
     const removeGazeListener = visionClient.onGazeSample((sample) => {
+      // Only captures registered by the lookbook can contribute recommendation evidence.
+      if (!layoutsByFrameId.has(sample.frame_id)) return;
+      if (sample.valid && sample.confidence < 0.5) limitedSignals.current = true;
       gazeSamples.current.push(sample);
       setLatestGazeSample(sample);
       setLatestGazeLayout(layoutsByFrameId.get(sample.frame_id) ?? null);
@@ -1364,12 +1228,13 @@ function App() {
 
   const beginCalibration = useCallback(() => {
     if (calibrationPromise.current) return calibrationPromise.current;
-    const promise = flowController.runSerialized(() =>
-      visionClient.startCalibration(CALIBRATION_PATTERN),
+    limitedSignals.current = false;
+    const promise = visionClient.startCalibration(
+      resolveCalibrationPattern(import.meta.env.VITE_CALIBRATION_PROFILE?.trim() || undefined),
     );
     calibrationPromise.current = promise;
     return promise;
-  }, [flowController]);
+  }, []);
 
   const completeCalibration = useCallback(async () => {
     const generation = flowController.captureGeneration();
@@ -1378,14 +1243,15 @@ function App() {
       const result = await beginCalibration();
       if (!flowController.isCurrent(generation)) return;
 
-      // Production live mode is fail-closed: an unavailable Eye worker is not
-      // converted into a neutral gaze or a successful calibration.
-      if (!result.valid) {
+      // A failed quality check stays failed in the diagnostics. It no longer
+      // prevents watching; an unfitted worker produces unavailable observations.
+      if (!canContinueAfterCalibration(result)) {
         throw new Error(result.reason ?? "calibration_failed");
       }
+      limitedSignals.current = !result.valid;
       await flowController.runSerialized(() => visionClient.startInference());
 
-      if (flowController.isCurrent(generation)) send("CALIBRATION_SUCCESS");
+      if (flowController.isCurrent(generation)) send(result.valid ? "CALIBRATION_SUCCESS" : "CALIBRATION_CONTINUE");
     } catch (error) {
       calibrationPromise.current = null;
       frameSource.stop();
@@ -1398,7 +1264,7 @@ function App() {
     }
   }, [beginCalibration, flowController, send]);
 
-  const captureCalibrationFrame = useCallback(async () => {
+  const captureCalibrationFrame = useCallback(async (marker?: CalibrationMarker) => {
     if (!session || !manifest) return;
     const dimensions = frameSource.getVideoDimensions();
     if (!dimensions) return;
@@ -1429,7 +1295,7 @@ function App() {
       layout,
     });
 
-    await frameSource.capture(context, async (frame, frameContext, signal) => {
+    await frameSource.capture({ ...context, ...(marker ? { calibration_target: marker } : {}) }, async (frame, frameContext, signal) => {
       await visionClient.sendFrame(frame, frameContext, { signal });
     });
   }, [manifest, nextVisionFrameSequence, session]);
@@ -1642,7 +1508,7 @@ function App() {
           throw new Error("Completed central recommendation has no selected product.");
         }
         product = await httpApiClient.getCentralProduct(decision.selected_product_id);
-        presentation = presentCentralRecommendation(decision, product);
+        presentation = presentCentralRecommendation(decision, product, { limitedSignals: limitedSignals.current });
       }
       if (!flowController.isCurrent(generation)) return;
 
@@ -1746,6 +1612,8 @@ function App() {
   if (screen === "calibration") {
     return (
       <Calibration
+        visionClient={visionClient}
+        cameraStream={frameSource.getPreviewStream()}
         onBegin={beginCalibration}
         onComplete={completeCalibration}
         onFrameCapture={captureCalibrationFrame}

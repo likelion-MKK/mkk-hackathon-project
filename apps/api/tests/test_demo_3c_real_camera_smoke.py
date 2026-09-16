@@ -145,8 +145,15 @@ def test_demo_3c_real_camera_smoke_test_instance_reaches_variant_c_top_one(
 
         dispatcher.run_next()
         decision = client.get(f"/api/v2/sessions/{session_id}/recommendation")
+        selected_product = client.get(f"/api/v2/products/{TONI_PRODUCT_ID}")
 
     assert decision.status_code == 200
+    assert selected_product.status_code == 200
+    product = selected_product.json()
+    assert product["source_status"] == "team_approved_catalog_record"
+    assert product["approved_asset"] is True
+    assert product["image_asset_path"].startswith(f"assets/products/{TONI_PRODUCT_ID}/")
+    assert product["official_product_url"].startswith("https://us.mcmworldwide.com/")
     payload = decision.json()
     assert payload["status"] == "completed"
     assert payload["selected_product_id"] == TONI_PRODUCT_ID
@@ -248,3 +255,54 @@ def test_demo_3c_test_app_requires_opt_in_and_rejects_live_services(
     monkeypatch.setenv("CENTRAL_AI_PROVIDER", "openai_luna")
     with pytest.raises(RuntimeError, match="deterministic stub"):
         create_demo_3c_test_app()
+
+
+@pytest.mark.parametrize("has_gaze", [True, False])
+def test_weak_or_missing_gaze_keeps_quality_and_reviewed_catalog_available(monkeypatch, has_gaze):
+    _clear_live_service_environment(monkeypatch)
+    monkeypatch.setenv("MCM_LOOKBOOK_DEMO_STATIC_AOI", "1")
+    dispatcher = ManualJobDispatcher()
+    model = CapturingDeterministicStub()
+    app = create_demo_3c_test_app(central_client=model, job_dispatcher=dispatcher)
+    with TestClient(app) as client:
+        session_id = _create_session(client)
+        observation = _observation(1, video_time_ms=5_500)
+        if has_gaze:
+            observation["gaze"]["confidence"] = .35
+            observation["gaze"]["model_revision"] += "+low-confidence"
+            observation["attention"]["confidence"] = .35
+        else:
+            observation.update(gaze=None, gaze_reason="gaze_unavailable", attention=None,
+                               attention_reason="source_gaze_unavailable")
+        response = client.post(f"/api/v2/sessions/{session_id}/observations", json={
+            "schema_version": "2.0", "batch_id": "weak-batch", "batch_sequence": 0,
+            "session_id": session_id, "video_id": VIDEO_ID, "observations": [observation],
+        })
+        assert response.status_code == 202, response.text
+        assert client.post(f"/api/v2/sessions/{session_id}/complete").status_code == 202
+        assert app.state.v2_store.buffered_observation_count(session_id) == 0
+        if has_gaze:
+            dispatcher.run_next()
+        decision = client.get(f"/api/v2/sessions/{session_id}/recommendation").json()
+        if has_gaze:
+            assert decision["status"] == "completed"
+            assert len(model.requests) == 1
+            gaze_summary = next(item.gaze for item in model.requests[0].evidence.summary if item.product_id == TONI_PRODUCT_ID)
+            assert gaze_summary.average_confidence == .35
+        else:
+            # This camera-only stub cannot make a low-signal AI decision.
+            # The actual Luna path is covered by test_low_signal_luna_flow.py.
+            assert decision["status"] == "insufficient_data"
+            assert decision["selected_product_id"] is None and decision["evidence"] == []
+            assert decision["data_quality"]["gaze_valid_ratio"] == 0
+            assert model.requests == []
+        catalog_response = client.get("/api/v2/products")
+        assert catalog_response.status_code == 200
+        products = catalog_response.json()
+        assert len(products) == len({product["product_id"] for product in products}) == 10
+        for product in products:
+            assert product["source_status"] == "team_approved_catalog_record"
+            assert product["approved_asset"] and product["image_asset_path"] and product["official_product_url"]
+            assert product == client.get(f"/api/v2/products/{product['product_id']}").json()
+        assert client.delete(f"/api/v2/sessions/{session_id}").status_code == 204
+        assert app.state.v2_store.buffered_observation_count(session_id) == 0

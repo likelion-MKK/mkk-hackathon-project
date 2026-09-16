@@ -67,6 +67,7 @@ export interface CentralRecommendationApiClient {
     options?: ApiRequestOptions,
   ): Promise<RecommendationAcceptedV2 | RecommendationDecisionV2>;
   getCentralProduct(productId: string): Promise<ProductRecommendationItemV2>;
+  listCentralProducts(options?: ApiRequestOptions): Promise<ProductRecommendationItemV2[]>;
   requestCentralManagerProduct(
     sessionId: string,
     request: ManagerProductRequestV2,

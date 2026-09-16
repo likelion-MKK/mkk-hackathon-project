@@ -240,6 +240,12 @@ export class FrameSource {
     return this.stream !== null && this.video !== null;
   }
 
+  // Borrow the active stream for a local preview. FrameSource retains ownership
+  // of the tracks; preview components only detach their video element.
+  getPreviewStream(): MediaStream | null {
+    return this.stream;
+  }
+
   getVideoDimensions(): { width: number; height: number } | null {
     const video = this.video;
     if (!video || video.videoWidth <= 0 || video.videoHeight <= 0) return null;

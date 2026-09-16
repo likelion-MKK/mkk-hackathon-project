@@ -31,7 +31,7 @@ test("pending central catalog data never falls back to an image, listing URL, QR
     officialProductUrl: null,
     qrUrl: null,
     canRequestManager: false,
-    unavailableMessage: "상품 정보 준비 중",
+    unavailableMessage: "상품 정보가 연결되지 않았습니다.",
   });
 });
 

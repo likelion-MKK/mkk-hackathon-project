@@ -14,12 +14,15 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from apps.api.app.main import create_app
+from apps.api.app.source_aoi import load_product_matching_catalog
 from apps.api.app.store import MemoryStore
 from apps.api.app.v2_central import (
     CentralRecommendationClient,
     DeterministicCentralStub,
     JobDispatcher,
 )
+from apps.api.app.v2_postgres import load_canonical_catalog
+from apps.api.app.v2_store import MemoryStoreRecommendationRepository, V2RecommendationStore
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -59,9 +62,28 @@ def create_demo_3c_test_app(
     """
 
     _require_local_demo_environment()
+    store = MemoryStore(REPOSITORY_ROOT)
+    # Use the already-approved product records for the final screen. The old
+    # contract fixture has all assets pending and therefore hides every product.
+    repository = MemoryStoreRecommendationRepository(
+        store,
+        catalog=load_canonical_catalog(
+            REPOSITORY_ROOT / "data/products/mcm-submission-recommendation-profile-v4.json"
+        ),
+        matching_catalog=load_product_matching_catalog(
+            REPOSITORY_ROOT,
+            REPOSITORY_ROOT / "data/products/mcm-submission-matching-profiles-v4.json",
+        ),
+        aoi_metadata_paths={
+            "mcm-lookbook-v2": REPOSITORY_ROOT
+            / "data/lookbooks/mcm-lookbook-v2/aoi-metadata-v2-demo-static-assumptions.json",
+        },
+        source_aoi_enabled=False,
+    )
     return create_app(
-        MemoryStore(REPOSITORY_ROOT),
+        store,
         central_client=central_client or DeterministicCentralStub(),
         job_dispatcher=job_dispatcher,
         central_input_variant="C",
+        v2_store=V2RecommendationStore(repository, input_variant="C"),
     )

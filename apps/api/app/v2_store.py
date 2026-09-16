@@ -91,6 +91,8 @@ class RecommendationRepository(Protocol):
 
     def get_product(self, product_id: str) -> ProductRecommendationItemV2: ...
 
+    def list_products(self) -> list[ProductRecommendationItemV2]: ...
+
     def request_manager_product(
         self,
         session_id: str,
@@ -372,6 +374,9 @@ class MemoryStoreRecommendationRepository:
         if product is None:
             raise DomainError(404, "product_not_found", f"v2 product '{product_id}' was not found")
         return product
+
+    def list_products(self) -> list[ProductRecommendationItemV2]:
+        return list(self._products.values())
 
     def request_manager_product(
         self,
@@ -1513,6 +1518,9 @@ class V2RecommendationStore:
 
     def get_product(self, product_id: str) -> ProductRecommendationItemV2:
         return self._repository.get_product(product_id)
+
+    def list_products(self) -> list[ProductRecommendationItemV2]:
+        return self._repository.list_products()
 
     def request_manager_product(
         self,

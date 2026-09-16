@@ -26,6 +26,13 @@ v2 흐름은 다음과 같다.
 6. 고객이 명시적으로 요청했을 때만
    `POST /api/v2/sessions/{session_id}/manager-product-requests`가 발생한다. Manager는
    `/api/v2/manager/events`와 `/api/v2/products/{product_id}`를 사용한다.
+7. `GET /api/v2/products`는 활성 10개 상품을 반환하는 읽기 전용 조회다. 이 목록의 첫 상품을
+   AI 추천 대신 표시하지 않는다. 각 상품의 검수 상태·이미지 승인을 그대로 적용한다.
+
+2026-09-16 저신호 정책: 관측 frame이 1개라도 있으면 Luna Medium을 세션당 한 번 호출한다.
+상품 AOI에 연결되지 않은 낮은 신뢰도 좌표나 결측·품질 기록은 B timeline으로 전달한다.
+`central-recommender-ko-v8`이 10개 후보에서 선택하며, 출력의 실제 frame ref·상품·tag 검증을
+유지한다. 관측 0개는 `insufficient_data`, provider·출력 검증 오류는 `failed`이며 대체 상품은 없다.
 
 원본 frame·영상·image bytes·base64·얼굴 embedding·원본 경로는 모든 REST 모델,
 DB, cache, queue와 로그에서 금지한다. v2 frame timeline은 프로세스 메모리에만 최대

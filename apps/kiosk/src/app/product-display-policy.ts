@@ -60,7 +60,7 @@ export function resolveProductDisplayPolicy(
       officialProductUrl: null,
       qrUrl: null,
       canRequestManager: false,
-      unavailableMessage: "상품 정보 준비 중",
+      unavailableMessage: "상품 정보가 연결되지 않았습니다.",
     };
   }
 
@@ -81,6 +81,6 @@ export function resolveProductDisplayPolicy(
     // asset is not a reason to tell the visitor the product is unprepared.
     unavailableMessage: imageUrl
       ? null
-      : "검수된 상품 이미지를 준비하고 있습니다.",
+      : "상품 이미지가 연결되지 않았습니다.",
   };
 }

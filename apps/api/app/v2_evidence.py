@@ -419,8 +419,8 @@ def summarize_observations(
         mappings,
         expected_observation_count=expected_observation_count,
     )
-    # No central call is made when there is no product window; B remains a
-    # contract-valid diagnostic snapshot for the insufficient-data result.
+    # With no product window, preserve every captured derived observation in B.
+    # Luna can still compare the catalog using this limited-signal context.
     variant = input_variant if windows else "B"
     evidence_windows = windows if variant in {"A", "C"} else None
     timeline = [frame.model_copy(deep=True) for frame in ordered] if variant in {"A", "B"} else None

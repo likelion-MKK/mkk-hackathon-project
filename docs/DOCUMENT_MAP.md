@@ -76,6 +76,9 @@ ADR-0001·0003·0004를 추가한다. Superseded 문서를 현재 기준처럼 �
 
 ### Eye 생산자·보정 — 양유상
 
+현재 브라우저 보정, 시작 전 얼굴 가이드·1초 준비 확인과 로컬 A/B/C 확인은
+[시선 보정 v2](eye-calibration-local-v2.md)를 따른다.
+
 1. [`ADR-0004`](adr/0004-eyetrax-mvp-selection.md)
 2. [`services/eye/README.md`](../services/eye/README.md)
 3. [`experiments/eye/README.md`](../experiments/eye/README.md)

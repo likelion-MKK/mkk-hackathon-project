@@ -2,6 +2,21 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ApiRequestError, HttpApiClient } from "./HttpApiClient.ts";
 
+test("catalog browsing uses the read-only v2 catalog and forwards cancellation", async () => {
+  const originalFetch = globalThis.fetch;
+  const controller = new AbortController();
+  globalThis.fetch = (async (url, init) => {
+    assert.equal(String(url), "http://localhost:8000/api/v2/products");
+    assert.equal(init?.signal, controller.signal);
+    return new Response("[]", { headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+  try {
+    assert.deepEqual(await new HttpApiClient("http://localhost:8000").listCentralProducts({ signal: controller.signal }), []);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("HTTP API client uses the configured backend and JSON contracts", async () => {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   const originalFetch = globalThis.fetch;

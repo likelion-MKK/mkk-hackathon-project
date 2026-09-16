@@ -17,6 +17,20 @@ It does not use Luna, Supabase, a fake media device, or a production provider.
 Do not add `--use-fake-device-for-media-stream` or a staged camera video to
 any command below.
 
+The in-memory catalog uses the reviewed submission v4 product and matching
+profiles (`mcm-us-pdp-verified-v4-2026-08-20`). This is the same revision stored
+in Supabase, but this camera test does not connect to or write to that database.
+The report labels the deterministic provider as a camera test, not a Luna
+recommendation, and displays the approved product name and official link.
+
+Image paths in the catalog are references, not image bytes. The ten approved
+files are included under `apps/kiosk/public/assets/products/<product_id>/` with
+the exact catalog filenames. Their original approval hashes and source commit
+are recorded in `data/products/mcm-submission-assets-v4.json`. Deployment serves
+that same URL prefix from its shared media volume. Missing images show an
+explicit image error while product details remain usable; waiting on the
+report does not fetch or approve missing assets.
+
 ## Preconditions
 
 - The canonical file is staged at `apps/kiosk/public/media/mcm-lookbook-v2.mp4`.
@@ -83,11 +97,13 @@ npm run dev:kiosk
 ```
 
 Open the printed local URL in a browser, consent, and grant camera access. The
-original full-viewport Dense5 calibration moves through 25 training points and
-8 validation points. One attempt has 64 seconds of planned capture time; one
-full retry has 128 seconds of capture plus local processing overhead. If the
-Eye worker is unavailable, calibration must stop with an error; do not
-continue by inventing a gaze point.
+current default `adaptive-dense5-v2` uses 25 training targets, eight independent
+validation targets, and bounded local repair. The browser and worker agree on
+the displayed target and its monotonic presentation time. It does not wait on
+a 64-second UI timer or automatically repeat the whole calibration. Quality
+failure stops the flow. See [calibration v2](../../docs/eye-calibration-local-v2.md)
+for sparse/fixed comparison modes, aggregate diagnostics, and the separate
+camera-free UI preview. Restart Eye and Gateway after changing their source.
 
 ## Success procedure
 

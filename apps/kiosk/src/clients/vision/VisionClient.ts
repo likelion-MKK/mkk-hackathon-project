@@ -1,3 +1,4 @@
+import type { CalibrationProgress } from "../../app/calibration-session.ts";
 import type {
   CalibrationPattern,
   CalibrationResult,
@@ -21,6 +22,7 @@ export interface VisionClient {
   ): Promise<void>;
   startCalibration(pattern: CalibrationPattern): Promise<CalibrationResult>;
   startInference(): Promise<void>;
+  onCalibrationProgress?(listener: (progress: CalibrationProgress) => void): Unsubscribe;
   onGazeSample(listener: GazeSampleListener): Unsubscribe;
   onExpressionSample(listener: ExpressionSampleListener): Unsubscribe;
   stopSession(): Promise<void>;

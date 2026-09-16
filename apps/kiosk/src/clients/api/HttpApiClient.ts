@@ -143,6 +143,10 @@ export class HttpApiClient implements ApiClient, CentralRecommendationApiClient 
     );
   }
 
+  listCentralProducts({ signal }: ApiRequestOptions = {}): Promise<ProductRecommendationItemV2[]> {
+    return this.request<ProductRecommendationItemV2[]>("/api/v2/products", { signal });
+  }
+
   getProduct(productId: string): Promise<Product> {
     return this.request<Product>(`/api/v1/products/${encodeURIComponent(productId)}`);
   }

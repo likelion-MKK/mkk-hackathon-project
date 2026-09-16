@@ -73,6 +73,13 @@ const decision: RecommendationDecisionV2 = {
   },
 };
 
+test("약한 보정 신호로 만든 결과는 실제 주시 지점을 단정하지 않는다", () => {
+  const result = presentCentralRecommendation(decision, product, { limitedSignals: true });
+  assert.equal(result.mode, "central_low_confidence_v2");
+  assert.match(result.reason, /제한적인 신호/);
+  assert.doesNotMatch(result.reason, /가장 오래|성격|무의식|취향/);
+});
+
 test("고객 문구는 code와 DB controlled tag 템플릿으로만 만든다", () => {
   const presentation = presentCentralRecommendation(decision, product);
   assert.equal(presentation.tendency, "한 상품에 시선이 오래 머문 흐름");
@@ -81,8 +88,8 @@ test("고객 문구는 code와 DB controlled tag 템플릿으로만 만든다", 
   assert.doesNotMatch(presentation.reason, /감정|성격|구매 의도|AI 자유 생성/);
 });
 
-test("명시적 로컬 데모 fallback은 시선 기반 추천으로 표시하지 않는다", () => {
-  const presentation = presentCentralRecommendation(
+test("고정 컬렉션 fallback은 AI 추천 결과로 받지 않는다", () => {
+  assert.throws(() => presentCentralRecommendation(
     {
       ...decision,
       reason_codes: ["catalog_tag_alignment"],
@@ -90,15 +97,22 @@ test("명시적 로컬 데모 fallback은 시선 기반 추천으로 표시하�
       version: { ...decision.version, model_id: "deterministic-test-stub" },
     },
     product,
-  );
-  assert.equal(presentation.mode, "demo_fallback_v2");
-  // Without observed gaze the copy may only talk about reviewed catalog style.
-  assert.equal(presentation.tendency, "스타일 취향 중심의 선택");
-  assert.match(presentation.reason, /컴팩트·구조적인 형태/);
-  assert.doesNotMatch(presentation.reason, /시선|응시|바라보|다시 돌아온/);
+  ), /catalog-only fallback/);
 });
 
-test("Luna 저신호 variant B는 유효 시선 추천으로 표현하지 않는다", () => {
+test("유효 시선이 있는 카메라 테스트도 실제 AI 추천으로 표시하지 않는다", () => {
+  const presentation = presentCentralRecommendation(
+    { ...decision, version: { ...decision.version, model_id: "deterministic-test-stub" } },
+    product,
+  );
+  assert.equal(presentation.mode, "camera_test_v2");
+  assert.match(presentation.tendency, /연결 확인/);
+  assert.match(presentation.reason, /테스트 결과/);
+  assert.doesNotMatch(presentation.reason, /가장 오래|무의식|취향으로 읽어/);
+});
+
+for (const gazeValidRatio of [0, 1]) {
+test(`Luna 저신호 B는 관측 기반 AI 선택을 표시한다 (좌표 비율 ${gazeValidRatio})`, () => {
   const presentation = presentCentralRecommendation(
     {
       ...decision,
@@ -108,10 +122,10 @@ test("Luna 저신호 variant B는 유효 시선 추천으로 표현하지 않는
           code: "data_quality",
           product_id: product.product_id,
           evidence_refs: [{ kind: "frame", ref_id: "frame-001" }],
-          statement: "유효 시선 좌표가 없어 결측 상태를 유지했습니다.",
+          statement: "상품에 연결할 수 없는 관측의 품질과 결측을 유지했습니다.",
         },
       ],
-      data_quality: { ...decision.data_quality, gaze_valid_ratio: 0 },
+      data_quality: { ...decision.data_quality, gaze_valid_ratio: gazeValidRatio },
       version: {
         ...decision.version,
         model_id: "gpt-5.6-luna",
@@ -121,12 +135,13 @@ test("Luna 저신호 variant B는 유효 시선 추천으로 표현하지 않는
     product,
   );
   assert.equal(presentation.mode, "central_low_signal_v2");
-  // Variant B ran without a single valid gaze coordinate, so the customer copy
-  // must never imply that a gaze observation happened.
-  assert.equal(presentation.tendency, "스타일 취향 중심의 선택");
+  assert.equal(presentation.recommendation_id, decision.recommendation_id);
+  assert.equal(presentation.tendency, "제한적인 관측을 참고한 AI 추천");
+  assert.match(presentation.reason, /AI가 비교해/);
   assert.match(presentation.reason, /컴팩트·구조적인 형태/);
   assert.doesNotMatch(presentation.reason, /시선|응시|바라보|다시 돌아온/);
 });
+}
 
 test("다른 상품 근거나 통제되지 않은 tag를 표시하지 않는다", () => {
   assert.throws(

@@ -17,7 +17,7 @@
 | W1 v2 계약 | 완료 | 22 schema, v1/v2 example, AOI metadata, privacy negative fixture와 OpenAPI | 공동 리뷰·PR 승인 |
 | W2 Vision·fusion·evidence | **3-A 완료 / 전체 미완료** | capture-time context, exact Eye·Face join, video 좌표, Backend 승인 AOI 경계, synthetic 계층·중첩 집계 | 실제 영상 AOI 검수(5번) 후 3-B 및 실기기 HTTPS/WSS E2E |
 | W3 API·DB 운영화 | 로컬 구현 완료 | pooler/direct 분리, 0003 migration, 비덮어쓰기 10개 seed/readiness, atomic job lifecycle, restart/orphan/24h retention, backup/restore 절차 | live Supabase migration·backup/restore 및 개별 URL·자산·QR·tag 검수 |
-| W4 모델·prompt | 구현 완료 | Luna Medium, variant C, prompt v4, strict Responses adapter, no retry/timeout | 실제 key canary와 비용·rate-limit 운영 검증 |
+| W4 모델·prompt | 구현 완료 | Luna Medium, C/source AOI B/저신호 B, prompt v8, strict Responses adapter, no retry/timeout | 실제 key canary와 비용·rate-limit 운영 검증 |
 | W5 Frontend 연결 | 구현 완료 | Kiosk v2 HTTP Top 1·template·cleanup, indefinite terminal polling, Vision token route, actual 33.5초 media identity | actual AOI·상품 자산·domain/TLS Browser E2E |
 | W6 통합 검증 | 자동화 일부 완료 | Contract/API/Vision/Kiosk/Manager unit·replay·build, DB failure/readiness/lifecycle synthetic 검증 | Node 24, live Supabase, 실 Eye calibration, 로그/APM·browser 잔존 감사 |
 
@@ -237,3 +237,24 @@ P0 Decision docs
 - insufficient-data 화면 문구와 재시도 UX의 사용자 테스트
 
 이 항목은 담당자가 근거를 수집해 Contract·ADR·migration 또는 UI PR에서 결정한다. 임시 기본값을 공식 결정처럼 문서화하지 않는다.
+
+
+## 시선 보정 v2 로컬 연결 — 2026-09-16
+
+후속 사용자 결정: 품질 미달을 체험 탈락으로 연결하지 않는다. 학습된 약한 Eye 모델은
+낮은 confidence로 계속 사용한다. 관측이 1개라도 있으면 품질·결측을 보존해 Luna Medium을
+호출하고 AI가 선택한 상품을 표시한다. 컬렉션 상품 대체 경로는 제거한다. 원본·좌표를
+조작하지 않으며 관측 0개·취소·API 오류에는 추천을 만들지 않는다.
+프롬프트 v8, Eye 추론 준비 상태 분리, Kiosk AI 결과 화면의 상세 범위와
+검증은 [시선 보정 v2 정책](eye-calibration-local-v2.md#신호가-약해도-체험을-완료하는-정책--2026-09-16)을 따른다.
+
+사용자 승인에 따라 [시선 보정 v2](eye-calibration-local-v2.md)를 로컬 구현했다.
+Kiosk 64초 타이머와 Worker 수집 시각의 불일치는 optional marker/progress 계약과
+실제 표적 표시 시각으로 해소한다. 표본 기반 조기 종료, 독립 품질 검사, 최대 4지점
+보완과 새 8점 확인, 참 수집 UI, session 종료 정리를 함께 연결한다.
+Contract·example → Eye producer → Kiosk consumer → Gateway wiring을 검증한다.
+공개 GazeSample·DB·중앙 Luna 추천은 변경하지 않는다.
+
+완료 범위는 합성 자동 검증과 로컬 UI 확인이다. 16점의 정확도, 실제 카메라 완료 시간,
+고개/조명/안경별 통과율, 실제 룩북 AOI 정확도는 미검증이며 25점과 동등하다고 보지 않는다.
+Eye 양유상·Kiosk 조윤혜·Gateway/계약 박형진이 실제 카메라 비교와 공유 경계를 검토한다.

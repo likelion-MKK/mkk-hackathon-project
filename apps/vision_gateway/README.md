@@ -15,6 +15,16 @@ Every Eye and Face result must repeat the original session, video, frame,
 sequence, monotonic capture time, capture-time video time and playback epoch.
 The Gateway drops a mismatched result and never creates an AOI or product ID.
 
+## Synchronized calibration v2
+
+Optional `calibration_target` frame metadata carries the displayed target ID and
+browser presentation timestamp. Optional `result.calibration_progress` carries
+bounded sample counts and a next target; both modality samples remain null.
+[Local calibration v2](../../docs/eye-calibration-local-v2.md) describes the profiles,
+limits, and local test commands. Gateway forwards the original metadata to Eye,
+sends an explicit cancel when a pending calibration is cancelled, and calls the
+private `/internal/eye/v1/session/end` on stream cleanup to discard the fitted model.
+
 ## 브라우저 localhost Eye live 개발
 
 `local_server.py`는 개발용 local token을 유지하고, `VISION_STREAM_TOKEN_SECRET`가

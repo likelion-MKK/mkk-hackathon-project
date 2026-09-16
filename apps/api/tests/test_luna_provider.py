@@ -72,7 +72,7 @@ def _client() -> OpenAILunaCentralClient:
         api_key=API_KEY,
         model_id=MODEL_ID,
         reasoning_context="current_turn",
-        prompt_version="central-recommender-ko-v7",
+        prompt_version="central-recommender-ko-v8",
     )
 
 

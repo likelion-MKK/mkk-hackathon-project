@@ -30,7 +30,7 @@ S04는 `completed` 결과의 단일 `selected_product_id`만 표시한다. `insu
 
 고객 문구는 AI 자유 문장을 그대로 표시하지 않는다. 서버가 검증한 `exploration_tendency_code`, `reason_codes`와 DB의 `controlled_tags`를 Frontend allowlist 템플릿에 매핑한다. 감정·성격·심리 유형이나 구매 의도를 단정하지 않는다.
 
-개별 상품 URL·이미지·QR이 검수 전 `null + reason`이면 bundled 가방 placeholder와 공식 전체 가방 listing 링크를 사용한다. 이미지나 QR이 준비된 것처럼 표시하지 않는다.
+검수 전 상품은 정보가 연결되지 않았다는 안내를 표시한다. 검수 완료 상품은 공식 개별 상품 링크와 상품 정보를 표시하며, 사진 로딩 실패가 상품명과 링크를 숨기지는 않는다. 이미지 경로와 실제 파일은 별개이며 로컬에서는 승인 파일을 `public/assets/products/<product_id>/`에 배치해야 한다.
 
 ## 데이터 수명과 취소
 
@@ -70,9 +70,32 @@ test-only deterministic Top 1을 위한 loopback-only 수동 smoke 절차다. �
 production acceptance가 아니며, fake media device·Luna·Supabase를 사용하지
 않는다.
 
-실제 Kiosk 보정 화면은 browser viewport 전체를 기준으로 초기 Dense5의 25개 학습점과
-8개 확인점을 부드럽게 이동시킨다. 한 시도의 점 수집 계획은 64초이며, 실패할 때 전체
-과정을 한 번 재시도한다(수집 128초와 로컬 처리 시간).
+테스트 API는 Supabase에도 등록된 검수 완료 v4 상품·matching profile을 메모리에서
+사용한다. 결과 화면은 `카메라 테스트 완료`로 표시하여 실제 Luna 추천과 구분한다.
+
+기본 보정은 25점 가변 수집 + 독립 8점 확인이다. 점 주변의 링은 유효 샘플로 채워지고,
+Worker가 충분히 수집한 뒤 다음 표적으로 이동한다. 일부 지점만 최대 4점 보완하며,
+전체 64초/128초 타이머와 자동 전체 재시도는 사용하지 않는다. 효과음은 기본 꺼짐이다.
+
+‘얼굴 맞추기 시작’ 후 같은 카메라 스트림의 미리보기와 타원 가이드를 표시한다.
+Eye에서 양쪽 눈·얼굴 위치·상대 크기·각도를 확인하면 초록색으로 바뀌며 약 1초 안정 후
+자동으로 시선 맞추기를 시작한다. 준비 실패는 30초 안에 안내하며 새 카메라 권한 요청이나
+두 번째 스트림을 만들지 않는다. `/calibration-preview.html`에서 얼굴 미인식·거리·각도와
+준비 완료 상태를 모의 확인할 수 있다. 실제 얼굴 인식은 로컬 live 경로에서 따로 확인한다.
+
+[로컬 보정 v2와 A/B/C 절차](../../docs/eye-calibration-local-v2.md)에
+`VITE_CALIBRATION_PROFILE`의 25점·16점·고정 비교 설정과 카메라 없는
+`/calibration-preview.html` 화면 점검 방법을 정리했다. 프레임은 실제 표적 도착 후의
+표시 시각을 사용한다. 품질 미달·얼굴 미검출도 영상으로 진행하며, 약한 신호는 낮은
+신뢰도로 전달한다. 관측이 하나라도 있으면 API가 Luna Medium으로 상품을 선택하고,
+Kiosk는 해당 AI 결정의 상품을 표시한다. 컬렉션 첫 상품으로 대체하는 경로는 없다.
+상품에 연결되지 않은 관측도 품질·결측과 함께 AI에 전달하며, 고객 문구는 실제 주시 지점이나
+취향을 단정하지 않는다. 관측 0개·취소·API 오류를 정상 분석으로 바꾸지 않는다.
+
+실제 Luna 로컬 실행은 저장소 루트의 `scripts/run_local_submission_stack.ps1`을 사용한다.
+`-ValidateOnly`는 외부 호출 없이 설정·프롬프트·검수된 상품 10개를 검사한다. 실제 실행은
+15173/8000/8765/8766 포트를 사용하므로 기존 카메라 테스트 스택을 먼저 종료한다.
+이 스크립트는 기존 서버 전용 키를 재사용하고 DB 대신 검수된 v4 상품 스냅샷을 사용한다.
 
 저장소 루트에서 Node.js `24.19.0`과 npm을 사용한다.
 
@@ -91,10 +114,10 @@ npm run build --workspace @mkk/kiosk
 
 ## 개발용 영상 좌표 overlay
 
-S03 룩북 화면은 개발 검증을 위해 최신 gaze 위치를 실제 영상 content 영역 위에 표시한다. gaze는 해당 frame의 캡처 시점 `VideoLayout`으로 video 정규화 좌표에 매핑한다.
+S03 룩북 화면은 기본적으로 시선을 따라가는 점을 표시하지 않는다. 개발 검증이 필요한 경우에만 `VITE_KIOSK_DEBUG_AOI=true`로 최신 gaze 위치를 실제 영상 content 영역 위에 표시한다. gaze는 해당 frame의 캡처 시점 `VideoLayout`으로 video 정규화 좌표에 매핑한다.
 
 - `valid=false`와 `outside_video`를 별도 상태로 표시하고 좌표나 상품 후보로 대체하지 않는다.
 - Kiosk overlay는 AOI hit나 상품 후보를 계산하지 않고 `BACKEND AOI PENDING`만 표시한다.
-- 개발 빌드에서는 overlay가 기본 활성화되며, release 빌드는 `VITE_KIOSK_DEBUG_AOI=true`일 때만 활성화된다.
+- 개발·release 빌드 모두 overlay는 기본 비활성화이며 `VITE_KIOSK_DEBUG_AOI=true`일 때만 활성화된다.
 - overlay는 디버그 표시만 담당하며 중앙 추천 v2의 S04 Top 1 결과와 Manager 요청 흐름을 변경하지 않는다.
 - 원본 frame, image bytes, base64와 얼굴 embedding을 파일·DB·API·로그·브라우저 저장소에 추가하지 않는다.

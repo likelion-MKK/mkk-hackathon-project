@@ -32,19 +32,19 @@ from apps.api.app.v2_models import (
 
 MAX_MODEL_RESPONSE_BYTES = 64 * 1024
 MAX_PROVIDER_ERROR_BODY_BYTES = 8 * 1024
-APPROVED_PROMPT_VERSION = "central-recommender-ko-v7"
+APPROVED_PROMPT_VERSION = "central-recommender-ko-v8"
 LUNA_MODEL_ID = "gpt-5.6-luna"
 LUNA_REASONING_EFFORT = "medium"
 LUNA_REASONING_CONTEXT = "current_turn"
 LUNA_INPUT_VARIANT = "C"
 LUNA_RESPONSES_URL = "https://api.openai.com/v1/responses"
-LUNA_PROMPT_SHA256 = "2ab67dd66ae801969357c007d14070de3cb130153e12cfddab3fbae109575804"
+LUNA_PROMPT_SHA256 = "b14321277e3cc15d7db591ab306c2328c530cd05dac85128676bb7c3267ec425"
 LUNA_PROMPT_PATH = (
     Path(__file__).resolve().parents[3]
     / "experiments"
     / "recommendation"
     / "prompts"
-    / "central-recommender.ko.v7.txt"
+    / "central-recommender.ko.v8.txt"
 )
 _SAFE_PROVIDER_ERROR_TOKEN = re.compile(r"^[A-Za-z0-9_.-]{1,120}$")
 _SAFE_PROVIDER_ERROR_PARAM = re.compile(r"^[A-Za-z0-9_.\[\]-]{1,200}$")
@@ -309,6 +309,21 @@ def _canonical_json(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
+def _uses_limited_signal_selection(request: CentralRecommendationRequestV2) -> bool:
+    """Keep actual unmatched/weak observations callable without inventing an AOI."""
+    return (
+        request.evidence.input_variant == "B"
+        and request.source_visual_evidence is None
+        and bool(request.evidence.timeline)
+        and not any(
+            frame.gaze is not None
+            and frame.attention is not None
+            and len(frame.attention.candidates) == 1
+            for frame in (request.evidence.timeline or [])
+        )
+    )
+
+
 def _openai_output_schema(request: CentralRecommendationRequestV2) -> dict[str, object]:
     """Build a strict schema narrowed to this exact ten-product request."""
 
@@ -383,10 +398,7 @@ def _openai_output_schema(request: CentralRecommendationRequestV2) -> dict[str, 
             "product_tag_match",
             "data_quality",
         ]
-    elif (
-        request.evidence.input_variant == "B"
-        and request.evidence.data_quality.gaze_valid_ratio == 0
-    ):
+    elif _uses_limited_signal_selection(request):
         if not frames or windows:
             raise CentralModelError("invalid_model_output", "variant B requires a derived timeline only")
         reference_kind = "frame"
@@ -940,10 +952,7 @@ def validate_central_output(
                 "invalid_model_output",
                 "source-AOI recommendation requires observation and product-match evidence",
             )
-    elif (
-        request.evidence.input_variant == "B"
-        and request.evidence.data_quality.gaze_valid_ratio == 0
-    ):
+    elif _uses_limited_signal_selection(request):
         if not request.evidence.timeline:
             raise CentralModelError(
                 "invalid_model_output", "low-signal recommendation requires a real derived timeline"
@@ -1026,7 +1035,7 @@ def validate_central_output(
                         "invalid_model_output", "central model referenced an ungrounded frame"
                     )
                 if (
-                    request.evidence.data_quality.gaze_valid_ratio == 0
+                    _uses_limited_signal_selection(request)
                     and item.code in {"data_quality", "product_tag_match"}
                 ):
                     continue

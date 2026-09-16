@@ -29,7 +29,9 @@
 5. 룩북이 종료되고 evidence가 finalize된 뒤 세션당 한 번만 호출한다.
 6. 후보군은 DB의 활성·검수된 **MCM 가방 정확히 10개**다.
 7. 정상 결과는 후보 안의 **Top 1** 상품, allowlist reason code, evidence reference와 비진단적 설명이다.
-8. schema 위반, 후보 밖 상품, 근거 없는 설명 또는 신호 부족은 fail-closed한다.
+8. schema 위반, 후보 밖 상품, 근거 없는 설명 또는 관측 0개는 fail-closed한다.
+   2026-09-16 사용자 후속 결정으로 관측이 1개라도 있으면 품질·결측을 보존해 AI를 호출한다.
+   저신호 B의 근거·설명 기준은 [ADR-0008](0008-openai-luna-central-recommendation.md)의 v8 정책을 따른다.
 
 ### 2.2 데이터 수명
 
@@ -90,7 +92,7 @@ Manager event는 S04에서 고객이 명시적으로 요청 버튼을 눌렀을 
 - 감정·성격·민감 속성 과잉 추론, prompt injection과 일부 invalid 입력
 - insufficient-data, timeout, rollback과 deterministic replay 비교
 
-시스템 프롬프트는 입력의 비진단적 의미, 금지 추론, 후보 제한, 근거 요구, 부족 시 실패와 strict output schema를 version으로 고정한다. 모델 출력의 제품 사실은 고객에게 직접 표시하지 않고 DB profile로 다시 grounding한다.
+시스템 프롬프트는 입력의 비진단적 의미, 금지 추론, 후보 제한, 근거 요구, 저신호 처리와 strict output schema를 version으로 고정한다. 모델 출력의 제품 사실은 고객에게 직접 표시하지 않고 DB profile로 다시 grounding한다.
 
 ## 5. Contract·DB 영향
 

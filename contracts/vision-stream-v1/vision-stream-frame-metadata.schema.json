@@ -29,9 +29,38 @@
     "video_time_ms": { "type": "integer", "minimum": 0 },
     "playback_epoch": { "type": "integer", "minimum": 0 },
     "layout": { "$ref": "#/$defs/layout" },
-    "camera_frame": { "$ref": "#/$defs/cameraFrame" }
+    "camera_frame": { "$ref": "#/$defs/cameraFrame" },
+    "calibration_target": { "$ref": "#/$defs/calibrationTarget" }
   },
   "$defs": {
+    "calibrationTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "calibration_id",
+        "target_id",
+        "presented_at_mono_ms"
+      ],
+      "properties": {
+        "calibration_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "target_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "presented_at_mono_ms": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000000000000.0
+        }
+      }
+    },
     "id": {
       "type": "string",
       "minLength": 1,

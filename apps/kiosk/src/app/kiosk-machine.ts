@@ -17,6 +17,7 @@ export type KioskEvent =
   | "SELECT_CATEGORY"
   | "AGREE"
   | "CALIBRATION_SUCCESS"
+  | "CALIBRATION_CONTINUE"
   | "LOOKBOOK_FINISHED"
   | "RECOMMENDATION_READY"
   | "BACK"
@@ -44,6 +45,7 @@ const transitions: Record<
   },
   calibration: {
     CALIBRATION_SUCCESS: "lookbook",
+    CALIBRATION_CONTINUE: "lookbook",
     CANCEL: "screensaver",
     RESTART: "screensaver",
   },

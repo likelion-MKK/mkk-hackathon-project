@@ -68,6 +68,9 @@ class FakeSocket {
   readonly sent: Array<string | ArrayBuffer | Uint8Array> = [];
   readonly url: string;
   deferFrameResult = false;
+  deferCalibration = false;
+  calibrationProgress: Record<string, unknown> | null = null;
+  private pendingCalibration: string | null = null;
   readyState = 0;
   binaryType = "";
   private readonly listeners = new Map<string, Set<(event: SocketEvent) => void>>();
@@ -112,6 +115,10 @@ class FakeSocket {
         return;
       }
       const action = message.action;
+      if (action === "start_calibration" && this.deferCalibration) {
+        this.pendingCalibration = String(message.request_id);
+        return;
+      }
       const requestId = message.request_id;
       const valid = action !== "start_calibration" || false;
       const response: Record<string, unknown> = {
@@ -149,15 +156,22 @@ class FakeSocket {
       video_time_ms: frameContext.video_time_ms,
       playback_epoch: frameContext.playback_epoch,
       gaze_sample: null,
-      gaze_reason: "eye_not_connected",
-      expression_sample: expressionSample(),
-      expression_reason: null,
+      gaze_reason: this.calibrationProgress ? "calibration_in_progress" : "eye_not_connected",
+      expression_sample: this.calibrationProgress ? null : expressionSample(),
+      expression_reason: this.calibrationProgress ? "calibration_in_progress" : null,
+      ...(this.calibrationProgress ? { calibration_progress: this.calibrationProgress } : {}),
     });
     if (this.deferFrameResult) {
       this.pendingFrameResult = result;
     } else {
       this.emit("message", { data: result });
     }
+  }
+
+  finishCalibration(): void {
+    this.emit("message", { data: JSON.stringify({ type: "control_result", protocol_version: "1.0",
+      request_id: this.pendingCalibration, action: "start_calibration", valid: true,
+      reason: null, calibration_id: "cal-live-v2" }) });
   }
 
   releaseDeferredFrame(): void {
@@ -353,4 +367,45 @@ test("Demo 3-C: Gateway 연결 중단은 in-flight frame을 accepted로 바꾸�
     runtime: "mediapipe_gateway",
     session_active: false,
   });
+});
+
+
+test("live calibration streams progress and captures the displayed marker before completing", async () => {
+  const ref = { current: null as FakeSocket | null };
+  const client = createClient(ref);
+  await client.startSession({ session_id: context.session_id, video_id: context.video_id });
+  const socket = ref.current!;
+  socket.deferCalibration = true;
+  const seen: unknown[] = [];
+  let evidenceCount = 0;
+  client.onExpressionSample(() => evidenceCount++);
+  client.onGazeSample(() => evidenceCount++);
+  const unsubscribe = client.onCalibrationProgress((progress) => seen.push(progress));
+  const calibration = client.startCalibration({ pattern_id: "adaptive-dense5-v2", points: [[0.1, 0.1]] });
+  socket.calibrationProgress = { calibration_id: "cal-live-v2", profile_id: "adaptive-dense5-v2", phase: "training",
+    target_id: "target-2", target: [0.1, 0.1], accepted_samples: 8, required_samples: 15,
+    completed_targets: 1, total_targets: 34, hint: "more_samples" };
+  const marker = { calibration_id: "cal-live-v2", target_id: "target-2", presented_at_mono_ms: 100 };
+  await client.sendFrame(createFrame(), { ...context, calibration_target: marker });
+  assert.deepEqual(seen, [socket.calibrationProgress]);
+  assert.equal(evidenceCount, 0);
+  const bytes = socket.sent.find((item) => item instanceof Uint8Array) as Uint8Array;
+  const length = new DataView(bytes.buffer, bytes.byteOffset).getUint32(4, false);
+  const metadata = JSON.parse(new TextDecoder().decode(bytes.slice(8, 8 + length)));
+  assert.deepEqual(metadata.calibration_target, marker);
+  socket.finishCalibration();
+  assert.equal((await calibration).valid, true);
+  unsubscribe();
+  await client.stopSession();
+});
+
+test("stopping a pending calibration releases its control waiter immediately", async () => {
+  const ref = { current: null as FakeSocket | null };
+  const client = createClient(ref);
+  await client.startSession({ session_id: context.session_id, video_id: context.video_id });
+  ref.current!.deferCalibration = true;
+  const result = assert.rejects(client.startCalibration({ pattern_id: "adaptive-dense5-v2", points: [[0.1, 0.1]] }));
+  await client.stopSession();
+  await result;
+  assert.equal((await client.health()).session_active, false);
 });

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+
 import {
   INITIAL_KIOSK_SCREEN,
   InvalidKioskTransitionError,
@@ -7,6 +8,11 @@ import {
   transitionKioskScreen,
   type KioskEvent,
 } from "./kiosk-machine.ts";
+
+test("보정 품질 실패를 성공으로 바꾸지 않고도 룩북으로 이어간다", () => {
+  assert.equal(transitionKioskScreen("calibration", "CALIBRATION_CONTINUE"), "lookbook");
+  assert.throws(() => transitionKioskScreen("screensaver", "CALIBRATION_CONTINUE"));
+});
 
 test("S01에서 S04까지 정해진 순서로 전환한다", () => {
   const events: KioskEvent[] = [

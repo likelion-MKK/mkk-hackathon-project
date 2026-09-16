@@ -344,6 +344,27 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/v2/products:
+    get:
+      tags: [Products]
+      operationId: listProductsV2
+      summary: List the active ten-product catalog for browsing
+      description: >-
+        This read-only catalog is not a completed AI decision. Consumers must
+        respect each record's source_status and approved_asset before display.
+        Insufficient-signal recommendation status and evidence remain unchanged.
+      responses:
+        "200":
+          description: The active catalog in stable catalog order
+          content:
+            application/json:
+              schema:
+                type: array
+                minItems: 10
+                maxItems: 10
+                items:
+                  $ref: "./v2/product-detail-v2.schema.json"
+
   /api/v2/products/{product_id}:
     get:
       tags: [Products]

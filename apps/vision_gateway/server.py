@@ -405,6 +405,10 @@ class VisionStreamApp:
                         )
                         event = {}
                         continue
+                    if binary.metadata.calibration_target is not None and not state.calibration_started:
+                        await websocket.send_json(self._drop(binary.metadata.context, "session_closing", retryable=False))
+                        event = {}
+                        continue
                     if not state.inference_started and not state.calibration_started:
                         await websocket.send_json(
                             self._drop(binary.metadata.context, "session_closing", retryable=True)
@@ -526,6 +530,10 @@ class VisionStreamApp:
                     await calibration_task
             if worker is not None:
                 await self._cleanup_worker(worker, state)
+            end_eye_session = getattr(self.eye_worker, "end_session", None)
+            if state is not None and callable(end_eye_session):
+                with contextlib.suppress(Exception):
+                    await end_eye_session(claims.session_id, claims.video_id)
 
     async def _process_calibration_frame(
         self,
@@ -566,26 +574,18 @@ class VisionStreamApp:
                     },
                 )
 
-            candidate = eye_result.gaze_sample
-            gaze_sample: Mapping[str, object] | None = None
-            gaze_reason = eye_result.reason or "calibration_in_progress"
-            if candidate is not None:
-                if not _same_gaze_payload_context(
-                    candidate, context, session_id=session_id
-                ):
-                    gaze_reason = "gaze_context_mismatch"
-                elif not isinstance(candidate.get("valid"), bool):
-                    gaze_reason = "eye_worker_invalid_response"
-                else:
-                    gaze_sample = candidate
-                    gaze_reason = None
+            # A worker may finish while this frame is in flight. Calibration
+            # captures must never become recommendation observations in that race.
+            gaze_reason = "calibration_in_progress" if eye_result.calibration_progress is not None else (eye_result.reason or "calibration_in_progress")
             return _FrameOutcome(
                 "result",
                 {
                     "type": "result",
                     "protocol_version": "1.0",
                     **context.as_payload(),
-                    "gaze_sample": gaze_sample,
+                    **({"calibration_progress": dict(eye_result.calibration_progress)}
+                       if eye_result.calibration_progress is not None else {}),
+                    "gaze_sample": None,
                     "gaze_reason": gaze_reason,
                     "expression_sample": None,
                     "expression_reason": "calibration_in_progress",

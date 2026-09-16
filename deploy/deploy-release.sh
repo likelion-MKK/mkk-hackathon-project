@@ -102,7 +102,7 @@ printf '%s\n' "$revision" > "$release_path/DEPLOYED_COMMIT"
 
 log "preflight checking environment variables"
 grep -q "CENTRAL_AI_REASONING_EFFORT=medium" "$release_path/deploy/.env" || { log "ERR: CENTRAL_AI_REASONING_EFFORT must be medium in $shared_env"; exit 65; }
-grep -q "CENTRAL_AI_PROMPT_VERSION=central-recommender-ko-v7" "$release_path/deploy/.env" || { log "ERR: CENTRAL_AI_PROMPT_VERSION must be central-recommender-ko-v7 in $shared_env"; exit 65; }
+grep -q "CENTRAL_AI_PROMPT_VERSION=central-recommender-ko-v8" "$release_path/deploy/.env" || { log "ERR: CENTRAL_AI_PROMPT_VERSION must be central-recommender-ko-v8 in $shared_env"; exit 65; }
 
 log "validating and building release images"
 run_compose "$release_path" config --quiet

@@ -420,6 +420,10 @@ def create_app(
         app.state.v2_store.cancel(session_id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
+    @app.get("/api/v2/products", response_model=list[ProductRecommendationItemV2])
+    def list_v2_products() -> list[ProductRecommendationItemV2]:
+        return app.state.v2_store.list_products()
+
     @app.get(
         "/api/v2/products/{product_id}",
         response_model=ProductRecommendationItemV2,

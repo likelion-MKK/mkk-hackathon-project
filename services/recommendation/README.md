@@ -7,7 +7,7 @@
 1. API는 `ObservationBatchV2`를 받아 같은 capture snapshot의 gaze, video coordinate, expression과 derived signal을 merge합니다. Client product/AOI candidate는 거절합니다.
 2. Feature extractor는 승인된 AOI만 적용하고 같은 상품의 중첩 부위는 모두 집계합니다. 서로 다른 상품이 겹치면 어느 상품에도 귀속하지 않습니다.
 3. Feature extractor는 version과 결측 reason을 보존해 `RecommendationEvidenceV2`의 summary, evidence window와 선택적 timeline을 만듭니다.
-4. Prompt runner는 같은 catalog와 prompt로 A/B/C payload를 평가합니다. 운영 lane은 `central-recommender-ko-v4`와 variant C(summary+window)를 사용하며, A/B는 benchmark·replay compatibility lane입니다.
+4. 운영 프롬프트는 `central-recommender-ko-v8`입니다. 기본 C(summary+window), 승인 source AOI B, 저신호 B timeline을 지원합니다. 관측 frame이 1개라도 있으면 품질·결측을 보존해 Luna Medium을 한 번 호출합니다. 상품 AOI와 연결되지 않은 좌표도 AI가 10개 후보를 비교하는 입력으로 사용하며 카탈로그 첫 상품으로 대체하지 않습니다. A는 benchmark·replay compatibility lane입니다.
 5. Model JSON은 `RecommendationDecisionV2` schema, catalog membership, evidence reference와 privacy gate를 모두 통과해야 공개됩니다. 실패하면 임의 보정하지 않고 `failed` 또는 `insufficient_data`를 반환합니다.
 6. Terminal 결과 뒤에는 frame-level observation, timeline, window와 session aggregate를 폐기합니다.
 

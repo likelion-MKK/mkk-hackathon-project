@@ -14,8 +14,8 @@
 
 - model: `gpt-5.6-luna`
 - reasoning: `effort=medium`, `context=current_turn` (2026-09-15 사용자 결정으로 변경)
-- input: variant C 전체 파생 JSON, 검수된 상품 정확히 10개
-- prompt: `central-recommender-ko-v7`
+- input: variant C, 승인 source AOI B 또는 저신호 B 파생 JSON, 검수된 상품 정확히 10개
+- prompt: `central-recommender-ko-v8`
 - API: Responses API, `store=false`, tool·web·conversation 없음
 - retry: 0
 - client timeout: 없음
@@ -32,6 +32,17 @@
 응답 대기시간을 줄이려는 사용자 요청에 따라 운영 추론 강도를 `max`에서 `medium`으로 변경한다. 모델 ID와 기존 프롬프트는 유지한다. 코드 기본값·검증, 환경 설정 예제와 로컬 실행 스크립트에 함께 반영한다. 기존 배포 환경의 `CENTRAL_AI_REASONING_EFFORT`도 `medium`으로 바꾸고 API를 재시작해야 적용된다. 아래 Max 평가 수치는 역사적 근거이며 Medium의 품질·지연 검증 결과가 아니다. Medium의 실제 지연·품질은 별도 확인이 필요하다.
 
 ## 근거
+
+### 2026-09-16 저신호 추천 후속 결정
+
+사용자 요청에 따라 실제 파생 관측이 1개라도 수집되면 Luna Medium을 호출한다.
+약한 좌표·상품 AOI 연결 실패·표정만 있는 관측·결측 품질 기록도 B timeline에 보존한다.
+v8은 모델이 10개 후보를 비교해 Top 1을 선택하도록 하며 컬렉션 첫 상품 대체를 금지한다.
+좌표 유무만으로 저신호 호출을 막지 않는다. 신뢰도·무효 사유를 올려 쓰거나 근거를 만들지 않는다.
+관측 0개, provider 실패, schema·catalog·ref 위반과 취소는 기존 실패 경계를 유지한다.
+아래 과거 Max/v4 평가는 새 저신호 v8의 품질 증명이 아니다.
+
+### 기존 모델 선정 근거
 
 `diagnostic-full-v4-no-timeout.json`에서 합성 callable 9개를 3회씩 총 27회 실행했다.
 

@@ -11,7 +11,7 @@ export type RecommendationPresentation = {
   product_id: string;
   tendency: string;
   reason: string;
-  mode: "central_v2" | "central_low_signal_v2" | "demo_fallback_v2" | "replay_v2" | "mock_v1";
+  mode: "central_v2" | "central_low_signal_v2" | "central_low_confidence_v2" | "camera_test_v2" | "replay_v2" | "mock_v1";
 };
 
 const TENDENCY_COPY: Record<ExplorationTendencyCodeV2, string> = {
@@ -77,6 +77,7 @@ function requireCopy<T extends string>(
 export function presentCentralRecommendation(
   decision: RecommendationDecisionV2,
   product: ProductRecommendationItemV2,
+  { limitedSignals = false }: { limitedSignals?: boolean } = {},
 ): RecommendationPresentation {
   if (
     decision.status !== "completed" ||
@@ -119,17 +120,10 @@ export function presentCentralRecommendation(
     decision.reason_codes.length === 1 &&
     decision.reason_codes[0] === "catalog_tag_alignment";
   if (isLocalDemoFallback) {
-    return {
-      recommendation_id: decision.recommendation_id,
-      product_id: product.product_id,
-      tendency: "스타일 취향 중심의 선택",
-      reason: `${tagCopy.join("·")} 방향이 이번 룩북에서 가장 잘 맞아 이 상품을 골랐습니다.`,
-      mode: "demo_fallback_v2",
-    };
+    throw new Error("A catalog-only fallback is not an AI recommendation.");
   }
   const isCentralLowSignal =
     decision.version.input_variant === "B" &&
-    decision.data_quality.gaze_valid_ratio === 0 &&
     decision.reason_codes.length === 1 &&
     decision.reason_codes[0] === "catalog_tag_alignment" &&
     decision.evidence.some((item) => item.code === "data_quality");
@@ -137,13 +131,32 @@ export function presentCentralRecommendation(
     return {
       recommendation_id: decision.recommendation_id,
       product_id: product.product_id,
-      tendency: "스타일 취향 중심의 선택",
-      reason: `${tagCopy.join("·")} 방향이 이번 룩북에서 가장 잘 맞아 이 상품을 골랐습니다.`,
+      tendency: "제한적인 관측을 참고한 AI 추천",
+      reason: `수집된 관측 정보와 상품 특징을 AI가 비교해 ${tagCopy.join("·")} 특징의 상품을 추천했습니다.`,
       mode: "central_low_signal_v2",
     };
   }
   if (reactionCopy.length === 0) {
     throw new Error("A completed decision needs an observation reason code.");
+  }
+  if (decision.version.model_id === "deterministic-test-stub") {
+    return {
+      recommendation_id: decision.recommendation_id,
+      product_id: product.product_id,
+      tendency: "카메라·시선 데이터 연결 확인",
+      reason: "카메라 입력과 상품 화면 연결을 확인하는 테스트 결과입니다.",
+      mode: "camera_test_v2",
+    };
+  }
+
+  if (limitedSignals) {
+    return {
+      recommendation_id: decision.recommendation_id,
+      product_id: product.product_id,
+      tendency: "참고 신호를 활용한 상품 제안",
+      reason: `수집된 제한적인 신호와 ${tagCopy.join("·")} 상품 특성을 참고한 제안입니다.`,
+      mode: "central_low_confidence_v2",
+    };
   }
 
   return {
@@ -154,7 +167,7 @@ export function presentCentralRecommendation(
       decision.exploration_tendency_code,
       "exploration tendency",
     ),
-    reason: `룩북을 보시는 동안 ${reactionCopy.join("과 ")}이 나타났습니다. 무의식적으로 드러난 이 신호를 ${tagCopy.join("·")} 취향으로 읽어 이 상품을 골랐습니다.`,
+    reason: `룩북을 보시는 동안 관찰된 ${reactionCopy.join("과 ")}을 참고해 ${tagCopy.join("·")} 특징의 상품을 제안합니다.`,
     mode: "central_v2",
   };
 }
